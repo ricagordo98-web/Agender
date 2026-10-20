@@ -1,0 +1,55 @@
+.note-view {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, #f59e0b 11%, var(--surface));
+    color: var(--text);
+    text-align: left;
+    font-size: 12.5px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.note-view:hover { border-color: var(--border-strong); }
+
+.note-view.empty {
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-muted);
+}
+
+.note-view ::deep .icon { margin-top: 2px; opacity: 0.7; }
+
+.note-view.empty .note-text { white-space: nowrap; text-overflow: ellipsis; display: block; }
+
+.note-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.note-input {
+    width: 100%;
+    min-height: 74px;
+    max-height: 240px;
+    padding: 8px 10px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 12.5px;
+    line-height: 1.45;
+    resize: vertical;
+    field-sizing: content;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.note-input:focus { outline: none; }
+
+.note-view.read-only { cursor: default; }
+.note-view.read-only:hover { border-color: transparent; }

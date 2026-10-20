@@ -1,0 +1,32 @@
+<nav class="app-nav" aria-label="Navegação principal">
+    <span class="nav-brand" aria-hidden="true"></span>
+
+    <ul class="nav-list">
+        @foreach (NavItem item in Items)
+        {
+            <li>
+                <NavLink class="nav-item" href="@item.Href" Match="@item.Match">
+                    <Icon Name="item.Icon" Size="22" />
+                    <span class="nav-label">@item.Label</span>
+                </NavLink>
+            </li>
+        }
+    </ul>
+
+    <div class="nav-user">
+        <UserMenu />
+    </div>
+</nav>
+
+@code {
+    private record NavItem(string Href, string Label, IconName Icon, NavLinkMatch Match);
+
+    private static readonly NavItem[] Items =
+    [
+        new(string.Empty, "Agenda", IconName.Calendar, NavLinkMatch.All),
+        new("relatorios", "Relatórios", IconName.BarChart, NavLinkMatch.Prefix),
+        new("projetos", "Agendas", IconName.Folder, NavLinkMatch.Prefix),
+        new("partilhas", "Partilhas", IconName.Share, NavLinkMatch.Prefix),
+        new("definicoes", "Definições", IconName.Settings, NavLinkMatch.Prefix)
+    ];
+}

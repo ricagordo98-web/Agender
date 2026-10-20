@@ -1,0 +1,15 @@
+<button type="button" role="switch" class="toggle @(Value ? "on" : string.Empty)" aria-checked="@(Value ? "true" : "false")" aria-label="@Label"
+        @onclick="() => ValueChanged.InvokeAsync(!Value)">
+    <span class="knob"></span>
+</button>
+
+@code {
+    [Parameter]
+    public bool Value { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+}

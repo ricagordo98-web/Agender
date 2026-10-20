@@ -1,0 +1,120 @@
+@page "/conta/registar"
+@layout AuthLayout
+@inject UserManager<AgenderUser> UserManager
+@inject SignInManager<AgenderUser> SignInManager
+@inject Agender.Infrastructure.Services.IUnclaimedDataService UnclaimedData
+@inject Microsoft.Extensions.Options.IOptions<AgenderOptions> Options
+@inject NavigationManager Navigation
+
+<PageTitle>Criar conta · Agender</PageTitle>
+
+@if (!Options.Value.AllowRegistration)
+{
+    <h1>Registo fechado</h1>
+    <p class="auth-lead">A criação de novas contas está desativada neste servidor.</p>
+    <p class="auth-alt"><a href="conta/entrar">Voltar a entrar</a></p>
+}
+else
+{
+    <h1>Cria a tua conta</h1>
+    <p class="auth-lead">Começa a registar o teu tempo ao minuto.</p>
+
+    @if (_errors.Count > 0)
+    {
+        <ul class="auth-error" role="alert">
+            @foreach (string error in _errors)
+            {
+                <li>@error</li>
+            }
+        </ul>
+    }
+
+    <EditForm Model="Input" FormName="register" OnValidSubmit="RegisterAsync" method="post" class="auth-form">
+        <DataAnnotationsValidator />
+
+        <div class="auth-field">
+            <label for="name">Nome</label>
+            <InputText id="name" class="field" @bind-Value="Input.DisplayName" autocomplete="name" autofocus />
+            <ValidationMessage For="() => Input.DisplayName" class="auth-validation" />
+        </div>
+
+        <div class="auth-field">
+            <label for="email">Email</label>
+            <InputText id="email" class="field" @bind-Value="Input.Email" type="email" autocomplete="username" />
+            <ValidationMessage For="() => Input.Email" class="auth-validation" />
+        </div>
+
+        <div class="auth-field">
+            <label for="password">Palavra-passe</label>
+            <InputText id="password" class="field" @bind-Value="Input.Password" type="password" autocomplete="new-password" />
+            <ValidationMessage For="() => Input.Password" class="auth-validation" />
+            <span class="auth-hint">Mínimo de 8 caracteres, com letras e números.</span>
+        </div>
+
+        <div class="auth-field">
+            <label for="confirm">Confirmar palavra-passe</label>
+            <InputText id="confirm" class="field" @bind-Value="Input.ConfirmPassword" type="password" autocomplete="new-password" />
+            <ValidationMessage For="() => Input.ConfirmPassword" class="auth-validation" />
+        </div>
+
+        <button type="submit" class="btn btn-primary auth-submit">Criar conta</button>
+    </EditForm>
+
+    <p class="auth-alt">Já tens conta? <a href="conta/entrar">Entrar</a></p>
+}
+
+@code {
+    private List<string> _errors = [];
+
+    [SupplyParameterFromForm]
+    private RegisterModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private async Task RegisterAsync()
+    {
+        bool isFirstUser = !UserManager.Users.Any();
+
+        AgenderUser user = new()
+        {
+            UserName = Input.Email.Trim(),
+            Email = Input.Email.Trim(),
+            DisplayName = Input.DisplayName.Trim()
+        };
+
+        IdentityResult result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (!result.Succeeded)
+        {
+            _errors = [.. result.Errors.Select(e => e.Description)];
+            return;
+        }
+
+        if (isFirstUser)
+        {
+            await UnclaimedData.ClaimAsync(user.Id);
+        }
+
+        await SignInManager.SignInAsync(user, isPersistent: true);
+        Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl), forceLoad: true);
+    }
+
+    private sealed class RegisterModel
+    {
+        [Required(ErrorMessage = "Indica o teu nome.")]
+        [StringLength(AgenderUser.DisplayNameMaxLength, ErrorMessage = "O nome é demasiado longo.")]
+        public string DisplayName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica o teu email.")]
+        [EmailAddress(ErrorMessage = "O email não é válido.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica uma palavra-passe.")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Confirma a palavra-passe.")]
+        [Compare(nameof(Password), ErrorMessage = "As palavras-passe não coincidem.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

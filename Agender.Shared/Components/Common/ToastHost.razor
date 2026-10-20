@@ -1,0 +1,43 @@
+@implements IDisposable
+@inject IToastService Toasts
+
+<div class="toast-stack" aria-live="polite">
+    @foreach (ToastMessage toast in Toasts.Messages)
+    {
+        <div @key="toast.Id" class="toast @ToastClass(toast)" role="status">
+            <span class="toast-text">@toast.Text</span>
+            @if (toast.Action is not null)
+            {
+                <button type="button" class="toast-action" @onclick="() => RunActionAsync(toast)">@toast.Action.Label</button>
+            }
+            <button type="button" class="toast-close" aria-label="Fechar" @onclick="() => Toasts.Dismiss(toast.Id)">
+                <Icon Name="IconName.Close" Size="14" />
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Toasts.Changed += OnToastsChanged;
+
+    private void OnToastsChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private static string ToastClass(ToastMessage toast) => toast.Kind switch
+    {
+        ToastKind.Error => "error",
+        ToastKind.Success => "success",
+        _ => string.Empty
+    };
+
+    private async Task RunActionAsync(ToastMessage toast)
+    {
+        Toasts.Dismiss(toast.Id);
+
+        if (toast.Action is not null)
+        {
+            await toast.Action.Callback();
+        }
+    }
+
+    public void Dispose() => Toasts.Changed -= OnToastsChanged;
+}

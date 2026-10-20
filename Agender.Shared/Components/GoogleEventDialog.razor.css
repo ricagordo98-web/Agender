@@ -1,0 +1,6 @@
+.gdlg { display: grid; gap: 8px; }
+.gdlg-title { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.gdlg-when { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13.5px; }
+.gdlg-origin { color: var(--text-muted); font-size: 13px; }
+.gdlg-warning { padding: 10px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--text); font-size: 13.5px; }
+.spacer { flex: 1; }

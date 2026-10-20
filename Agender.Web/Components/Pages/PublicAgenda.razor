@@ -1,0 +1,17 @@
+@page "/p/{Token}"
+@layout PublicLayout
+@inject IPublicAgendaService Public
+
+<PageTitle>Agenda partilhada · Agender</PageTitle>
+<HeadContent>
+    <meta name="robots" content="noindex, nofollow" />
+</HeadContent>
+
+<SharedAgendaView Loader="LoadAsync" UnavailableText="O link pode ter expirado ou ter sido desativado. Pede um novo ao dono da agenda." />
+
+@code {
+    [Parameter]
+    public string Token { get; set; } = string.Empty;
+
+    private Task<Agender.Shared.Contracts.SharedAgendaDto> LoadAsync(DateOnly from, DateOnly to) => Public.GetAsync(Token, from, to);
+}

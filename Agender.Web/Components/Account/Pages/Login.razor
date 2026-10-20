@@ -1,0 +1,96 @@
+@page "/conta/entrar"
+@layout AuthLayout
+@inject SignInManager<AgenderUser> SignInManager
+@inject NavigationManager Navigation
+
+<PageTitle>Entrar · Agender</PageTitle>
+
+<h1>Bem-vindo de volta</h1>
+<p class="auth-lead">Entra para ver a tua agenda.</p>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p class="auth-error" role="alert">@_error</p>
+}
+
+<EditForm Model="Input" FormName="login" OnValidSubmit="SignInAsync" method="post" class="auth-form">
+    <DataAnnotationsValidator />
+
+    <div class="auth-field">
+        <label for="email">Email</label>
+        <InputText id="email" class="field" @bind-Value="Input.Email" type="email" autocomplete="username" autofocus />
+        <ValidationMessage For="() => Input.Email" class="auth-validation" />
+    </div>
+
+    <div class="auth-field">
+        <label for="password">Palavra-passe</label>
+        <InputText id="password" class="field" @bind-Value="Input.Password" type="password" autocomplete="current-password" />
+        <ValidationMessage For="() => Input.Password" class="auth-validation" />
+    </div>
+
+    <label class="auth-check">
+        <InputCheckbox @bind-Value="Input.RememberMe" /> Manter sessão iniciada
+    </label>
+
+    <button type="submit" class="btn btn-primary auth-submit">Entrar</button>
+</EditForm>
+
+@if (Options.Value.AllowRegistration)
+{
+    <p class="auth-alt">Ainda não tens conta? <a href="@RegisterUrl">Criar conta</a></p>
+}
+
+@code {
+    private string? _error;
+
+    [Inject]
+    private Microsoft.Extensions.Options.IOptions<AgenderOptions> Options { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private LoginModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private string RegisterUrl => string.IsNullOrEmpty(ReturnUrl)
+        ? "conta/registar"
+        : $"conta/registar?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+
+    protected override void OnInitialized()
+    {
+        if (HttpContext.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl), forceLoad: true);
+        }
+    }
+
+    private async Task SignInAsync()
+    {
+        SignInResult result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
+
+        if (result.Succeeded)
+        {
+            Navigation.NavigateTo(SafeReturnUrl.Resolve(ReturnUrl), forceLoad: true);
+            return;
+        }
+
+        _error = result.IsLockedOut
+            ? "Demasiadas tentativas falhadas. Tenta novamente dentro de alguns minutos."
+            : "Email ou palavra-passe incorretos.";
+    }
+
+    private sealed class LoginModel
+    {
+        [Required(ErrorMessage = "Indica o teu email.")]
+        [EmailAddress(ErrorMessage = "O email não é válido.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica a palavra-passe.")]
+        public string Password { get; set; } = string.Empty;
+
+        public bool RememberMe { get; set; } = true;
+    }
+}

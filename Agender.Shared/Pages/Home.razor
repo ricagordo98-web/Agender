@@ -1,0 +1,327 @@
+@page "/"
+@attribute [Authorize]
+@implements IDisposable
+@inject AgendaStore Store
+@inject PaletteState Palette
+@inject GoogleCalendarState GoogleCalendar
+@inject IToastService Toasts
+@inject UserSettingsState Settings
+
+<PageTitle>Agenda · Agender</PageTitle>
+
+<div class="agenda">
+    <AgendaToolbar Days="Store.Days"
+                   View="Store.View" ViewChanged="Store.ChangeViewAsync"
+                   SnapMinutes="Store.SnapMinutes" SnapMinutesChanged="Store.SetSnap"
+                   OnPrevious="() => Store.ShiftAsync(-1)" OnNext="() => Store.ShiftAsync(1)" OnToday="Store.GoToTodayAsync"
+                   OnNewEntry="OpenNewEntryNow" OnToggleSidebar="() => _sidebarToggled = !_sidebarToggled"
+                   OnSearch="Palette.Open"
+                   ShowSourceSwitch="GoogleCalendar.Status.IsConnected" ShowGoogle="GoogleCalendar.ShowGoogle" OnSourceChanged="SetSourceAsync"
+                   GoogleLoading="GoogleCalendar.IsLoadingEvents" GoogleError="GoogleCalendar.HasEventsError" OnRetryGoogle="() => LoadGoogleAsync(force: true)"
+                   Agendas="Store.Agendas" OnAgendaToggle="Store.ToggleAgendaVisibilityAsync" OnAgendaActivate="ActivateAgendaAsync"
+                   FilterLabel="@FilterLabel" OnClearFilter="() => Store.SetFilter(null, null)" />
+
+    <div class="agenda-body">
+        <TaskRepository Tasks="Store.ActiveTasks" Projects="Store.ActiveProjects" IsToggled="_sidebarToggled"
+                        OnAdd="AddTaskAsync" OnSetProject="SetTaskProjectAsync"
+                        OnToggle="Store.ToggleTaskAsync" RunningTaskId="Store.ActiveTimer?.TaskItemId" OnToggleTimer="ToggleTimerAsync" OnSetColor="SetTaskColorAsync"
+                        OnDelete="Store.DeleteTaskAsync" OnClose="() => _sidebarToggled = false"
+                        FilterProjectId="Store.FilterProjectId" FilterTag="@Store.FilterTag" Tags="Store.Tags" OnFilterChanged="ChangeFilter" />
+
+        @if (_sidebarToggled)
+        {
+            <div class="scrim" @onclick="() => _sidebarToggled = false"></div>
+        }
+
+        @if (Store.IsInitialized)
+        {
+            <Timeline Days="Store.Days" Entries="Store.VisibleEntries" Notes="Store.Notes" SnapMinutes="Store.SnapMinutes" DefaultDurationMinutes="Store.DefaultEntryMinutes" ShowNotes="!Store.Preferences.HideDayNotes" ShowEntryDetails="!Store.Preferences.HideEntryDetails" StartMinute="Store.Preferences.StartScrollMinute"
+                      Projects="Store.ProjectsById" FilterProjectId="Store.FilterProjectId" FilterTag="@Store.FilterTag"
+                      HighlightedEntryId="Store.HighlightedEntryId"
+                      OnEntryClick="OpenEditor" OnEntryMove="Store.MoveEntryAsync" OnRangeSelect="OpenNewEntry"
+                      OnTaskDrop="DropTaskAsync" OnEntryReturn="ReturnToTaskListAsync" OnEntryMenu="OpenEntryMenu" OnNoteSave="Store.SaveNoteAsync"
+                      ShowGoogle="GoogleCalendar.ShowGoogle" GoogleEventsFor="GoogleCalendar.EventsOn" OnGoogleEventClick="OnGoogleEventClicked" />
+        }
+    </div>
+
+    @if (_googleEvent is GoogleEvent googleEvent)
+    {
+        <GoogleEventDialog @key="googleEvent.Id" Event="googleEvent"
+                           CanOpenEntry="@(googleEvent.EntryId is Guid linked && Store.Entries.Any(e => e.Id == linked))"
+                           OnClose="() => _googleEvent = null"
+                           OnCreateEntry="CreateFromDialog" OnOpenEntry="OpenEntryFromDialog" OnDelete="DeleteGoogleEventAsync" />
+    }
+
+    @if (_menu is EntryMenuRequest menu)
+    {
+        <EntryContextMenu Entry="menu.Entry" X="menu.X" Y="menu.Y" OnClose="() => _menu = null"
+                          OnOpen="() => OpenEditor(menu.Entry)" OnToggleCompleted="() => Store.ToggleEntryCompletedAsync(menu.Entry.Id)"
+                          OnDelete="() => RequestDeleteAsync(menu.Entry)" />
+    }
+
+    @if (_confirmDelete is TimeEntry toDelete)
+    {
+        <ConfirmDialog Title="Eliminar tarefa" Message="Queres mesmo eliminar este registo da agenda?" ConfirmLabel="Eliminar" Danger="true"
+                       OnCancel="() => _confirmDelete = null" OnConfirm="() => ConfirmDeleteAsync(toDelete)" />
+    }
+
+    @if (_editing is not null)
+    {
+        <EntryEditor @key="_editing.Id" Entry="_editing" IsNew="_editingIsNew" Projects="Store.Projects" Agendas="Store.Agendas" KnownTags="Store.Tags"
+                     OnSave="SaveEntryAsync" OnDelete="RequestDeleteAsync" OnReturnToTasks="ReturnToTaskListAsync" OnCancel="CloseEditor" />
+    }
+</div>
+
+@code {
+    private const int DefaultStartMinute = 9 * 60;
+
+    private TimeEntry? _editing;
+    private bool _editingIsNew;
+    private bool _sidebarToggled;
+    private (DateOnly From, DateOnly To)? _googleRange;
+    private GoogleEvent? _googleEvent;
+    private EntryMenuRequest? _menu;
+    private TimeEntry? _confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnStoreChanged;
+        Store.NewEntryRequested += OnNewEntryRequested;
+        GoogleCalendar.Changed += OnGoogleChanged;
+        await GoogleCalendar.EnsureStatusAsync();
+        await Settings.EnsureLoadedAsync();
+        await Store.ApplySettingsAsync(Settings.Current, applyView: !Store.HasAppliedSettings);
+        await Store.InitializeAsync();
+
+        if (Store.ConsumePendingNewEntry())
+        {
+            OpenNewEntryNow();
+        }
+    }
+
+    private void OnNewEntryRequested() => _ = InvokeAsync(() =>
+    {
+        if (Store.IsInitialized && Store.ConsumePendingNewEntry())
+        {
+            OpenNewEntryNow();
+            StateHasChanged();
+        }
+    });
+
+    private void CreateFromGoogleEvent(GoogleEvent googleEvent)
+    {
+        if (googleEvent.StartMinute is not int start || googleEvent.EndMinute is not int end)
+        {
+            return;
+        }
+
+        _editing = new TimeEntry { Date = googleEvent.Date, StartMinute = start, EndMinute = end, Description = googleEvent.Title, AgendaId = Store.ActiveAgendaId };
+        _editingIsNew = true;
+    }
+
+    private string? FilterLabel
+    {
+        get
+        {
+            List<string> parts = [];
+
+            if (Store.FilterProjectId is Guid projectId)
+            {
+                parts.Add($"Projeto: {(Store.ProjectsById.TryGetValue(projectId, out Project? project) ? project.Name : "—")}");
+            }
+
+            if (Store.FilterTag is not null)
+            {
+                parts.Add($"#{Store.FilterTag}");
+            }
+
+            return parts.Count == 0 ? null : string.Join(" · ", parts);
+        }
+    }
+
+    private Task ActivateAgendaAsync(Agenda agenda) => Store.SelectOnlyAgendaAsync(agenda.Id);
+
+    private void ChangeFilter(FilterChange change) => Store.SetFilter(change.ProjectId, change.Tag);
+
+    private Task AddTaskAsync(NewTask task) => Store.AddTaskAsync(task.Title, task.ProjectId);
+
+    private Task SetTaskColorAsync(TaskColorChange change) => Store.SetTaskColorAsync(change.Task, change.Choice);
+
+    private Task SetTaskProjectAsync(TaskProjectChange change) => Store.SetTaskProjectAsync(change.Task, change.ProjectId);
+
+    private Task ToggleTimerAsync(TaskItem task) =>
+        Store.ActiveTimer?.TaskItemId == task.Id
+            ? Store.StopTimerAsync()
+            : Store.StartTimerAsync(task.Title, task.ProjectId, task.Id);
+
+    private void OnStoreChanged() => _ = InvokeAsync(async () =>
+    {
+        StateHasChanged();
+        await LoadGoogleAsync();
+    });
+
+    private void OnGoogleChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task LoadGoogleAsync(bool force = false)
+    {
+        if (!GoogleCalendar.ShowGoogle || Store.Days.Count == 0)
+        {
+            return;
+        }
+
+        (DateOnly From, DateOnly To) range = (Store.Days[0], Store.Days[^1]);
+
+        if (!force && _googleRange == range)
+        {
+            return;
+        }
+
+        _googleRange = range;
+        await GoogleCalendar.LoadRangeAsync(range.From, range.To, force);
+    }
+
+    private async Task SetSourceAsync(bool google)
+    {
+        GoogleCalendar.SetShowGoogle(google);
+        Store.SyncNewEntries = GoogleCalendar.ShowGoogle;
+        _googleRange = null;
+        await LoadGoogleAsync();
+    }
+
+    private Task OnGoogleEventClicked(GoogleEvent googleEvent)
+    {
+        _googleEvent = googleEvent;
+        return Task.CompletedTask;
+    }
+
+    private void CreateFromDialog()
+    {
+        if (_googleEvent is not null)
+        {
+            CreateFromGoogleEvent(_googleEvent);
+        }
+
+        _googleEvent = null;
+    }
+
+    private void OpenEntryFromDialog()
+    {
+        if (_googleEvent?.EntryId is Guid id && Store.Entries.FirstOrDefault(e => e.Id == id) is TimeEntry entry)
+        {
+            OpenEditor(entry);
+        }
+
+        _googleEvent = null;
+    }
+
+    private async Task DeleteGoogleEventAsync()
+    {
+        if (_googleEvent is not GoogleEvent googleEvent)
+        {
+            return;
+        }
+
+        if (await GoogleCalendar.DeleteEventAsync(googleEvent))
+        {
+            _googleEvent = null;
+
+            if (googleEvent.IsAgender)
+            {
+                await Store.RefreshAsync();
+            }
+        }
+    }
+
+    private void OpenNewEntryNow()
+    {
+        DateOnly today = Store.Today;
+        DateOnly date = Store.Days.Contains(today) ? today : Store.Days[0];
+        int start = DefaultStartMinute;
+
+        if (date == today)
+        {
+            DateTime now = Store.Now;
+            start = Math.Min(now.Hour * 60 + now.Minute, TimeSlot.MinutesPerDay - Store.DefaultEntryMinutes);
+        }
+
+        OpenNewEntry(new SlotSelection(date, start, start + Store.DefaultEntryMinutes));
+    }
+
+    private void OpenNewEntry(SlotSelection selection)
+    {
+        _editing = new TimeEntry { Date = selection.Date, StartMinute = selection.StartMinute, EndMinute = selection.EndMinute, SyncToGoogle = GoogleCalendar.ShowGoogle, AgendaId = Store.ActiveAgendaId };
+        _editingIsNew = true;
+    }
+
+    private void OpenEditor(TimeEntry entry)
+    {
+        if (entry.IsCompleted)
+        {
+            Toasts.Show("Tarefa terminada e bloqueada. Reabre-a para a editar.", ToastKind.Info);
+            return;
+        }
+
+        _editing = entry.Clone();
+        _editingIsNew = false;
+    }
+
+    private void CloseEditor() => _editing = null;
+
+    private void OpenEntryMenu(EntryMenuRequest request) => _menu = request;
+
+    private async Task RequestDeleteAsync(TimeEntry entry)
+    {
+        if (Store.ConfirmBeforeDelete)
+        {
+            _confirmDelete = entry;
+            return;
+        }
+
+        await ConfirmDeleteAsync(entry);
+    }
+
+    private Task RequestDeleteAsync(Guid id) =>
+        Store.Entries.FirstOrDefault(e => e.Id == id) is TimeEntry entry ? RequestDeleteAsync(entry) : Task.CompletedTask;
+
+    private async Task ConfirmDeleteAsync(TimeEntry entry)
+    {
+        _confirmDelete = null;
+
+        if (await Store.DeleteEntryAsync(entry.Id))
+        {
+            _editing = null;
+        }
+    }
+
+    private async Task SaveEntryAsync(TimeEntry entry)
+    {
+        if (await Store.SaveEntryAsync(entry, _editingIsNew))
+        {
+            _editing = null;
+            await LoadGoogleAsync(force: true);
+        }
+    }
+
+    private async Task ReturnToTaskListAsync(Guid id)
+    {
+        if (await Store.ReturnToTaskListAsync(id))
+        {
+            _editing = null;
+        }
+    }
+
+    private async Task DropTaskAsync(TaskDrop drop)
+    {
+        Store.SyncNewEntries = GoogleCalendar.ShowGoogle;
+        await Store.DropTaskAsync(drop);
+        _sidebarToggled = false;
+        await LoadGoogleAsync(force: true);
+    }
+
+    public void Dispose()
+    {
+        Store.Changed -= OnStoreChanged;
+        GoogleCalendar.Changed -= OnGoogleChanged;
+        Store.NewEntryRequested -= OnNewEntryRequested;
+    }
+}

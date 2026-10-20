@@ -1,0 +1,233 @@
+@inject GoogleCalendarState GoogleCalendar
+
+<Modal Title="@(IsNew ? "Novo registo" : "Editar registo")" OnClose="OnCancel" OnSubmit="SaveAsync">
+    <ChildContent>
+        <label class="label" for="entry-description">O que fizeste?</label>
+        <textarea id="entry-description" @ref="_description" class="field" rows="3"
+                  maxlength="@TimeEntry.DescriptionMaxLength" placeholder="Descreve o que fizeste…"
+                  value="@_descriptionText" @oninput="e => _descriptionText = e.Value?.ToString() ?? string.Empty"></textarea>
+
+        <div class="time-row">
+            <div>
+                <label class="label" for="entry-date">Data</label>
+                <input id="entry-date" class="field" type="date" @bind="_date" />
+            </div>
+            <div>
+                <label class="label" for="entry-start">Início</label>
+                <input id="entry-start" class="field" type="time" value="@_start" @oninput="e => _start = e.Value?.ToString() ?? string.Empty" />
+            </div>
+            <div>
+                <label class="label" for="entry-end">Fim</label>
+                <input id="entry-end" class="field" type="time" value="@_end" @oninput="e => _end = e.Value?.ToString() ?? string.Empty" />
+            </div>
+        </div>
+
+        <p class="duration">
+            <Icon Name="IconName.Clock" Size="14" />
+            @DurationText
+        </p>
+
+        @if (Agendas.Count > 1)
+        {
+            <label class="label" for="entry-agenda">Agenda</label>
+            <select id="entry-agenda" class="field" @onchange="OnAgendaChanged">
+                @foreach (Agenda agenda in Agendas)
+                {
+                    <option value="@agenda.Id" selected="@(agenda.Id == _agendaId)">@agenda.Name</option>
+                }
+            </select>
+        }
+
+        <label class="label" for="entry-project">Projeto</label>
+        <select id="entry-project" class="field" @onchange="OnProjectChanged">
+            <option value="" selected="@(_projectId is null)">Sem projeto</option>
+            @foreach (Project project in SelectableProjects)
+            {
+                <option value="@project.Id" selected="@(project.Id == _projectId)">@project.Name@(project.IsArchived ? " (arquivado)" : string.Empty)</option>
+            }
+        </select>
+
+        <label class="label" for="entry-tags">Etiquetas</label>
+        <ChipInput Id="entry-tags" @bind-Values="_tags" Suggestions="KnownTags" MaxItems="Tag.MaxPerEntry"
+                   MaxLength="Tag.NameMaxLength" Placeholder="Escreve e prime Enter…" />
+
+        <span class="label">Cor</span>
+        <ColorPicker @bind-Value="_color" @bind-CustomValue="_customColor" />
+
+        @if (GoogleCalendar.Status.IsConnected || _syncToGoogle)
+        {
+            <label class="sync-row">
+                <input type="checkbox" checked="@_syncToGoogle" @onchange="e => _syncToGoogle = (bool)(e.Value ?? false)" />
+                Enviar para o Google Calendar
+            </label>
+
+            @if (Entry.GoogleSyncFailed)
+            {
+                <p class="sync-warning">A última sincronização com o Google falhou. Usa “Sincronizar agora” em Definições.</p>
+            }
+        }
+
+        @if (_error is not null)
+        {
+            <p class="error" role="alert">@_error</p>
+        }
+    </ChildContent>
+
+    <Footer>
+        @if (!IsNew)
+        {
+            <button type="button" class="btn btn-danger" @onclick="() => OnDelete.InvokeAsync(Entry.Id)">
+                <Icon Name="IconName.Trash" Size="16" /> Eliminar
+            </button>
+        }
+        @if (!IsNew && Entry.TaskItemId is not null)
+        {
+            <button type="button" class="btn btn-ghost" title="Remove o registo da agenda e a tarefa volta à lista"
+                    @onclick="() => OnReturnToTasks.InvokeAsync(Entry.Id)">
+                <Icon Name="IconName.Tasks" Size="16" /> Devolver à lista
+            </button>
+        }
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OnCancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync">Guardar</button>
+    </Footer>
+</Modal>
+
+@code {
+    private ElementReference _description;
+    private string _descriptionText = string.Empty;
+    private DateOnly _date;
+    private string _start = string.Empty;
+    private string _end = string.Empty;
+    private EntryColor _color;
+    private string? _customColor;
+    private Guid _agendaId;
+    private Guid? _projectId;
+    private IReadOnlyList<string> _tags = [];
+    private bool _syncToGoogle;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public TimeEntry Entry { get; set; } = default!;
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Project> Projects { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<Agenda> Agendas { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<string> KnownTags { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<TimeEntry> OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnDelete { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnReturnToTasks { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private string DurationText =>
+        TryGetSlot(out TimeSlot slot) ? $"Duração: {TimeText.Duration(slot.Duration)}" : "Indica uma hora de início e de fim válidas";
+
+    protected override void OnInitialized()
+    {
+        _descriptionText = Entry.Description;
+        _date = Entry.Date;
+        _start = TimeSlot.FormatMinute(Entry.StartMinute);
+        _end = TimeSlot.FormatMinute(Entry.EndMinute % TimeSlot.MinutesPerDay);
+        _color = Entry.Color;
+        _customColor = Entry.CustomColor;
+        _projectId = Entry.ProjectId;
+        _agendaId = Entry.AgendaId != Guid.Empty ? Entry.AgendaId : Agendas.FirstOrDefault(a => a.IsActive)?.Id ?? Guid.Empty;
+        _tags = [.. Entry.Tags.Select(t => t.Name)];
+        _syncToGoogle = Entry.SyncToGoogle;
+    }
+
+    protected override Task OnInitializedAsync() => GoogleCalendar.EnsureStatusAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _description.FocusAsync();
+        }
+    }
+
+    private IEnumerable<Project> SelectableProjects =>
+        Projects.Where(p => (_agendaId == Guid.Empty || p.AgendaId == _agendaId) && (!p.IsArchived || p.Id == _projectId));
+
+    private void OnAgendaChanged(ChangeEventArgs args)
+    {
+        _agendaId = Guid.TryParse(args.Value?.ToString(), out Guid id) ? id : Guid.Empty;
+
+        if (Projects.FirstOrDefault(p => p.Id == _projectId) is Project project && project.AgendaId != _agendaId)
+        {
+            _projectId = null;
+        }
+    }
+
+    private void OnProjectChanged(ChangeEventArgs args)
+    {
+        _projectId = Guid.TryParse(args.Value?.ToString(), out Guid id) ? id : null;
+
+        if (Projects.FirstOrDefault(p => p.Id == _projectId) is Project project)
+        {
+            _color = project.Color;
+            _customColor = project.CustomColor;
+        }
+    }
+
+    private bool TryGetSlot(out TimeSlot slot)
+    {
+        slot = default;
+
+        if (!TimeSlot.TryParseClock(_start, out int start) || !TimeSlot.TryParseClock(_end, out int end))
+        {
+            return false;
+        }
+
+        if (end == 0 && start > 0)
+        {
+            end = TimeSlot.MinutesPerDay;
+        }
+
+        if (end <= start)
+        {
+            return false;
+        }
+
+        slot = new TimeSlot(start, end);
+        return true;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!TryGetSlot(out TimeSlot slot))
+        {
+            _error = "A hora de fim tem de ser posterior à hora de início.";
+            return;
+        }
+
+        TimeEntry updated = Entry.Clone();
+        updated.Description = _descriptionText;
+        updated.Date = _date;
+        updated.StartMinute = slot.StartMinute;
+        updated.EndMinute = slot.EndMinute;
+        updated.Color = _color;
+        updated.CustomColor = _customColor;
+        updated.ProjectId = _projectId;
+        updated.AgendaId = _agendaId;
+        updated.SyncToGoogle = _syncToGoogle;
+        updated.Tags = [.. _tags.Select(name => new Tag { Name = name })];
+
+        await OnSave.InvokeAsync(updated);
+    }
+}

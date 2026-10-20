@@ -1,0 +1,118 @@
+<div class="day-col @(NowMinute is not null ? "is-today" : string.Empty)" data-date="@TimelineMetrics.DateKey(Date)">
+    @if (!HideEntries)
+    {
+    @foreach (TimeEntry entry in Entries)
+    {
+        LaneAssignment lane = _lanes[entry.Id];
+        double width = 100d / lane.LaneCount;
+        double left = width * lane.Lane;
+        int duration = entry.EndMinute - entry.StartMinute;
+        string colorClass = EntryColorStyle.CssClass(entry.Color);
+        Project? project = entry.ProjectId is Guid projectId && Projects.TryGetValue(projectId, out Project? found) ? found : null;
+
+        <div @key="entry.Id"
+             class="entry @colorClass @(duration < TimelineMetrics.CompactEntryMinutes ? "compact" : string.Empty) @(IsDimmed(entry) ? "dimmed" : string.Empty) @(entry.IsCompleted ? "completed" : string.Empty) @(entry.Id == HighlightedEntryId ? "highlight" : string.Empty)"
+             data-entry-id="@entry.Id" data-task-linked="@(entry.TaskItemId is not null ? "true" : null)" data-start="@entry.StartMinute" data-end="@entry.EndMinute" data-color="@colorClass"
+             style="top:@TimelineMetrics.Px(entry.StartMinute);height:@TimelineMetrics.Px(duration);left:calc((100% - var(--lane-gutter)) * @TimelineMetrics.Number(left / 100) + 2px);width:calc((100% - var(--lane-gutter)) * @TimelineMetrics.Number(width / 100) - 4px);@EntryColorStyle.Style(entry.CustomColor)"
+             title="@entry.Description">
+            <span class="entry-resize top" data-edge="top"></span>
+            <div class="entry-time">@(entry.IsCompleted ? "✓ " : string.Empty)@TimeText.Range(entry.StartMinute, entry.EndMinute) <span class="entry-duration">· @TimeText.Duration(duration)</span></div>
+            <div class="entry-text @(string.IsNullOrEmpty(entry.Description) ? "placeholder" : string.Empty)">@(string.IsNullOrEmpty(entry.Description) ? "Sem descrição" : entry.Description)</div>
+            @if (ShowDetails && duration >= TimelineMetrics.MetaEntryMinutes && (project is not null || entry.Tags.Count > 0))
+            {
+                <div class="entry-meta">
+                    @if (project is not null)
+                    {
+                        <span class="meta-project"><span class="meta-dot @EntryColorStyle.CssClass(project.Color)" style="@EntryColorStyle.Style(project.CustomColor)"></span>@project.Name</span>
+                    }
+                    @foreach (Tag tag in entry.Tags.Take(3))
+                    {
+                        <span class="meta-tag">#@tag.Name</span>
+                    }
+                </div>
+            }
+            <div class="entry-more">+ Mais detalhes</div>
+            <span class="entry-resize bottom" data-edge="bottom"></span>
+        </div>
+    }
+    }
+
+    @for (int i = 0; i < _timed.Count; i++)
+    {
+        GoogleEvent item = _timed[i];
+        LaneAssignment lane = _googleLanes[PlaceholderId(i)];
+        double width = 100d / lane.LaneCount;
+        double left = width * lane.Lane;
+        int duration = item.EndMinute!.Value - item.StartMinute!.Value;
+
+        <div @key="item.Id" class="gevent @(item.IsAgender ? "own" : string.Empty) @(duration < TimelineMetrics.CompactEntryMinutes ? "compact" : string.Empty)"
+             role="button" tabindex="0" data-google-event="@item.Id"
+             style="top:@TimelineMetrics.Px(item.StartMinute!.Value);height:@TimelineMetrics.Px(duration);left:calc((100% - var(--lane-gutter)) * @TimelineMetrics.Number(left / 100) + 2px);width:calc((100% - var(--lane-gutter)) * @TimelineMetrics.Number(width / 100) - 4px)"
+             title="@item.Title" @onclick="() => OnGoogleEventClick.InvokeAsync(item)">
+            <div class="gevent-time">@TimeText.Range(item.StartMinute!.Value, item.EndMinute!.Value)@(item.IsAgender ? " · Agender" : string.Empty)</div>
+            <div class="gevent-text">@item.Title</div>
+        </div>
+    }
+
+    @if (NowMinute is int now)
+    {
+        <div class="now-line" style="top:@TimelineMetrics.Px(now)"><span class="now-dot"></span></div>
+    }
+</div>
+
+@code {
+    private IReadOnlyDictionary<Guid, LaneAssignment> _lanes = new Dictionary<Guid, LaneAssignment>();
+    private IReadOnlyDictionary<Guid, LaneAssignment> _googleLanes = new Dictionary<Guid, LaneAssignment>();
+    private IReadOnlyList<GoogleEvent> _timed = [];
+
+    [Parameter, EditorRequired]
+    public DateOnly Date { get; set; }
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TimeEntry> Entries { get; set; } = [];
+
+    [Parameter]
+    public int? NowMinute { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<GoogleEvent> GoogleEvents { get; set; } = [];
+
+    [Parameter]
+    public bool HideEntries { get; set; }
+
+    [Parameter]
+    public bool ShowDetails { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<GoogleEvent> OnGoogleEventClick { get; set; }
+
+    [Parameter]
+    public IReadOnlyDictionary<Guid, Project> Projects { get; set; } = new Dictionary<Guid, Project>();
+
+    [Parameter]
+    public Guid? FilterProjectId { get; set; }
+
+    [Parameter]
+    public string? FilterTag { get; set; }
+
+    [Parameter]
+    public Guid? HighlightedEntryId { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _lanes = EntryLayout.Compute(Entries);
+        _timed = [.. GoogleEvents.Where(e => !e.IsAllDay)];
+        _googleLanes = EntryLayout.Compute(_timed.Select((e, i) => new TimeEntry
+        {
+            Id = PlaceholderId(i),
+            StartMinute = e.StartMinute!.Value,
+            EndMinute = e.EndMinute!.Value
+        }));
+    }
+
+    private static Guid PlaceholderId(int index) => new(index, 0, 0, new byte[8]);
+
+    private bool IsDimmed(TimeEntry entry) =>
+        (FilterProjectId is not null && entry.ProjectId != FilterProjectId)
+        || (FilterTag is not null && !entry.Tags.Any(t => string.Equals(t.Name, FilterTag, StringComparison.OrdinalIgnoreCase)));
+}

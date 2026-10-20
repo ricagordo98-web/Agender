@@ -1,0 +1,18 @@
+.popover-panel {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 8px;
+    overflow-y: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-lg);
+}
+
+.popover-panel:popover-open { animation: popover-in 0.18s var(--ease); }
+
+@keyframes popover-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+}

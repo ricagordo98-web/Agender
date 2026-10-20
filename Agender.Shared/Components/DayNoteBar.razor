@@ -1,0 +1,122 @@
+@implements IDisposable
+
+@if (ReadOnly)
+{
+    @if (HasNote)
+    {
+        <div class="note-view read-only">
+            <Icon Name="IconName.Note" Size="14" />
+            <span class="note-text">@Text</span>
+        </div>
+    }
+}
+else if (_isEditing)
+{
+    <textarea @ref="_input" class="note-input" rows="3" maxlength="@DayNote.TextMaxLength"
+              placeholder="Escreve uma nota para este dia…" aria-label="Nota do dia"
+              @oninput="OnInputAsync" @onblur="CommitAsync" @onkeydown="OnKeyDown">@_initialText</textarea>
+}
+else
+{
+    <button type="button" class="note-view @(HasNote ? string.Empty : "empty")" @onclick="BeginEdit"
+            title="@(HasNote ? "Editar nota" : "Adicionar nota ao dia")">
+        <Icon Name="IconName.Note" Size="14" />
+        <span class="note-text">@(HasNote ? Text : "Adicionar nota…")</span>
+    </button>
+}
+
+@code {
+    private const int AutosaveDelayMilliseconds = 700;
+
+    private ElementReference _input;
+    private CancellationTokenSource? _debounce;
+    private string _draft = string.Empty;
+    private string _initialText = string.Empty;
+    private string _lastSaved = string.Empty;
+    private bool _isEditing;
+    private bool _focusPending;
+
+    [Parameter, EditorRequired]
+    public DateOnly Date { get; set; }
+
+    [Parameter]
+    public string? Text { get; set; }
+
+    [Parameter]
+    public EventCallback<DayNoteChange> OnSave { get; set; }
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    private bool HasNote => !string.IsNullOrWhiteSpace(Text);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPending)
+        {
+            _focusPending = false;
+            await _input.FocusAsync();
+        }
+    }
+
+    private void BeginEdit()
+    {
+        _initialText = Text ?? string.Empty;
+        _draft = _initialText;
+        _lastSaved = _initialText;
+        _isEditing = true;
+        _focusPending = true;
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs args)
+    {
+        _draft = args.Value?.ToString() ?? string.Empty;
+
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+        _debounce = new CancellationTokenSource();
+
+        try
+        {
+            await Task.Delay(AutosaveDelayMilliseconds, _debounce.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        await SaveAsync();
+    }
+
+    private async Task CommitAsync()
+    {
+        _debounce?.Cancel();
+        await SaveAsync();
+        _isEditing = false;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape" || (args.CtrlKey && args.Key == "Enter"))
+        {
+            await CommitAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_draft == _lastSaved)
+        {
+            return;
+        }
+
+        _lastSaved = _draft;
+        await OnSave.InvokeAsync(new DayNoteChange(Date, _draft));
+    }
+
+    public void Dispose()
+    {
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+    }
+}

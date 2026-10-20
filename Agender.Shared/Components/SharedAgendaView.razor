@@ -1,0 +1,115 @@
+@inject IClock Clock
+
+<div class="shared-agenda">
+    <header class="shared-bar">
+        <div class="shared-owner">
+            <span class="shared-badge">Só leitura</span>
+            <h1 class="shared-title">@Title</h1>
+        </div>
+
+        <div class="shared-nav">
+            <button type="button" class="icon-btn" title="Anterior" aria-label="Anterior" @onclick="() => ShiftAsync(-1)">
+                <Icon Name="IconName.ChevronLeft" />
+            </button>
+            <button type="button" class="btn btn-ghost" @onclick="GoToTodayAsync">Hoje</button>
+            <button type="button" class="icon-btn" title="Seguinte" aria-label="Seguinte" @onclick="() => ShiftAsync(1)">
+                <Icon Name="IconName.ChevronRight" />
+            </button>
+            <span class="shared-range">@RangeText</span>
+            <div class="shared-segmented" role="group" aria-label="Vista">
+                <button type="button" class="@SegmentClass(false)" @onclick="() => SetWeekAsync(false)">Dia</button>
+                <button type="button" class="@SegmentClass(true)" @onclick="() => SetWeekAsync(true)">Semana</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="shared-body">
+        @if (_unavailable)
+        {
+            <div class="shared-message">
+                <h2>Esta agenda não está disponível</h2>
+                <p>@UnavailableText</p>
+            </div>
+        }
+        else if (_loaded)
+        {
+            <Timeline Days="_days" Entries="_entries" Notes="_notes" Projects="_projects" ReadOnly="true" />
+        }
+    </div>
+</div>
+
+@code {
+    private IReadOnlyList<DateOnly> _days = [];
+    private IReadOnlyList<TimeEntry> _entries = [];
+    private IReadOnlyDictionary<DateOnly, string> _notes = new Dictionary<DateOnly, string>();
+    private IReadOnlyDictionary<Guid, Project> _projects = new Dictionary<Guid, Project>();
+    private DateOnly _anchor;
+    private bool _week = true;
+    private bool _loaded;
+    private bool _unavailable;
+    private string _ownerName = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Func<DateOnly, DateOnly, Task<SharedAgendaDto>> Loader { get; set; } = default!;
+
+    [Parameter]
+    public string UnavailableText { get; set; } = "Pode ter expirado ou ter sido removida pelo dono.";
+
+    private string Title => _ownerName.Length == 0 ? "Agenda partilhada" : $"Agenda de {_ownerName}";
+
+    private string RangeText => _days.Count switch
+    {
+        0 => string.Empty,
+        1 => DateText.Full(_days[0]),
+        _ => DateText.Range(_days[0], _days[^1])
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _anchor = Clock.Today;
+        await LoadAsync();
+    }
+
+    private Task ShiftAsync(int direction)
+    {
+        _anchor = _anchor.AddDays(direction * (_week ? 7 : 1));
+        return LoadAsync();
+    }
+
+    private Task GoToTodayAsync()
+    {
+        _anchor = Clock.Today;
+        return LoadAsync();
+    }
+
+    private Task SetWeekAsync(bool week)
+    {
+        _week = week;
+        return LoadAsync();
+    }
+
+    private string SegmentClass(bool week) => week == _week ? "segment active" : "segment";
+
+    private async Task LoadAsync()
+    {
+        DateOnly monday = _anchor.AddDays(-(((int)_anchor.DayOfWeek + 6) % 7));
+        List<DateOnly> days = _week ? [.. Enumerable.Range(0, 7).Select(monday.AddDays)] : [_anchor];
+
+        try
+        {
+            SharedAgendaDto agenda = await Loader(days[0], days[^1]);
+
+            _ownerName = agenda.OwnerName;
+            _projects = agenda.Projects.Select(p => p.ToEntity()).ToDictionary(p => p.Id);
+            _entries = [.. agenda.Entries.Select(e => e.ToEntity())];
+            _notes = agenda.Notes.ToDictionary(n => n.Date, n => n.Text);
+            _days = days;
+            _unavailable = false;
+            _loaded = true;
+        }
+        catch (Exception ex) when (ex is NotFoundException or ArgumentException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            _unavailable = true;
+        }
+    }
+}

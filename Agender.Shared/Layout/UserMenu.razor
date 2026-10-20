@@ -1,0 +1,95 @@
+@implements IDisposable
+@inject AuthenticationStateProvider AuthState
+@inject IAuthNavigation Auth
+@inject NavigationManager Navigation
+
+<div class="user-menu">
+<Popover @ref="_popover" Label="Conta e tema" TriggerClass="avatar-btn" Width="260">
+    <Trigger><span class="avatar" aria-hidden="true">@_initials</span></Trigger>
+    <ChildContent>
+        <div class="user-head">
+            <span class="avatar large" aria-hidden="true">@_initials</span>
+            <div class="user-text">
+                <strong>@_displayName</strong>
+                @if (!string.IsNullOrEmpty(_email))
+                {
+                    <span>@_email</span>
+                }
+            </div>
+        </div>
+
+        <p class="menu-title">Tema</p>
+        <ThemeSelector />
+
+        <div class="menu-actions">
+            <a class="menu-link" href="definicoes" @onclick="ClosePopoverAsync">
+                <Icon Name="IconName.Settings" Size="16" /> Definições
+            </a>
+            @if (Auth.ChangePasswordPath is not null)
+            {
+                <a class="menu-link" href="@Auth.ChangePasswordPath">
+                    <Icon Name="IconName.Lock" Size="16" /> Alterar palavra-passe
+                </a>
+            }
+            @if (Auth.CanLogout)
+            {
+                <button type="button" class="menu-link danger" @onclick="Auth.LogoutAsync">
+                    <Icon Name="IconName.LogOut" Size="16" /> Terminar sessão
+                </button>
+            }
+        </div>
+    </ChildContent>
+</Popover>
+</div>
+
+@code {
+    private Popover? _popover;
+    private string _displayName = string.Empty;
+    private string? _email;
+    private string _initials = "?";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        await LoadUserAsync(AuthState.GetAuthenticationStateAsync());
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> state) =>
+        _ = InvokeAsync(async () =>
+        {
+            await LoadUserAsync(state);
+            StateHasChanged();
+        });
+
+    private async Task LoadUserAsync(Task<AuthenticationState> stateTask)
+    {
+        AuthenticationState state = await stateTask;
+        System.Security.Claims.ClaimsPrincipal user = state.User;
+
+        _email = user.Identity?.Name;
+        _displayName = user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value ?? _email ?? string.Empty;
+        _initials = BuildInitials(_displayName);
+    }
+
+    private async Task ClosePopoverAsync()
+    {
+        if (_popover is not null)
+        {
+            await _popover.CloseAsync();
+        }
+    }
+
+    private static string BuildInitials(string name)
+    {
+        string[] parts = name.Split([' ', '@', '.'], StringSplitOptions.RemoveEmptyEntries);
+
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..1].ToUpperInvariant(),
+            _ => $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant()
+        };
+    }
+
+    public void Dispose() => AuthState.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+}

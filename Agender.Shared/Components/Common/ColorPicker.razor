@@ -1,0 +1,99 @@
+<div class="color-picker">
+    <div class="swatches" role="radiogroup" aria-label="@Label">
+        @foreach (EntryColor color in EntryColorStyle.Palette)
+        {
+            bool selected = CustomValue is null && color == Value;
+
+            <button type="button" role="radio" aria-checked="@selected" aria-label="@EntryColorStyle.Label(color)"
+                    class="swatch @EntryColorStyle.CssClass(color) @(selected ? "selected" : string.Empty)"
+                    @onclick="() => SelectPresetAsync(color)"></button>
+        }
+
+        <label class="swatch custom @(CustomValue is not null ? "selected" : string.Empty)" style="@EntryColorStyle.Style(CustomValue)" title="Escolher uma cor personalizada">
+            <input type="color" aria-label="Cor personalizada" value="@PickerValue" @onchange="OnPickedAsync" />
+        </label>
+    </div>
+
+    <div class="hex-row">
+        <label class="hex-label" for="@_inputId">Hex</label>
+        <input id="@_inputId" class="field hex @(_invalid ? "invalid" : string.Empty)" maxlength="@ColorHex.Length" spellcheck="false" autocomplete="off"
+               placeholder="#RRGGBB" value="@(CustomValue ?? string.Empty)" @onchange="OnHexChangedAsync" />
+        @if (CustomValue is not null)
+        {
+            <button type="button" class="hex-clear" @onclick="ClearAsync">Usar cor da paleta</button>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly string _inputId = $"hex-{Guid.NewGuid():N}";
+    private bool _invalid;
+
+    [Parameter]
+    public EntryColor Value { get; set; }
+
+    [Parameter]
+    public EventCallback<EntryColor> ValueChanged { get; set; }
+
+    [Parameter]
+    public string? CustomValue { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> CustomValueChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<ColorChoice> OnChange { get; set; }
+
+    [Parameter]
+    public string Label { get; set; } = "Cor";
+
+    private string PickerValue => (CustomValue ?? EntryColorStyle.Hex(Value)).ToLowerInvariant();
+
+    private async Task SelectPresetAsync(EntryColor color)
+    {
+        _invalid = false;
+        await ValueChanged.InvokeAsync(color);
+        await CustomValueChanged.InvokeAsync(null);
+        await OnChange.InvokeAsync(new ColorChoice(color, null));
+    }
+
+    private Task OnPickedAsync(ChangeEventArgs args) => SetCustomAsync(args.Value?.ToString());
+
+    private async Task OnHexChangedAsync(ChangeEventArgs args)
+    {
+        string text = args.Value?.ToString()?.Trim() ?? string.Empty;
+
+        if (text.Length == 0)
+        {
+            await ClearAsync();
+            return;
+        }
+
+        if (!text.StartsWith('#'))
+        {
+            text = "#" + text;
+        }
+
+        _invalid = !ColorHex.IsValid(text);
+
+        if (!_invalid)
+        {
+            await SetCustomAsync(text);
+        }
+    }
+
+    private async Task SetCustomAsync(string? hex)
+    {
+        _invalid = false;
+        string? normalized = ColorHex.Normalize(hex);
+        await CustomValueChanged.InvokeAsync(normalized);
+        await OnChange.InvokeAsync(new ColorChoice(Value, normalized));
+    }
+
+    private async Task ClearAsync()
+    {
+        _invalid = false;
+        await CustomValueChanged.InvokeAsync(null);
+        await OnChange.InvokeAsync(new ColorChoice(Value, null));
+    }
+}

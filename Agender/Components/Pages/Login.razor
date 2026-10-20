@@ -1,0 +1,106 @@
+@page "/entrar"
+@layout AuthLayout
+@inject AuthSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>Entrar · Agender</PageTitle>
+
+<h1>Bem-vindo de volta</h1>
+<p class="auth-lead">Liga-te ao teu servidor Agender para ver a tua agenda.</p>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p class="auth-error" role="alert">@_error</p>
+}
+
+<EditForm Model="_input" OnValidSubmit="SignInAsync" class="auth-form">
+    <DataAnnotationsValidator />
+
+    <div class="auth-field">
+        <label for="server">Servidor</label>
+        <InputText id="server" class="field" @bind-Value="_input.Server" type="url" placeholder="https://agender.exemplo.pt" />
+        <ValidationMessage For="() => _input.Server" class="auth-validation" />
+    </div>
+
+    <div class="auth-field">
+        <label for="email">Email</label>
+        <InputText id="email" class="field" @bind-Value="_input.Email" type="email" autocomplete="username" />
+        <ValidationMessage For="() => _input.Email" class="auth-validation" />
+    </div>
+
+    <div class="auth-field">
+        <label for="password">Palavra-passe</label>
+        <InputText id="password" class="field" @bind-Value="_input.Password" type="password" autocomplete="current-password" />
+        <ValidationMessage For="() => _input.Password" class="auth-validation" />
+    </div>
+
+    <button type="submit" class="btn btn-primary auth-submit" disabled="@_busy">@(_busy ? "A entrar…" : "Entrar")</button>
+</EditForm>
+
+<p class="auth-alt">Ainda não tens conta? <button type="button" class="auth-link" @onclick="OpenRegisterAsync">Criar conta</button></p>
+
+@code {
+    private readonly LoginInput _input = new();
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitializeAsync();
+
+        if (Session.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        _input.Server = Session.ServerUrl;
+    }
+
+    private async Task SignInAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        LoginResult result = await Session.LoginAsync(_input.Server, _input.Email, _input.Password);
+        _busy = false;
+
+        if (result == LoginResult.Success)
+        {
+            Navigation.NavigateTo("/", forceLoad: true);
+            return;
+        }
+
+        _error = result switch
+        {
+            LoginResult.InvalidCredentials => "Email ou palavra-passe incorretos.",
+            LoginResult.InvalidServerAddress => "O endereço do servidor não é válido ou não é um servidor Agender.",
+            _ => "Não foi possível ligar ao servidor. Verifica o endereço e a tua ligação."
+        };
+    }
+
+    private async Task OpenRegisterAsync()
+    {
+        if (Uri.TryCreate($"{_input.Server.Trim().TrimEnd('/')}/conta/registar", UriKind.Absolute, out Uri? uri))
+        {
+            await Launcher.Default.OpenAsync(uri);
+        }
+        else
+        {
+            _error = "Indica primeiro o endereço do servidor.";
+        }
+    }
+
+    private sealed class LoginInput
+    {
+        [Required(ErrorMessage = "Indica o endereço do servidor.")]
+        public string Server { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica o teu email.")]
+        [EmailAddress(ErrorMessage = "O email não é válido.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Indica a palavra-passe.")]
+        public string Password { get; set; } = string.Empty;
+    }
+}

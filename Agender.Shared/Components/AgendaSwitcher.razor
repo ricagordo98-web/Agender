@@ -1,0 +1,45 @@
+<div class="ag-list" role="group" aria-label="Agendas">
+    @foreach (Agenda agenda in Agendas)
+    {
+        <span @key="agenda.Id" class="ag-chip @EntryColorStyle.CssClass(agenda.Color) @(agenda.IsActive ? "active" : string.Empty) @(agenda.IsVisible ? string.Empty : "hidden")"
+              style="@EntryColorStyle.Style(agenda.CustomColor)">
+            @if (ShowVisibility)
+            {
+                <button type="button" class="ag-dot" role="checkbox" aria-checked="@(agenda.IsVisible ? "true" : "false")"
+                        aria-label="@(agenda.IsVisible ? $"Esconder {agenda.Name}" : $"Mostrar {agenda.Name}")"
+                        title="@(agenda.IsActive ? "A agenda ativa está sempre visível" : agenda.IsVisible ? "Esconder esta agenda" : "Mostrar esta agenda")"
+                        disabled="@agenda.IsActive" @onclick="() => OnToggle.InvokeAsync(agenda)"></button>
+            }
+            else
+            {
+                <span class="ag-dot static" aria-hidden="true"></span>
+            }
+            <button type="button" class="ag-name" aria-pressed="@(agenda.IsActive ? "true" : "false")"
+                    title="@(agenda.IsActive ? "Agenda ativa: as novas tarefas e registos vão para aqui" : ShowVisibility ? "Ver só esta agenda (e torná-la ativa)" : "Tornar esta a agenda ativa")"
+                    @onclick="() => OnActivate.InvokeAsync(agenda)">@agenda.Name</button>
+            @if (OnEdit.HasDelegate)
+            {
+                <button type="button" class="ag-edit" aria-label="@($"Editar {agenda.Name}")" title="Editar agenda" @onclick="() => OnEdit.InvokeAsync(agenda)">
+                    <Icon Name="IconName.Pencil" Size="13" />
+                </button>
+            }
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<Agenda> Agendas { get; set; } = [];
+
+    [Parameter]
+    public bool ShowVisibility { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<Agenda> OnToggle { get; set; }
+
+    [Parameter]
+    public EventCallback<Agenda> OnActivate { get; set; }
+
+    [Parameter]
+    public EventCallback<Agenda> OnEdit { get; set; }
+}

@@ -1,0 +1,62 @@
+<div class="menu-backdrop" @onclick="OnClose" @oncontextmenu="OnClose" @oncontextmenu:preventDefault></div>
+
+<div class="entry-menu" role="menu" aria-label="Ações do registo" style="left:min(@(TimelineMetrics.Number(X))px, calc(100vw - 210px));top:min(@(TimelineMetrics.Number(Y))px, calc(100vh - 150px))"
+     @onkeydown="OnKeyDown">
+    @if (!Entry.IsCompleted)
+    {
+        <button type="button" role="menuitem" class="menu-item" @ref="_first" @onclick="() => Run(OnOpen)">
+            <Icon Name="IconName.Pencil" Size="15" />
+            <span>Abrir tarefa</span>
+        </button>
+    }
+    <button type="button" role="menuitem" class="menu-item" @ref="_second" @onclick="() => Run(OnToggleCompleted)">
+        <Icon Name="IconName.Check" Size="15" />
+        <span>@(Entry.IsCompleted ? "Reabrir tarefa" : "Terminar tarefa")</span>
+    </button>
+    <button type="button" role="menuitem" class="menu-item danger" @onclick="() => Run(OnDelete)">
+        <Icon Name="IconName.Trash" Size="15" />
+        <span>Eliminar</span>
+    </button>
+</div>
+
+@code {
+    private ElementReference _first;
+    private ElementReference _second;
+
+    [Parameter, EditorRequired]
+    public TimeEntry Entry { get; set; } = default!;
+
+    [Parameter]
+    public double X { get; set; }
+
+    [Parameter]
+    public double Y { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpen { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleCompleted { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await (Entry.IsCompleted ? _second : _first).FocusAsync();
+        }
+    }
+
+    private async Task Run(EventCallback action)
+    {
+        await OnClose.InvokeAsync();
+        await action.InvokeAsync();
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs args) => args.Key == "Escape" ? OnClose.InvokeAsync() : Task.CompletedTask;
+}

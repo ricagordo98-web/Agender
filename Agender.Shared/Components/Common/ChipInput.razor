@@ -1,0 +1,101 @@
+<div class="chip-input" @onclick="FocusInputAsync">
+    @foreach (string value in Values)
+    {
+        <span @key="value" class="chip">
+            #@value
+            <button type="button" class="chip-remove" aria-label="Remover @value" @onclick="() => RemoveAsync(value)" @onclick:stopPropagation>
+                <Icon Name="IconName.Close" Size="12" />
+            </button>
+        </span>
+    }
+
+    @if (Values.Count < MaxItems)
+    {
+        <input @ref="_input" id="@Id" class="chip-field" list="@_listId" maxlength="@MaxLength"
+               placeholder="@(Values.Count == 0 ? Placeholder : string.Empty)"
+               value="@_text" @oninput="OnInputAsync" @onkeydown="OnKeyDownAsync" @onblur="CommitAsync" />
+    }
+
+    <datalist id="@_listId">
+        @foreach (string suggestion in Suggestions.Where(s => !Values.Contains(s, StringComparer.OrdinalIgnoreCase)))
+        {
+            <option value="@suggestion"></option>
+        }
+    </datalist>
+</div>
+
+@code {
+    private readonly string _listId = $"chip-list-{Guid.NewGuid():N}";
+    private ElementReference _input;
+    private string _text = string.Empty;
+
+    [Parameter]
+    public IReadOnlyList<string> Values { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<IReadOnlyList<string>> ValuesChanged { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string> Suggestions { get; set; } = [];
+
+    [Parameter]
+    public string? Id { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = string.Empty;
+
+    [Parameter]
+    public int MaxItems { get; set; } = int.MaxValue;
+
+    [Parameter]
+    public int MaxLength { get; set; } = 30;
+
+    private async Task FocusInputAsync()
+    {
+        if (Values.Count < MaxItems)
+        {
+            await _input.FocusAsync();
+        }
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs args)
+    {
+        string text = args.Value?.ToString() ?? string.Empty;
+
+        if (text.EndsWith(','))
+        {
+            _text = text.TrimEnd(',');
+            await CommitAsync();
+            return;
+        }
+
+        _text = text;
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await CommitAsync();
+        }
+        else if (args.Key == "Backspace" && _text.Length == 0 && Values.Count > 0)
+        {
+            await RemoveAsync(Values[^1]);
+        }
+    }
+
+    private async Task CommitAsync()
+    {
+        string name = _text.Trim().TrimStart('#').Trim();
+        _text = string.Empty;
+
+        if (name.Length == 0 || Values.Count >= MaxItems || Values.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await ValuesChanged.InvokeAsync([.. Values, name]);
+    }
+
+    private Task RemoveAsync(string value) => ValuesChanged.InvokeAsync([.. Values.Where(v => v != value)]);
+}

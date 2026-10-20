@@ -1,0 +1,24 @@
+<div class="setting-row @(Stacked ? "stacked" : string.Empty)">
+    <div class="setting-text">
+        <div class="setting-title">@Title</div>
+        @if (!string.IsNullOrEmpty(Description))
+        {
+            <p class="setting-desc">@Description</p>
+        }
+    </div>
+    <div class="setting-control">@ChildContent</div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public bool Stacked { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

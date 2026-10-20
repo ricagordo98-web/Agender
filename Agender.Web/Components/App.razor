@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <ResourcePreloader />
+    <script>try{var t=localStorage.getItem('agender-theme');if(t&&t!=='system')document.documentElement.dataset.theme=t;}catch(e){}</script>
+    <link rel="stylesheet" href="_content/Agender.Shared/app.css" />
+    <link rel="stylesheet" href="_content/Agender.Shared/auth.css" />
+    <link rel="stylesheet" href="Agender.Web.styles.css" />
+    <ImportMap />
+    <link rel="icon" type="image/png" href="_content/Agender.Shared/favicon.png" />
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+
+<body>
+    <Routes @rendermode="PageRenderMode" />
+    <ReconnectModal />
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+
+</html>
+
+@code {
+    private static readonly InteractiveServerRenderMode InteractiveMode = new(prerender: false);
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.Request.Path.StartsWithSegments("/conta") ? null : InteractiveMode;
+}

@@ -1,0 +1,208 @@
+<article class="detail @EntryColorStyle.CssClass(Project.Color)" style="@EntryColorStyle.Style(Project.CustomColor)">
+    <header class="detail-head">
+        <button type="button" class="icon-btn back-btn" aria-label="Voltar à lista de projetos" @onclick="OnBack">
+            <Icon Name="IconName.ChevronLeft" />
+        </button>
+        <span class="project-swatch" aria-hidden="true"></span>
+        <div class="project-title">
+            <h2>@Project.Name</h2>
+            @if (!string.IsNullOrEmpty(Project.ClientName))
+            {
+                <p>@Project.ClientName</p>
+            }
+        </div>
+        @if (Project.IsArchived)
+        {
+            <span class="badge">Arquivado</span>
+        }
+        <div class="project-actions">
+            <button type="button" class="btn btn-ghost" @onclick="OnShowInAgenda">Ver na agenda</button>
+            <button type="button" class="icon-btn" title="Editar" aria-label="Editar projeto" @onclick="OnEdit">
+                <Icon Name="IconName.Pencil" Size="16" />
+            </button>
+            <button type="button" class="icon-btn" title="@(Project.IsArchived ? "Restaurar" : "Arquivar")"
+                    aria-label="@(Project.IsArchived ? "Restaurar projeto" : "Arquivar projeto")" @onclick="OnArchive">
+                <Icon Name="IconName.Archive" Size="16" />
+            </button>
+            <button type="button" class="icon-btn danger" title="Eliminar" aria-label="Eliminar projeto" @onclick="OnDelete">
+                <Icon Name="IconName.Trash" Size="16" />
+            </button>
+        </div>
+    </header>
+
+    <dl class="project-stats">
+        <div>
+            <dt>Esta semana</dt>
+            <dd>@TimeText.Duration(WeekMinutes)</dd>
+        </div>
+        <div>
+            <dt>Este mês</dt>
+            <dd>@TimeText.Duration(MonthMinutes)</dd>
+        </div>
+        <div>
+            <dt>Tarefas em aberto</dt>
+            <dd>@(Open.Count + Scheduled.Count)</dd>
+        </div>
+    </dl>
+
+    <section class="block" aria-label="Tarefas do projeto">
+        <h3>Tarefas <span class="count">@Tasks.Count</span></h3>
+
+        <form class="task-add" @onsubmit="AddAsync" @onsubmit:preventDefault>
+            <input class="field" placeholder="Nova tarefa neste projeto…" aria-label="Nova tarefa neste projeto"
+                   maxlength="@TaskItem.TitleMaxLength" value="@_title" @oninput="e => _title = e.Value?.ToString() ?? string.Empty" />
+            <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_title)">
+                <Icon Name="IconName.Plus" Size="16" /> Adicionar
+            </button>
+        </form>
+
+        @if (Tasks.Count == 0)
+        {
+            <p class="subtle">Este projeto ainda não tem tarefas.</p>
+        }
+
+        @foreach ((string title, IReadOnlyList<TaskItem> group) in Groups.Where(g => g.Tasks.Count > 0))
+        {
+            <h4 class="group-title">@title <span class="count">@group.Count</span></h4>
+            <ul class="task-list">
+                @foreach (TaskItem task in group)
+                {
+                    <li @key="task.Id" class="task-row @(task.IsCompleted ? "done" : string.Empty)">
+                        <button type="button" class="check" role="checkbox" aria-checked="@task.IsCompleted"
+                                aria-label="@(task.IsCompleted ? "Reabrir tarefa" : "Concluir tarefa")"
+                                @onclick="() => OnToggleTask.InvokeAsync(task)">
+                            @if (task.IsCompleted)
+                            {
+                                <Icon Name="IconName.Check" Size="12" />
+                            }
+                        </button>
+                        <span class="task-title">@task.Title</span>
+                        @if (task.IsScheduled && !task.IsCompleted)
+                        {
+                            <span class="badge scheduled" title="Esta tarefa já tem um registo na agenda">Agendada</span>
+                        }
+                        <select class="field move" aria-label="Mover tarefa para outro projeto" @onchange="e => MoveAsync(task, e.Value)">
+                            <option value="" selected disabled>Mover…</option>
+                            <option value="@NoProjectValue">Sem projeto</option>
+                            @foreach (Project other in OtherProjects)
+                            {
+                                <option value="@other.Id">@other.Name</option>
+                            }
+                        </select>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="block" aria-label="Registos recentes">
+        <h3>Registos recentes <span class="subtle-inline">últimos 60 dias</span></h3>
+
+        @if (RecentEntries.Count == 0)
+        {
+            <p class="subtle">Ainda não há registos neste projeto.</p>
+        }
+        else
+        {
+            <ul class="recent-list">
+                @foreach (TimeEntry entry in RecentEntries)
+                {
+                    <li @key="entry.Id">
+                        <span class="recent-date">@DateText.Weekday(entry.Date) @entry.Date.Day @DateText.Month(entry.Date)</span>
+                        <span class="recent-time">@TimeText.Range(entry.StartMinute, entry.EndMinute)</span>
+                        <span class="recent-text">@(string.IsNullOrEmpty(entry.Description) ? "Sem descrição" : entry.Description)</span>
+                        <span class="recent-duration">@TimeText.Duration(entry.EndMinute - entry.StartMinute)</span>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</article>
+
+@code {
+    private const string NoProjectValue = "none";
+
+    private string _title = string.Empty;
+
+    [Parameter, EditorRequired]
+    public Project Project { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyList<TaskItem> Tasks { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<Project> OtherProjects { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<TimeEntry> RecentEntries { get; set; } = [];
+
+    [Parameter]
+    public int WeekMinutes { get; set; }
+
+    [Parameter]
+    public int MonthMinutes { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnAddTask { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskItem> OnToggleTask { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskProjectChange> OnMoveTask { get; set; }
+
+    [Parameter]
+    public EventCallback OnEdit { get; set; }
+
+    [Parameter]
+    public EventCallback OnArchive { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    [Parameter]
+    public EventCallback OnShowInAgenda { get; set; }
+
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+    private IReadOnlyList<TaskItem> Open => [.. Tasks.Where(t => !t.IsCompleted && !t.IsScheduled)];
+
+    private IReadOnlyList<TaskItem> Scheduled => [.. Tasks.Where(t => !t.IsCompleted && t.IsScheduled)];
+
+    private IReadOnlyList<TaskItem> Done => [.. Tasks.Where(t => t.IsCompleted)];
+
+    private IEnumerable<(string Title, IReadOnlyList<TaskItem> Tasks)> Groups =>
+    [
+        ("Em aberto", Open),
+        ("Agendadas", Scheduled),
+        ("Concluídas", Done)
+    ];
+
+    private async Task AddAsync()
+    {
+        string title = _title.Trim();
+
+        if (title.Length == 0)
+        {
+            return;
+        }
+
+        _title = string.Empty;
+        await OnAddTask.InvokeAsync(title);
+    }
+
+    private async Task MoveAsync(TaskItem task, object? value)
+    {
+        string? text = value?.ToString();
+
+        if (text == NoProjectValue)
+        {
+            await OnMoveTask.InvokeAsync(new TaskProjectChange(task, null));
+        }
+        else if (Guid.TryParse(text, out Guid projectId))
+        {
+            await OnMoveTask.InvokeAsync(new TaskProjectChange(task, projectId));
+        }
+    }
+}

@@ -1,0 +1,53 @@
+<div class="day-head @(IsToday ? "today" : string.Empty)">
+    <div class="day-title">
+        <span class="dow">@DateText.Weekday(Date)</span>
+        <span class="dom">@Date.Day</span>
+        <span class="month">@DateText.Month(Date)</span>
+        @if (TotalMinutes > 0)
+        {
+            <span class="total" title="Tempo registado">@TimeText.Duration(TotalMinutes)</span>
+        }
+    </div>
+    @if (AllDayEvents.Count > 0)
+    {
+        <div class="allday">
+            @foreach (GoogleEvent item in AllDayEvents)
+            {
+                <button type="button" class="allday-chip" title="@item.Title" @onclick="() => OnAllDayClick.InvokeAsync(item)">@item.Title</button>
+            }
+        </div>
+    }
+    @if (ShowNote)
+    {
+        <DayNoteBar Date="Date" Text="@Note" OnSave="OnNoteSave" ReadOnly="ReadOnly" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public DateOnly Date { get; set; }
+
+    [Parameter]
+    public bool IsToday { get; set; }
+
+    [Parameter]
+    public int TotalMinutes { get; set; }
+
+    [Parameter]
+    public string? Note { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<GoogleEvent> AllDayEvents { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<GoogleEvent> OnAllDayClick { get; set; }
+
+    [Parameter]
+    public EventCallback<DayNoteChange> OnNoteSave { get; set; }
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    [Parameter]
+    public bool ShowNote { get; set; } = true;
+}

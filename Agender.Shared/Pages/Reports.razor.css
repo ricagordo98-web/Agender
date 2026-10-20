@@ -1,0 +1,49 @@
+.report-filters {
+    display: grid;
+    gap: 14px;
+    margin-bottom: 20px;
+}
+
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.filter-row label {
+    display: grid;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.report-skeleton {
+    min-height: 220px;
+    background: linear-gradient(100deg, var(--surface) 30%, var(--surface-hover) 50%, var(--surface) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s linear infinite;
+}
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+.report-table { padding: 8px 0; }
+
+.report-row {
+    display: grid;
+    grid-template-columns: 1fr 110px 90px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+}
+
+.report-row.group { cursor: pointer; font-weight: 600; list-style: none; }
+.report-row.group::-webkit-details-marker { display: none; }
+.report-row.child { padding-left: 44px; color: var(--text-muted); }
+.report-row.total { margin-top: 6px; border-top: 1px solid var(--border); font-weight: 700; }
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-muted); }
+
+.hint { margin: 8px 20px 4px; font-size: 0.8rem; color: var(--text-muted); }

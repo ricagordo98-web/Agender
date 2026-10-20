@@ -1,0 +1,109 @@
+@implements IDisposable
+@inject AgendaStore Store
+
+@if (Store.IsInitialized)
+{
+    <div class="timer-dock">
+        @if (Store.ActiveTimer is ActiveTimer timer)
+        {
+            Project? project = timer.ProjectId is Guid id && Store.ProjectsById.TryGetValue(id, out Project? found) ? found : null;
+
+            <div class="timer-card running" role="timer" aria-label="Cronómetro a decorrer">
+                <span class="pulse" aria-hidden="true"></span>
+                <span class="timer-info">
+                    <span class="timer-desc">@(string.IsNullOrEmpty(timer.Description) ? "Sem descrição" : timer.Description)</span>
+                    @if (project is not null)
+                    {
+                        <span class="timer-project"><span class="meta-dot @EntryColorStyle.CssClass(project.Color)" style="@EntryColorStyle.Style(project.CustomColor)"></span>@project.Name</span>
+                    }
+                </span>
+                <time class="timer-elapsed">@TimeText.Elapsed(Store.Now - timer.StartedAt)</time>
+                <button type="button" class="btn btn-danger-solid" @onclick="Store.StopTimerAsync">
+                    <Icon Name="IconName.Stop" Size="14" /> Parar
+                </button>
+            </div>
+        }
+        else if (_open)
+        {
+            <form class="timer-card form" @onsubmit="StartAsync" @onsubmit:preventDefault>
+                <input class="field" placeholder="O que vais fazer?" aria-label="Descrição do cronómetro"
+                       maxlength="@TimeEntry.DescriptionMaxLength" autofocus
+                       value="@_description" @oninput="e => _description = e.Value?.ToString() ?? string.Empty" />
+                @if (Store.ActiveProjects.Any(p => !p.IsArchived))
+                {
+                    <select class="field" aria-label="Projeto do cronómetro" @onchange="e => _projectId = ParseProject(e.Value)">
+                        <option value="" selected="@(_projectId is null)">Sem projeto</option>
+                        @foreach (Project option in Store.ActiveProjects.Where(p => !p.IsArchived))
+                        {
+                            <option value="@option.Id" selected="@(option.Id == _projectId)">@option.Name</option>
+                        }
+                    </select>
+                }
+                <button type="submit" class="btn btn-primary"><Icon Name="IconName.Play" Size="14" /> Iniciar</button>
+                <button type="button" class="icon-btn" title="Cancelar" aria-label="Cancelar" @onclick="() => _open = false">
+                    <Icon Name="IconName.Close" Size="16" />
+                </button>
+            </form>
+        }
+        else
+        {
+            <button type="button" class="btn btn-primary timer-fab" @onclick="() => _open = true">
+                <Icon Name="IconName.Play" Size="14" /> Iniciar cronómetro
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private readonly CancellationTokenSource _lifetime = new();
+    private bool _open;
+    private string _description = string.Empty;
+    private Guid? _projectId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnStoreChanged;
+        await Store.InitializeAsync();
+        _ = TickAsync();
+    }
+
+    private async Task TickAsync()
+    {
+        using PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_lifetime.Token))
+            {
+                if (Store.ActiveTimer is not null)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private static Guid? ParseProject(object? value) => Guid.TryParse(value?.ToString(), out Guid id) ? id : null;
+
+    private async Task StartAsync()
+    {
+        string description = _description.Trim();
+        Guid? projectId = _projectId;
+
+        _description = string.Empty;
+        _open = false;
+        await Store.StartTimerAsync(description, projectId, null);
+    }
+
+    private void OnStoreChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Store.Changed -= OnStoreChanged;
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+}

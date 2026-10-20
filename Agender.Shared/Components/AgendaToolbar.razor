@@ -1,0 +1,176 @@
+<header class="toolbar">
+    <div class="tb-group">
+        <button type="button" class="icon-btn" title="Mostrar ou ocultar tarefas" aria-label="Mostrar ou ocultar tarefas" @onclick="OnToggleSidebar">
+            <Icon Name="IconName.Tasks" />
+        </button>
+
+        @if (ShowSourceSwitch)
+        {
+            <div class="source-switch" role="group" aria-label="O que queres ver na agenda">
+                <button type="button" class="@SourceClass(false)" title="A tua agenda: registos de tempo e tarefas agendadas" @onclick="() => OnSourceChanged.InvokeAsync(false)">
+                    <Icon Name="IconName.Calendar" Size="16" />
+                    <span>Agenda</span>
+                </button>
+                <button type="button" class="@SourceClass(true)" title="Os eventos do teu Google Calendar" @onclick="() => OnSourceChanged.InvokeAsync(true)">
+                    <span class="g-dot" aria-hidden="true">G</span>
+                    <span>Google<span class="src-more"> Calendar</span></span>
+                </button>
+            </div>
+        }
+
+        @if (!ShowGoogle && Agendas.Count > 1)
+        {
+            <AgendaSwitcher Agendas="Agendas" OnToggle="OnAgendaToggle" OnActivate="OnAgendaActivate" />
+        }
+    </div>
+
+    <div class="tb-group tb-nav">
+        <button type="button" class="icon-btn" title="Anterior" aria-label="Anterior" @onclick="OnPrevious">
+            <Icon Name="IconName.ChevronLeft" />
+        </button>
+        <button type="button" class="btn btn-ghost" @onclick="OnToday">Hoje</button>
+        <button type="button" class="icon-btn" title="Seguinte" aria-label="Seguinte" @onclick="OnNext">
+            <Icon Name="IconName.ChevronRight" />
+        </button>
+        <h1 class="range-title">@Title</h1>
+        @if (!string.IsNullOrEmpty(FilterLabel))
+        {
+            <button type="button" class="filter-chip" title="Filtro ativo na agenda. Clica para limpar" @onclick="OnClearFilter">
+                <Icon Name="IconName.Filter" Size="14" />
+                <span class="chip-text">@FilterLabel</span>
+                <Icon Name="IconName.Close" Size="12" />
+            </button>
+        }
+    </div>
+
+    <div class="tb-group tb-actions">
+        <div class="segmented" role="group" aria-label="Vista">
+            <button type="button" class="@SegmentClass(AgendaView.Day)" @onclick="() => ViewChanged.InvokeAsync(AgendaView.Day)">Dia</button>
+            <button type="button" class="@SegmentClass(AgendaView.Week)" @onclick="() => ViewChanged.InvokeAsync(AgendaView.Week)">Semana</button>
+        </div>
+
+        <label class="snap" title="Precisão ao arrastar e criar registos (minutos)">
+            <Icon Name="IconName.Clock" Size="16" />
+            <span class="snap-label">Passo</span>
+            <select aria-label="Precisão ao arrastar" @onchange="OnSnapSelected">
+                @foreach (int option in SnapOptions)
+                {
+                    <option value="@option" selected="@(option == SnapMinutes)">@option min</option>
+                }
+            </select>
+        </label>
+
+        <button type="button" class="icon-btn" title="Pesquisar (Ctrl+K)" aria-label="Pesquisar" @onclick="OnSearch">
+            <Icon Name="IconName.Search" />
+        </button>
+
+        <button type="button" class="btn btn-primary" @onclick="OnNewEntry">
+            <Icon Name="IconName.Plus" Size="16" />
+            <span class="btn-label">Novo registo</span>
+        </button>
+    </div>
+
+    @if (ShowGoogle)
+    {
+        <div class="source-banner" role="status">
+            <span class="g-dot" aria-hidden="true">G</span>
+            <span class="banner-text">
+                A ver o <strong>Google Calendar</strong>. Os registos de tempo estão escondidos; o que criares aqui vai também para o Google. Clica num evento para o abrir ou apagar.
+            </span>
+            @if (GoogleLoading)
+            {
+                <span class="banner-state">A carregar…</span>
+            }
+            else if (GoogleError)
+            {
+                <span class="banner-state error">Não foi possível carregar os eventos.</span>
+                <button type="button" class="banner-link" @onclick="OnRetryGoogle">Tentar de novo</button>
+            }
+            <button type="button" class="banner-link" @onclick="() => OnSourceChanged.InvokeAsync(false)">Voltar à Agenda</button>
+        </div>
+    }
+</header>
+
+@code {
+    private static readonly int[] SnapOptions = [1, 5, 15];
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DateOnly> Days { get; set; } = [];
+
+    [Parameter]
+    public AgendaView View { get; set; }
+
+    [Parameter]
+    public EventCallback<AgendaView> ViewChanged { get; set; }
+
+    [Parameter]
+    public int SnapMinutes { get; set; }
+
+    [Parameter]
+    public EventCallback<int> SnapMinutesChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnPrevious { get; set; }
+
+    [Parameter]
+    public EventCallback OnNext { get; set; }
+
+    [Parameter]
+    public EventCallback OnToday { get; set; }
+
+    [Parameter]
+    public EventCallback OnNewEntry { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleSidebar { get; set; }
+
+    [Parameter]
+    public EventCallback OnSearch { get; set; }
+
+    [Parameter]
+    public bool ShowSourceSwitch { get; set; }
+
+    [Parameter]
+    public bool ShowGoogle { get; set; }
+
+    [Parameter]
+    public bool GoogleLoading { get; set; }
+
+    [Parameter]
+    public bool GoogleError { get; set; }
+
+    [Parameter]
+    public EventCallback OnRetryGoogle { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnSourceChanged { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Agenda> Agendas { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<Agenda> OnAgendaToggle { get; set; }
+
+    [Parameter]
+    public EventCallback<Agenda> OnAgendaActivate { get; set; }
+
+    [Parameter]
+    public string? FilterLabel { get; set; }
+
+    [Parameter]
+    public EventCallback OnClearFilter { get; set; }
+
+    private string Title => Days.Count switch
+    {
+        0 => string.Empty,
+        1 => DateText.Full(Days[0]),
+        _ => DateText.Range(Days[0], Days[^1])
+    };
+
+    private string SourceClass(bool google) => google == ShowGoogle ? (google ? "src google active" : "src active") : (google ? "src google" : "src");
+
+    private string SegmentClass(AgendaView view) => view == View ? "segment active" : "segment";
+
+    private Task OnSnapSelected(ChangeEventArgs args) =>
+        int.TryParse(args.Value?.ToString(), out int value) ? SnapMinutesChanged.InvokeAsync(value) : Task.CompletedTask;
+}

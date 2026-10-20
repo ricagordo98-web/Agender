@@ -1,0 +1,279 @@
+@implements IAsyncDisposable
+@inject PaletteState Palette
+@inject AgendaStore Store
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@if (Palette.IsOpen)
+{
+    <div class="palette-backdrop" @onclick="Palette.Close" @onkeydown="OnKeyDownAsync">
+        <div class="palette" role="dialog" aria-modal="true" aria-label="Paleta de comandos" @onclick:stopPropagation>
+            <div class="palette-input">
+                <Icon Name="IconName.Search" Size="18" />
+                <input @ref="_input" placeholder="Procurar registos ou executar um comando…" aria-label="Pesquisar"
+                       value="@_query" @oninput="OnInputAsync" />
+                <kbd>Esc</kbd>
+            </div>
+
+            <div class="palette-results" @ref="_results" role="listbox">
+                @if (_commandItems.Count > 0)
+                {
+                    <p class="palette-group">Ações</p>
+                    @foreach (PaletteItem item in _commandItems)
+                    {
+                        @ItemRow(item)
+                    }
+                }
+
+                @if (_entryItems.Count > 0)
+                {
+                    <p class="palette-group">Registos</p>
+                    @foreach (PaletteItem item in _entryItems)
+                    {
+                        @ItemRow(item)
+                    }
+                }
+
+                @if (_isSearching && _entryItems.Count == 0)
+                {
+                    <p class="palette-note">A pesquisar…</p>
+                }
+                else if (_commandItems.Count == 0 && _entryItems.Count == 0)
+                {
+                    <p class="palette-note">Sem resultados para “@_query”.</p>
+                }
+            </div>
+
+            <footer class="palette-foot">
+                <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+                <span><kbd>↵</kbd> abrir</span>
+                <span><kbd>Ctrl</kbd><kbd>K</kbd> fechar</span>
+            </footer>
+        </div>
+    </div>
+}
+
+@code {
+    private const int SearchDelayMilliseconds = 220;
+    private const int MinSearchLength = 2;
+    private const int MaxResults = 8;
+
+    private record PaletteItem(string Label, string? Hint, IconName Icon, Func<Task> Run, string? ColorClass = null, string? ColorStyle = null);
+
+    private ElementReference _input;
+    private ElementReference _results;
+    private IJSObjectReference? _module;
+    private CancellationTokenSource? _searchCts;
+    private List<PaletteItem> _commandItems = [];
+    private List<PaletteItem> _entryItems = [];
+    private string _query = string.Empty;
+    private int _active;
+    private bool _isSearching;
+    private bool _focusPending;
+    private bool _scrollPending;
+    private bool _wasOpen;
+
+    private RenderFragment<PaletteItem> ItemRow => item => @<button type="button" role="option"
+            class="palette-item @(IsActive(item) ? "active" : string.Empty)" aria-selected="@IsActive(item)"
+            @onclick="() => RunAsync(item)" @onmouseenter="() => _active = AllItems.IndexOf(item)">
+        <span class="palette-icon @item.ColorClass" style="@item.ColorStyle"><Icon Name="item.Icon" Size="16" /></span>
+        <span class="palette-label">@item.Label</span>
+        @if (item.Hint is not null)
+        {
+            <span class="palette-hint">@item.Hint</span>
+        }
+    </button>;
+
+    private bool IsActive(PaletteItem item)
+    {
+        List<PaletteItem> items = AllItems;
+        return _active < items.Count && ReferenceEquals(items[_active], item);
+    }
+
+    private List<PaletteItem> AllItems => [.. _commandItems, .. _entryItems];
+
+    protected override void OnInitialized()
+    {
+        Palette.Changed += OnPaletteChanged;
+        BuildCommands();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!Palette.IsOpen)
+        {
+            return;
+        }
+
+        if (_focusPending)
+        {
+            _focusPending = false;
+            await _input.FocusAsync();
+        }
+
+        if (_scrollPending)
+        {
+            _scrollPending = false;
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Components/CommandPalette.razor.js");
+            await _module.InvokeVoidAsync("scrollActiveIntoView", _results);
+        }
+    }
+
+    private void OnPaletteChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (Palette.IsOpen && !_wasOpen)
+            {
+                _query = string.Empty;
+                _entryItems = [];
+                _active = 0;
+                _focusPending = true;
+                BuildCommands();
+            }
+
+            _wasOpen = Palette.IsOpen;
+            StateHasChanged();
+        });
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs args)
+    {
+        _query = args.Value?.ToString() ?? string.Empty;
+        _active = 0;
+        BuildCommands();
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        CancellationToken token = _searchCts.Token;
+
+        if (_query.Trim().Length < MinSearchLength)
+        {
+            _entryItems = [];
+            _isSearching = false;
+            return;
+        }
+
+        _isSearching = true;
+
+        try
+        {
+            await Task.Delay(SearchDelayMilliseconds, token);
+            IReadOnlyList<TimeEntry> results = await Store.SearchEntriesAsync(_query, 0, MaxResults, token);
+            token.ThrowIfCancellationRequested();
+
+            _entryItems = [.. results.Select(ToItem)];
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        _isSearching = false;
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        List<PaletteItem> items = AllItems;
+
+        switch (args.Key)
+        {
+            case "Escape":
+                Palette.Close();
+                break;
+            case "ArrowDown" when items.Count > 0:
+                _active = (_active + 1) % items.Count;
+                _scrollPending = true;
+                break;
+            case "ArrowUp" when items.Count > 0:
+                _active = (_active - 1 + items.Count) % items.Count;
+                _scrollPending = true;
+                break;
+            case "Enter" when items.Count > 0:
+                await RunAsync(items[Math.Min(_active, items.Count - 1)]);
+                break;
+        }
+    }
+
+    private async Task RunAsync(PaletteItem item)
+    {
+        Palette.Close();
+        await item.Run();
+    }
+
+    private void BuildCommands()
+    {
+        string query = Normalize(_query);
+
+        List<PaletteItem> commands =
+        [
+            new("Novo registo", "N", IconName.Plus, async () => { GoToAgenda(); Store.RequestNewEntry(); await Task.CompletedTask; }),
+            new("Ir para hoje", "T", IconName.Calendar, async () => { GoToAgenda(); await Store.GoToTodayAsync(); }),
+            new("Ver o dia", "D", IconName.Calendar, async () => { GoToAgenda(); await Store.ChangeViewAsync(AgendaView.Day); }),
+            new("Ver a semana", "W", IconName.Calendar, async () => { GoToAgenda(); await Store.ChangeViewAsync(AgendaView.Week); }),
+            new("Abrir Relatórios", null, IconName.BarChart, () => Navigate("relatorios")),
+            new("Abrir Projetos", null, IconName.Folder, () => Navigate("projetos")),
+            new("Abrir Definições", null, IconName.Settings, () => Navigate("definicoes"))
+        ];
+
+        if (Store.FilterProjectId is not null || Store.FilterTag is not null)
+        {
+            commands.Add(new PaletteItem("Limpar filtros da agenda", null, IconName.Filter, () => { Store.SetFilter(null, null); return Task.CompletedTask; }));
+        }
+
+        _commandItems = [.. commands.Where(c => query.Length == 0 || Normalize(c.Label).Contains(query))];
+    }
+
+    private PaletteItem ToItem(TimeEntry entry)
+    {
+        string project = Store.ProjectsById.TryGetValue(entry.ProjectId ?? Guid.Empty, out Project? found) ? $" · {found.Name}" : string.Empty;
+        string label = string.IsNullOrWhiteSpace(entry.Description) ? "Sem descrição" : entry.Description;
+
+        return new PaletteItem(
+            label,
+            $"{DateText.Weekday(entry.Date)}, {entry.Date.Day} {DateText.Month(entry.Date)} · {TimeText.Range(entry.StartMinute, entry.EndMinute)}{project}",
+            IconName.Clock,
+            async () => { GoToAgenda(); await Store.GoToEntryAsync(entry); },
+            EntryColorStyle.CssClass(entry.Color),
+            EntryColorStyle.Style(entry.CustomColor));
+    }
+
+    private void GoToAgenda()
+    {
+        if (!new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/').Equals(new Uri(Navigation.BaseUri).AbsolutePath.TrimEnd('/'), StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo(string.Empty);
+        }
+    }
+
+    private Task Navigate(string path)
+    {
+        Navigation.NavigateTo(path);
+        return Task.CompletedTask;
+    }
+
+    private static string Normalize(string text)
+    {
+        string decomposed = text.Trim().ToLowerInvariant().Normalize(System.Text.NormalizationForm.FormD);
+        return new string([.. decomposed.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark)]);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Palette.Changed -= OnPaletteChanged;
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

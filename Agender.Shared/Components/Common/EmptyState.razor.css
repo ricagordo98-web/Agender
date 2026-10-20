@@ -1,0 +1,23 @@
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 56px 20px;
+    text-align: center;
+}
+
+.empty-icon {
+    display: grid;
+    place-items: center;
+    width: 56px;
+    height: 56px;
+    margin-bottom: 8px;
+    border-radius: 18px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+p { color: var(--text-muted); }

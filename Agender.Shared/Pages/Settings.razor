@@ -1,0 +1,302 @@
+@page "/definicoes"
+@attribute [Authorize]
+@implements IDisposable
+@inject IAuthNavigation Auth
+@inject GoogleCalendarState GoogleCalendar
+@inject UserSettingsState SettingsState
+@inject AgendaStore Store
+
+<PageTitle>Definições · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Definições" Subtitle="Ajusta o Agender ao teu modo de trabalhar. As alterações guardam-se sozinhas.">
+        <span class="saved-pill @(_saved ? "show" : string.Empty)" role="status">
+            <Icon Name="IconName.Check" Size="14" /> Guardado
+        </span>
+    </PageHeader>
+
+    <div class="settings-shell">
+        <nav class="settings-nav" aria-label="Categorias das definições">
+            @foreach (Category category in Categories)
+            {
+                <button type="button" class="nav-tab @(category.Id == _active ? "active" : string.Empty)" aria-current="@(category.Id == _active ? "page" : null)"
+                        @onclick="() => _active = category.Id">
+                    <Icon Name="category.Icon" Size="18" />
+                    <span>@category.Label</span>
+                </button>
+            }
+        </nav>
+
+        <div class="settings-panel">
+            @if (_active == AppearanceId)
+            {
+                <header class="panel-head">
+                    <h2>Aparência</h2>
+                    <p>Como o Agender se apresenta neste dispositivo.</p>
+                </header>
+                <SettingRow Title="Tema" Description="A escolha fica guardada neste dispositivo." Stacked="true">
+                    <ThemeSelector />
+                </SettingRow>
+                <SettingRow Title="Notas do dia" Description="Mostra a nota no cabeçalho de cada dia da agenda.">
+                    <ToggleSwitch Label="Mostrar notas do dia" Value="!Current.HideDayNotes"
+                                  ValueChanged="value => ChangeAsync(s => s.HideDayNotes = !value)" />
+                </SettingRow>
+                <SettingRow Title="Projeto e etiquetas nos cartões" Description="Mostra o projeto e as etiquetas nos registos com altura suficiente.">
+                    <ToggleSwitch Label="Mostrar projeto e etiquetas nos cartões" Value="!Current.HideEntryDetails"
+                                  ValueChanged="value => ChangeAsync(s => s.HideEntryDetails = !value)" />
+                </SettingRow>
+            }
+            else if (_active == AgendaId)
+            {
+                <header class="panel-head">
+                    <h2>Agenda</h2>
+                    <p>O ponto de partida da grelha e dos novos registos.</p>
+                </header>
+                <SettingRow Title="Vista inicial" Description="Mostra um dia ou a semana inteira quando abres a agenda.">
+                    <SegmentedControl Label="Vista inicial" Options="ViewOptions" Value="@(Current.DefaultWeekView ? 1 : 0)"
+                                      ValueChanged="value => ChangeAsync(s => s.DefaultWeekView = value == 1)" />
+                </SettingRow>
+                <SettingRow Title="A semana começa à" Description="Define a primeira coluna da vista semanal.">
+                    <SegmentedControl Label="Início da semana" Options="WeekStartOptions" Value="@(Current.WeekStartsOnSunday ? 1 : 0)"
+                                      ValueChanged="value => ChangeAsync(s => s.WeekStartsOnSunday = value == 1)" />
+                </SettingRow>
+                <SettingRow Title="Fins de semana" Description="Mostra o sábado e o domingo na vista semanal.">
+                    <ToggleSwitch Label="Mostrar fins de semana" Value="!Current.HideWeekends"
+                                  ValueChanged="value => ChangeAsync(s => s.HideWeekends = !value)" />
+                </SettingRow>
+                <SettingRow Title="Ao abrir a agenda, mostrar" Description="A hora a que a grelha se posiciona quando abres a agenda.">
+                    <SegmentedControl Label="Posição inicial" Options="StartScrollOptions" Value="Current.StartScrollMinute"
+                                      ValueChanged="value => ChangeAsync(s => s.StartScrollMinute = value)" />
+                </SettingRow>
+                <SettingRow Title="Precisão ao arrastar" Description="Os minutos a que o cartão encaixa ao criar, mover ou redimensionar registos.">
+                    <SegmentedControl Label="Precisão" Options="SnapOptions" Value="Current.SnapMinutes"
+                                      ValueChanged="value => ChangeAsync(s => s.SnapMinutes = value)" />
+                </SettingRow>
+                <SettingRow Title="Duração de um novo registo" Description="Usada ao largar uma tarefa na agenda, ao clicar num espaço vazio ou ao usar «Novo registo».">
+                    <SegmentedControl Label="Duração" Options="DurationOptions" Value="Current.DefaultEntryMinutes"
+                                      ValueChanged="value => ChangeAsync(s => s.DefaultEntryMinutes = value)" />
+                </SettingRow>
+            }
+            else if (_active == TasksId)
+            {
+                <header class="panel-head">
+                    <h2>Tarefas e registos</h2>
+                    <p>O que acontece quando terminas ou eliminas trabalho.</p>
+                </header>
+                <SettingRow Title="Remover da agenda ao terminar"
+                            Description="Com «Terminar tarefa» no menu do botão direito, o cartão desaparece da agenda em vez de ficar riscado. Atenção: o registo de tempo é apagado e deixa de contar nos relatórios.">
+                    <ToggleSwitch Label="Remover da agenda ao terminar" Value="Current.RemoveFromAgendaWhenCompleted"
+                                  ValueChanged="value => ChangeAsync(s => s.RemoveFromAgendaWhenCompleted = value)" />
+                </SettingRow>
+                <SettingRow Title="Confirmar antes de eliminar" Description="Pede confirmação antes de apagar um registo da agenda.">
+                    <ToggleSwitch Label="Confirmar antes de eliminar" Value="Current.ConfirmBeforeDelete"
+                                  ValueChanged="value => ChangeAsync(s => s.ConfirmBeforeDelete = value)" />
+                </SettingRow>
+            }
+            else if (_active == TimerId)
+            {
+                <header class="panel-head">
+                    <h2>Cronómetro</h2>
+                    <p>Como o tempo medido vira um registo.</p>
+                </header>
+                <SettingRow Title="Arredondar o tempo" Description="Ao parar o cronómetro, o registo arredonda para cima para o múltiplo escolhido (por exemplo, 12 min passam a 15 min).">
+                    <SegmentedControl Label="Arredondamento" Options="RoundingOptions" Value="Current.TimerRoundingMinutes"
+                                      ValueChanged="value => ChangeAsync(s => s.TimerRoundingMinutes = value)" />
+                </SettingRow>
+            }
+            else if (_active == IntegrationsId)
+            {
+                <header class="panel-head">
+                    <h2>Google Calendar</h2>
+                    <p>Vê e escreve eventos no teu calendário a partir da agenda.</p>
+                </header>
+
+                @if (!GoogleCalendar.IsLoaded)
+                {
+                    <p class="hint">A carregar…</p>
+                }
+                else if (GoogleCalendar.Status.IsConnected)
+                {
+                    <p class="hint">Ligado através da conta de serviço <strong>@GoogleCalendar.Status.ServiceAccountEmail</strong>.</p>
+                    <dl class="google-info">
+                        <div><dt>Calendário (leitura)</dt><dd>@GoogleCalendar.Status.CalendarId</dd></div>
+                        <div><dt>Calendário (registos)</dt><dd>@GoogleCalendar.Status.WriteCalendarId</dd></div>
+                    </dl>
+                    <div class="account-actions">
+                        <button type="button" class="btn btn-ghost" @onclick="GoogleCalendar.RetryFailedAsync">Sincronizar agora</button>
+                        <button type="button" class="btn btn-danger" @onclick="GoogleCalendar.DisconnectAsync">Desligar</button>
+                    </div>
+                }
+                else
+                {
+                    <p class="hint">
+                        Cola a chave JSON de uma conta de serviço do Google e partilha o teu calendário com o email dessa conta
+                        (permissão “Fazer alterações a eventos”). A chave é guardada cifrada e só é usada por ti.
+                    </p>
+                    <form class="google-form" @onsubmit="ConnectGoogleAsync" @onsubmit:preventDefault>
+                        <label for="google-json">Chave da conta de serviço (JSON)</label>
+                        <textarea id="google-json" class="field mono" rows="6" spellcheck="false" autocomplete="off"
+                                  placeholder="Cola aqui o conteúdo do ficheiro .json"
+                                  value="@_json" @oninput="e => _json = e.Value?.ToString() ?? string.Empty"></textarea>
+
+                        <label for="google-calendar">ID do calendário (o teu email, para o calendário principal)</label>
+                        <input id="google-calendar" class="field" type="text" autocomplete="off" maxlength="300"
+                               value="@_calendarId" @oninput="e => _calendarId = e.Value?.ToString() ?? string.Empty" />
+
+                        <label for="google-write">ID do calendário para os registos (opcional)</label>
+                        <input id="google-write" class="field" type="text" autocomplete="off" maxlength="300"
+                               placeholder="Por omissão, o mesmo calendário"
+                               value="@_writeCalendarId" @oninput="e => _writeCalendarId = e.Value?.ToString() ?? string.Empty" />
+
+                        <div class="account-actions">
+                            <button type="submit" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_json) || string.IsNullOrWhiteSpace(_calendarId))">
+                                Ligar ao Google
+                            </button>
+                        </div>
+                    </form>
+                }
+            }
+            else if (_active == AccountId)
+            {
+                <header class="panel-head">
+                    <h2>Conta</h2>
+                    <p>Segurança e sessão.</p>
+                </header>
+
+                @if (Auth.ChangePasswordPath is null && !Auth.CanLogout)
+                {
+                    <p class="hint">Não há opções de conta disponíveis nesta aplicação.</p>
+                }
+
+                <div class="account-actions">
+                    @if (Auth.ChangePasswordPath is not null)
+                    {
+                        <a class="btn btn-ghost" href="@Auth.ChangePasswordPath">
+                            <Icon Name="IconName.Lock" Size="16" /> Alterar palavra-passe
+                        </a>
+                    }
+                    @if (Auth.CanLogout)
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="Auth.LogoutAsync">
+                            <Icon Name="IconName.LogOut" Size="16" /> Terminar sessão
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private const string AppearanceId = "aparencia";
+    private const string AgendaId = "agenda";
+    private const string TasksId = "tarefas";
+    private const string TimerId = "cronometro";
+    private const string IntegrationsId = "integracoes";
+    private const string AccountId = "conta";
+
+    private record Category(string Id, string Label, IconName Icon);
+
+    private static readonly Category[] Categories =
+    [
+        new(AppearanceId, "Aparência", IconName.Palette),
+        new(AgendaId, "Agenda", IconName.Calendar),
+        new(TasksId, "Tarefas e registos", IconName.Tasks),
+        new(TimerId, "Cronómetro", IconName.Clock),
+        new(IntegrationsId, "Google Calendar", IconName.Share),
+        new(AccountId, "Conta", IconName.Lock)
+    ];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
+        [new(0, "Dia"), new(1, "Semana")];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> WeekStartOptions =
+        [new(0, "Segunda"), new(1, "Domingo")];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> StartScrollOptions =
+        [new(0, "Agora"), new(420, "07:00"), new(540, "09:00")];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> RoundingOptions =
+        [.. UserSettings.TimerRoundingOptions.Select(m => new SegmentedControl.SegmentOption(m, m == 0 ? "Exato" : $"{m} min"))];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> SnapOptions =
+        [.. UserSettings.SnapOptions.Select(m => new SegmentedControl.SegmentOption(m, $"{m} min"))];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> DurationOptions =
+        [.. UserSettings.EntryDurationOptions.Select(m => new SegmentedControl.SegmentOption(m, m % 60 == 0 ? $"{m / 60} h" : m > 60 ? $"{m / 60} h {m % 60}" : $"{m} min"))];
+
+    private string _active = AppearanceId;
+    private string _json = string.Empty;
+    private string _calendarId = string.Empty;
+    private string _writeCalendarId = string.Empty;
+    private bool _busy;
+    private bool _saved;
+    private CancellationTokenSource? _savedTimer;
+
+    private UserSettings Current => SettingsState.Current;
+
+    protected override async Task OnInitializedAsync()
+    {
+        GoogleCalendar.Changed += OnGoogleChanged;
+        await SettingsState.EnsureLoadedAsync();
+        await GoogleCalendar.RefreshStatusAsync();
+    }
+
+    private async Task ChangeAsync(Action<UserSettings> change)
+    {
+        UserSettings updated = Current.Clone();
+        change(updated);
+        bool viewChanged = updated.DefaultWeekView != Current.DefaultWeekView;
+
+        if (!await SettingsState.SaveAsync(updated))
+        {
+            return;
+        }
+
+        await Store.ApplySettingsAsync(updated, viewChanged);
+
+        await ShowSavedAsync();
+    }
+
+    private async Task ShowSavedAsync()
+    {
+        _savedTimer?.Cancel();
+        _savedTimer?.Dispose();
+        _savedTimer = new CancellationTokenSource();
+        _saved = true;
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), _savedTimer.Token);
+            _saved = false;
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task ConnectGoogleAsync()
+    {
+        _busy = true;
+
+        bool connected = await GoogleCalendar.ConnectAsync(_json, _calendarId.Trim(), string.IsNullOrWhiteSpace(_writeCalendarId) ? null : _writeCalendarId.Trim());
+
+        _busy = false;
+
+        if (connected)
+        {
+            _json = string.Empty;
+            _calendarId = string.Empty;
+            _writeCalendarId = string.Empty;
+        }
+    }
+
+    private void OnGoogleChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        GoogleCalendar.Changed -= OnGoogleChanged;
+        _savedTimer?.Cancel();
+        _savedTimer?.Dispose();
+    }
+}

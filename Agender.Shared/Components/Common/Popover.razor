@@ -1,0 +1,68 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<button type="button" class="@TriggerClass" @ref="_trigger" popovertarget="@_id" title="@Label"
+        aria-label="@Label" aria-haspopup="true">
+    @Trigger
+</button>
+
+<div id="@_id" popover class="popover-panel" @ref="_panel" data-width="@Width" style="width:@(Width)px">
+    @ChildContent
+</div>
+
+@code {
+    private readonly string _id = $"popover-{Guid.NewGuid():N}";
+    private ElementReference _trigger;
+    private ElementReference _panel;
+    private IJSObjectReference? _module;
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    [Parameter]
+    public string TriggerClass { get; set; } = "icon-btn";
+
+    [Parameter]
+    public int Width { get; set; } = 240;
+
+    [Parameter]
+    public RenderFragment? Trigger { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Components/Common/Popover.razor.js");
+        await _module.InvokeVoidAsync("init", _trigger, _panel);
+    }
+
+    public async Task CloseAsync()
+    {
+        if (_module is not null)
+        {
+            await _module.InvokeVoidAsync("close", _panel);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

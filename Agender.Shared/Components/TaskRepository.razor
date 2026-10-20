@@ -1,0 +1,246 @@
+<aside class="tasks @(IsToggled ? "toggled" : string.Empty)" aria-label="Repositório de tarefas">
+    <div class="tasks-head">
+        <div>
+            <h2>Tarefas</h2>
+            <p class="subtle">@CounterText</p>
+        </div>
+        <button type="button" class="icon-btn close-btn" aria-label="Fechar tarefas" @onclick="OnClose">
+            <Icon Name="IconName.Close" />
+        </button>
+    </div>
+
+    <section class="filters" aria-label="Filtrar tarefas e agenda">
+        <p class="filters-title"><Icon Name="IconName.Filter" Size="14" /> Filtrar</p>
+
+        <label class="filter-field" for="filter-project">
+            <span>Projeto</span>
+            <select id="filter-project" class="field project-pick" @onchange="OnProjectFilterChanged">
+                <option value="" selected="@(FilterProjectId is null)">Todos os projetos</option>
+                @foreach (Project project in Projects.Where(p => !p.IsArchived || p.Id == FilterProjectId))
+                {
+                    <option value="@project.Id" selected="@(project.Id == FilterProjectId)">@project.Name</option>
+                }
+            </select>
+        </label>
+
+        @if (Tags.Count > 0 || FilterTag is not null)
+        {
+            <label class="filter-field" for="filter-tag">
+                <span>Etiqueta</span>
+                <select id="filter-tag" class="field project-pick" @onchange="OnTagFilterChanged">
+                    <option value="" selected="@(FilterTag is null)">Todas as etiquetas</option>
+                    @foreach (string tag in Tags)
+                    {
+                        <option value="@tag" selected="@string.Equals(tag, FilterTag, StringComparison.OrdinalIgnoreCase)">#@tag</option>
+                    }
+                </select>
+            </label>
+        }
+
+        @if (HasFilter)
+        {
+            <button type="button" class="link-btn" @onclick="ClearFilterAsync">Limpar filtros</button>
+        }
+        else
+        {
+            <p class="filters-hint">O projeto filtra as tarefas e a agenda; a etiqueta filtra a agenda. O que não coincide fica esbatido.</p>
+        }
+    </section>
+
+    <form class="task-add" @onsubmit="AddAsync" @onsubmit:preventDefault>
+        <div class="task-add-row">
+            <input class="field" placeholder="Adicionar tarefa…" maxlength="@TaskItem.TitleMaxLength"
+                   value="@_title" @oninput="e => _title = e.Value?.ToString() ?? string.Empty" />
+            <button type="submit" class="icon-btn add-btn" aria-label="Adicionar tarefa" disabled="@string.IsNullOrWhiteSpace(_title)">
+                <Icon Name="IconName.Plus" />
+            </button>
+        </div>
+
+        @if (FilterProjectId is Guid filteredId)
+        {
+            <p class="new-in">A nova tarefa fica em <strong>@(Projects.FirstOrDefault(p => p.Id == filteredId)?.Name ?? "este projeto")</strong>.</p>
+        }
+        else if (ActiveProjects.Any())
+        {
+            <label class="filter-field" for="new-task-project">
+                <span>Projeto da nova tarefa</span>
+                <select id="new-task-project" class="field project-pick" @onchange="e => _newProjectId = ParseProject(e.Value)">
+                    <option value="" selected="@(_newProjectId is null)">Sem projeto</option>
+                    @foreach (Project project in ActiveProjects)
+                    {
+                        <option value="@project.Id" selected="@(project.Id == _newProjectId)">@project.Name</option>
+                    }
+                </select>
+            </label>
+        }
+    </form>
+
+    @if (!VisibleTasks.Any())
+    {
+        <div class="empty">
+            @if (FilterProjectId is not null)
+            {
+                <p>Sem tarefas por agendar neste projeto.</p>
+                <button type="button" class="btn btn-ghost" @onclick="ClearFilterAsync">Mostrar todos os projetos</button>
+            }
+            else
+            {
+                <p>Ainda não há tarefas.</p>
+                <p class="subtle">Cria uma e arrasta-a para a agenda para registar tempo.</p>
+            }
+        </div>
+    }
+    else
+    {
+        <p class="hint">Arrasta uma tarefa para a agenda para registar tempo (toque: pressão longa).</p>
+        <ul class="task-list">
+            @foreach (TaskItem task in VisibleTasks)
+            {
+                Project? project = Projects.FirstOrDefault(p => p.Id == task.ProjectId);
+
+                <li @key="task.Id" class="task @EntryColorStyle.CssClass(task.Color) @(task.IsCompleted ? "done" : string.Empty)"
+                    data-task-id="@task.Id" data-color="@EntryColorStyle.CssClass(task.Color)" style="@EntryColorStyle.Style(task.CustomColor)">
+                    <span class="grip"><Icon Name="IconName.Grip" Size="16" /></span>
+                    <button type="button" class="check" role="checkbox" aria-checked="@task.IsCompleted"
+                            aria-label="Concluir tarefa" @onclick="() => OnToggle.InvokeAsync(task)">
+                        @if (task.IsCompleted)
+                        {
+                            <Icon Name="IconName.Check" Size="12" />
+                        }
+                    </button>
+                    <span class="task-body">
+                        <span class="task-title">@task.Title</span>
+                        @if (project is not null)
+                        {
+                            <span class="task-project"><span class="meta-dot @EntryColorStyle.CssClass(project.Color)" style="@EntryColorStyle.Style(project.CustomColor)"></span>@project.Name</span>
+                        }
+                    </span>
+                    <Popover Label="Mudar cor" TriggerClass="color-trigger" Width="270">
+                        <Trigger><span class="dot"></span></Trigger>
+                        <ChildContent>
+                            <ColorPicker Value="task.Color" CustomValue="task.CustomColor" OnChange="choice => OnSetColor.InvokeAsync(new TaskColorChange(task, choice))" />
+                        </ChildContent>
+                    </Popover>
+                    <span class="task-actions">
+                        @if (!task.IsCompleted)
+                        {
+                            bool timing = RunningTaskId == task.Id;
+
+                            <button type="button" class="icon-btn small timer-btn @(timing ? "timing" : string.Empty)"
+                                    title="@(timing ? "Parar cronómetro" : "Iniciar cronómetro")"
+                                    aria-label="@(timing ? "Parar cronómetro" : "Iniciar cronómetro")"
+                                    @onclick="() => OnToggleTimer.InvokeAsync(task)">
+                                <Icon Name="@(timing ? IconName.Stop : IconName.Play)" Size="15" />
+                            </button>
+                        }
+                        <Popover Label="Projeto da tarefa" TriggerClass="icon-btn small" Width="220">
+                            <Trigger><Icon Name="IconName.Folder" Size="15" /></Trigger>
+                            <ChildContent>
+                                <button type="button" class="pick-item @(task.ProjectId is null ? "selected" : string.Empty)"
+                                        @onclick="() => OnSetProject.InvokeAsync(new TaskProjectChange(task, null))">Sem projeto</button>
+                                @foreach (Project option in ActiveProjects)
+                                {
+                                    <button type="button" class="pick-item @(task.ProjectId == option.Id ? "selected" : string.Empty)"
+                                            @onclick="() => OnSetProject.InvokeAsync(new TaskProjectChange(task, option.Id))">
+                                        <span class="meta-dot @EntryColorStyle.CssClass(option.Color)" style="@EntryColorStyle.Style(option.CustomColor)"></span>@option.Name
+                                    </button>
+                                }
+                            </ChildContent>
+                        </Popover>
+                        <button type="button" class="icon-btn small remove" title="Eliminar" aria-label="Eliminar tarefa"
+                                @onclick="() => OnDelete.InvokeAsync(task)">
+                            <Icon Name="IconName.Trash" Size="15" />
+                        </button>
+                    </span>
+                </li>
+            }
+        </ul>
+    }
+</aside>
+
+@code {
+    private string _title = string.Empty;
+    private Guid? _newProjectId;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TaskItem> Tasks { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<Project> Projects { get; set; } = [];
+
+    [Parameter]
+    public bool IsToggled { get; set; }
+
+    [Parameter]
+    public EventCallback<NewTask> OnAdd { get; set; }
+
+    [Parameter]
+    public Guid? FilterProjectId { get; set; }
+
+    [Parameter]
+    public string? FilterTag { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<string> Tags { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<FilterChange> OnFilterChanged { get; set; }
+
+    [Parameter]
+    public Guid? RunningTaskId { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskItem> OnToggleTimer { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskItem> OnToggle { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskColorChange> OnSetColor { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskProjectChange> OnSetProject { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskItem> OnDelete { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private IEnumerable<TaskItem> Unscheduled => Tasks.Where(t => !t.IsScheduled);
+
+    private int OpenCount => Unscheduled.Count(t => !t.IsCompleted);
+
+    private bool HasFilter => FilterProjectId is not null || FilterTag is not null;
+
+    private string CounterText => FilterProjectId is null
+        ? $"{OpenCount} em aberto"
+        : $"{VisibleTasks.Count(t => !t.IsCompleted)} de {OpenCount} em aberto";
+
+    private IEnumerable<Project> ActiveProjects => Projects.Where(p => !p.IsArchived);
+
+    private IEnumerable<TaskItem> VisibleTasks =>
+        FilterProjectId is Guid projectId ? Unscheduled.Where(t => t.ProjectId == projectId) : Unscheduled;
+
+    private Task OnProjectFilterChanged(ChangeEventArgs args) =>
+        OnFilterChanged.InvokeAsync(new FilterChange(ParseProject(args.Value), FilterTag));
+
+    private Task OnTagFilterChanged(ChangeEventArgs args) =>
+        OnFilterChanged.InvokeAsync(new FilterChange(FilterProjectId, string.IsNullOrEmpty(args.Value?.ToString()) ? null : args.Value!.ToString()));
+
+    private Task ClearFilterAsync() => OnFilterChanged.InvokeAsync(new FilterChange(null, null));
+
+    private static Guid? ParseProject(object? value) => Guid.TryParse(value?.ToString(), out Guid id) ? id : null;
+
+    private async Task AddAsync()
+    {
+        string title = _title.Trim();
+        if (title.Length == 0)
+        {
+            return;
+        }
+
+        _title = string.Empty;
+        await OnAdd.InvokeAsync(new NewTask(title, FilterProjectId ?? _newProjectId));
+    }
+}

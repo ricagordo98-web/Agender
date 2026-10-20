@@ -1,0 +1,62 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="theme-list" role="radiogroup" aria-label="Tema">
+    @foreach (ThemeOption theme in ThemeCatalog.All)
+    {
+        <button type="button" role="radio" aria-checked="@(theme.Id == _current)"
+                class="theme-item @(theme.Id == _current ? "selected" : string.Empty)"
+                @onclick="() => SelectAsync(theme)">
+            <span class="theme-preview" style="--preview-bg:@theme.Surface;--preview-accent:@theme.Accent"></span>
+            <span class="theme-label">@theme.Label</span>
+            @if (theme.Id == _current)
+            {
+                <Icon Name="IconName.Check" Size="16" />
+            }
+        </button>
+    }
+</div>
+
+@code {
+    private IJSObjectReference? _module;
+    private string _current = ThemeCatalog.SystemId;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Components/Common/ThemeSelector.razor.js");
+        _current = await _module.InvokeAsync<string>("getTheme");
+        StateHasChanged();
+    }
+
+    private async Task SelectAsync(ThemeOption theme)
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        _current = theme.Id;
+        await _module.InvokeVoidAsync("setTheme", theme.Id);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

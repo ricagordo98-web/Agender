@@ -1,0 +1,238 @@
+@page "/partilhas"
+@attribute [Authorize]
+@inject IAgendaSharingService SharingService
+@inject IShareLinkBuilder LinkBuilder
+@inject IToastService Toasts
+@inject IJSRuntime JS
+
+<PageTitle>Partilhas · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Partilhas" Subtitle="Mostra a tua agenda a outras pessoas, só para leitura. O Google Calendar não é partilhado." />
+
+    @if (!_loaded)
+    {
+        <p class="hint">A carregar…</p>
+    }
+    else
+    {
+        <div class="sharing-grid">
+            <section class="card">
+                <h2>Partilhar com um utilizador</h2>
+                <p class="hint">A pessoa tem de ter conta no Agender. Vê tudo o que registas (horas, descrições, projetos e notas), sem poder alterar nada.</p>
+
+                <form class="share-form" @onsubmit="ShareAsync" @onsubmit:preventDefault>
+                    <input class="field" type="email" autocomplete="off" maxlength="256" placeholder="Email da pessoa" aria-label="Email da pessoa"
+                           value="@_email" @oninput="e => _email = e.Value?.ToString() ?? string.Empty" />
+                    <button type="submit" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_email))">Partilhar</button>
+                </form>
+
+                @if (_shares.Count == 0)
+                {
+                    <p class="hint">Ainda não partilhaste a agenda com ninguém.</p>
+                }
+                else
+                {
+                    <ul class="share-list">
+                        @foreach (ShareDto share in _shares)
+                        {
+                            <li>
+                                <div class="who">
+                                    <strong>@share.DisplayName</strong>
+                                    <span>@share.Email</span>
+                                </div>
+                                <button type="button" class="btn btn-ghost" @onclick="() => RevokeAsync(share)">Remover acesso</button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section class="card">
+                <h2>Link de leitura</h2>
+                <p class="hint">Quem tiver o link vê a tua agenda sem precisar de conta. O link deixa de funcionar ao fim de 2 dias ou quando o desativares.</p>
+
+                @if (_newUrl is not null)
+                {
+                    <div class="link-box">
+                        <input class="field" type="text" readonly value="@_newUrl" aria-label="Link de leitura" />
+                        <button type="button" class="btn btn-primary" @onclick="CopyAsync">Copiar</button>
+                    </div>
+                    <p class="hint">Copia o link agora: por segurança, não voltas a vê-lo depois de sair desta página.</p>
+                }
+
+                @if (_creating)
+                {
+                    <p class="hint">A criar o acesso público… na primeira vez pode demorar um minuto.</p>
+                }
+
+                @if (_notice is not null)
+                {
+                    <p class="hint notice">@_notice</p>
+                }
+
+                @if (_link.IsActive)
+                {
+                    <p class="hint">Link ativo até <strong>@_link.ExpiresAt!.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</strong>.</p>
+                    <div class="account-actions">
+                        <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="CreateLinkAsync">Gerar novo link</button>
+                        <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="RevokeLinkAsync">Desativar link</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="account-actions">
+                        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="CreateLinkAsync">Gerar link</button>
+                    </div>
+                }
+            </section>
+
+            <section class="card">
+                <h2>Partilhadas contigo</h2>
+
+                @if (_received.Count == 0)
+                {
+                    <p class="hint">Ninguém partilhou a agenda contigo.</p>
+                }
+                else
+                {
+                    <ul class="share-list">
+                        @foreach (SharedWithMeDto item in _received)
+                        {
+                            <li>
+                                <div class="who">
+                                    <strong>@item.DisplayName</strong>
+                                    <span>@item.Email</span>
+                                </div>
+                                <a class="btn btn-ghost" href="partilhas/@item.ShareId">Ver agenda</a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyList<ShareDto> _shares = [];
+    private IReadOnlyList<SharedWithMeDto> _received = [];
+    private ShareLinkStatusDto _link = new(false, null);
+    private string _email = string.Empty;
+    private string? _newUrl;
+    private string? _notice;
+    private bool _loaded;
+    private bool _busy;
+    private bool _creating;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _shares = await SharingService.GetSharesAsync();
+            _received = await SharingService.GetSharedWithMeAsync();
+            _link = await SharingService.GetLinkAsync();
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível carregar as partilhas.", ToastKind.Error);
+        }
+
+        _loaded = true;
+    }
+
+    private async Task ShareAsync()
+    {
+        _busy = true;
+
+        try
+        {
+            await SharingService.ShareAsync(_email.Trim());
+            _shares = await SharingService.GetSharesAsync();
+            _email = string.Empty;
+            Toasts.Show("Agenda partilhada.", ToastKind.Success);
+        }
+        catch (ArgumentException)
+        {
+            Toasts.Show("Não foi possível partilhar. Confirma que o email pertence a um utilizador do Agender e que não é o teu.", ToastKind.Error);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível partilhar a agenda. Tenta novamente.", ToastKind.Error);
+        }
+
+        _busy = false;
+    }
+
+    private async Task RevokeAsync(ShareDto share)
+    {
+        try
+        {
+            await SharingService.RevokeAsync(share.Id);
+            _shares = [.. _shares.Where(s => s.Id != share.Id)];
+            Toasts.Show("Acesso removido.", ToastKind.Success);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível remover o acesso.", ToastKind.Error);
+        }
+    }
+
+    private async Task CreateLinkAsync()
+    {
+        _busy = true;
+        _creating = true;
+        _notice = null;
+
+        try
+        {
+            NewShareLinkDto created = await SharingService.CreateLinkAsync();
+            _newUrl = created.BaseUrl is null ? LinkBuilder.Build(created.Token) : $"{created.BaseUrl.TrimEnd('/')}/p/{created.Token}";
+            _notice = created.Notice;
+            _link = new ShareLinkStatusDto(true, created.ExpiresAt);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível gerar o link.", ToastKind.Error);
+        }
+
+        _creating = false;
+        _busy = false;
+    }
+
+    private async Task RevokeLinkAsync()
+    {
+        _busy = true;
+
+        try
+        {
+            await SharingService.RevokeLinkAsync();
+            _newUrl = null;
+            _notice = null;
+            _link = new ShareLinkStatusDto(false, null);
+            Toasts.Show("Link desativado.", ToastKind.Success);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível desativar o link.", ToastKind.Error);
+        }
+
+        _busy = false;
+    }
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newUrl);
+            Toasts.Show("Link copiado.", ToastKind.Success);
+        }
+        catch (JSException)
+        {
+            Toasts.Show("Não foi possível copiar. Seleciona o link e copia manualmente.", ToastKind.Error);
+        }
+    }
+
+    private static bool IsExpected(Exception ex) =>
+        ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException;
+}

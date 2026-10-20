@@ -1,0 +1,82 @@
+<Modal Title="@(IsNew ? "Novo projeto" : "Editar projeto")" OnClose="OnCancel" OnSubmit="SaveAsync">
+    <ChildContent>
+        <label class="label" for="project-name">Nome</label>
+        <input id="project-name" @ref="_name" class="field" maxlength="@Project.NameMaxLength" placeholder="Ex.: Website da ACME"
+               value="@_nameText" @oninput="e => _nameText = e.Value?.ToString() ?? string.Empty" />
+
+        <label class="label" for="project-client">Cliente <span class="optional">(opcional)</span></label>
+        <input id="project-client" class="field" maxlength="@Project.ClientNameMaxLength" placeholder="Ex.: ACME, Lda."
+               value="@_client" @oninput="e => _client = e.Value?.ToString() ?? string.Empty" />
+
+        <span class="label">Cor</span>
+        <ColorPicker @bind-Value="_color" @bind-CustomValue="_customColor" />
+
+        @if (_error is not null)
+        {
+            <p class="error" role="alert">@_error</p>
+        }
+    </ChildContent>
+    <Footer>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OnCancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync">Guardar</button>
+    </Footer>
+</Modal>
+
+@code {
+    private ElementReference _name;
+    private string _nameText = string.Empty;
+    private string _client = string.Empty;
+    private EntryColor _color;
+    private string? _customColor;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Project Project { get; set; } = default!;
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    [Parameter]
+    public EventCallback<Project> OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _nameText = Project.Name;
+        _client = Project.ClientName ?? string.Empty;
+        _color = Project.Color;
+        _customColor = Project.CustomColor;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _name.FocusAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nameText))
+        {
+            _error = "Indica o nome do projeto.";
+            return;
+        }
+
+        await OnSave.InvokeAsync(new Project
+        {
+            Id = Project.Id,
+            Name = _nameText,
+            ClientName = _client,
+            Color = _color,
+            CustomColor = _customColor,
+            AgendaId = Project.AgendaId,
+            IsArchived = Project.IsArchived,
+            CreatedAt = Project.CreatedAt
+        });
+    }
+}

@@ -1,0 +1,24 @@
+<div class="seg" role="radiogroup" aria-label="@Label">
+    @foreach (SegmentOption option in Options)
+    {
+        <button type="button" role="radio" aria-checked="@(option.Value == Value ? "true" : "false")"
+                class="seg-item @(option.Value == Value ? "active" : string.Empty)"
+                @onclick="() => ValueChanged.InvokeAsync(option.Value)">@option.Label</button>
+    }
+</div>
+
+@code {
+    public record SegmentOption(int Value, string Label);
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SegmentOption> Options { get; set; } = [];
+
+    [Parameter]
+    public int Value { get; set; }
+
+    [Parameter]
+    public EventCallback<int> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+}

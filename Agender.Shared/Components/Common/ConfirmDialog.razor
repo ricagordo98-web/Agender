@@ -1,0 +1,30 @@
+<Modal Title="@Title" OnClose="OnCancel" OnSubmit="OnConfirm">
+    <ChildContent>
+        <p class="confirm-message">@Message</p>
+    </ChildContent>
+    <Footer>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OnCancel">Cancelar</button>
+        <button type="button" class="btn @(Danger ? "btn-danger-solid" : "btn-primary")" @onclick="OnConfirm">@ConfirmLabel</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Message { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ConfirmLabel { get; set; } = "Confirmar";
+
+    [Parameter]
+    public bool Danger { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfirm { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+}

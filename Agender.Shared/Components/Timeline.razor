@@ -1,0 +1,247 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject IClock Clock
+
+<div class="timeline @(ReadOnly ? "readonly" : string.Empty)" @ref="_root" style="--cols:@Days.Count"
+     data-ppm="@TimelineMetrics.PixelsPerMinuteAttribute" data-snap="@SnapMinutes"
+     data-default-duration="@DefaultDurationMinutes">
+    <div class="tl-head">
+        <div class="tl-corner"></div>
+        @foreach (DateOnly day in Days)
+        {
+            <DayHeader @key="day" Date="day" IsToday="day == _today" TotalMinutes="TotalMinutes(day)"
+                       Note="@Notes.GetValueOrDefault(day)" OnNoteSave="OnNoteSave" ShowNote="ShowNotes"
+                       AllDayEvents="AllDayFor(day)" OnAllDayClick="OnGoogleEventClick" ReadOnly="ReadOnly" />
+        }
+    </div>
+
+    <div class="tl-grid" style="height:@TimelineMetrics.DayHeight">
+        <div class="tl-gutter" aria-hidden="true">
+            @for (int hour = 1; hour < 24; hour++)
+            {
+                <span class="hour-label" style="top:@TimelineMetrics.Px(hour * 60)">@TimeSlot.FormatMinute(hour * 60)</span>
+            }
+        </div>
+
+        @foreach (DateOnly day in Days)
+        {
+            <DayColumn @key="day" Date="day" Entries="EntriesFor(day)" NowMinute="@(day == _today ? _nowMinute : null)"
+                       Projects="Projects" FilterProjectId="FilterProjectId" FilterTag="@FilterTag" HighlightedEntryId="HighlightedEntryId"
+                       ShowDetails="ShowEntryDetails" HideEntries="ShowGoogle" GoogleEvents="GoogleFor(day)" OnGoogleEventClick="OnGoogleEventClick" />
+        }
+    </div>
+</div>
+
+@code {
+    private const int FirstVisibleHour = 7;
+    private const int NowScrollLeadMinutes = 90;
+    private const int HighlightScrollLeadMinutes = 120;
+
+    private readonly CancellationTokenSource _lifetime = new();
+    private ElementReference _root;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<Timeline>? _self;
+    private ILookup<DateOnly, TimeEntry> _entriesByDay = Array.Empty<TimeEntry>().ToLookup(e => e.Date);
+    private DateOnly _today;
+    private int _nowMinute;
+    private Guid? _lastHighlightedEntryId;
+    private bool _scrollToHighlightPending;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DateOnly> Days { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<TimeEntry> Entries { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyDictionary<DateOnly, string> Notes { get; set; } = new Dictionary<DateOnly, string>();
+
+    [Parameter]
+    public int SnapMinutes { get; set; } = 5;
+
+    [Parameter]
+    public int DefaultDurationMinutes { get; set; } = TimelineMetrics.DefaultEntryMinutes;
+
+    [Parameter]
+    public IReadOnlyDictionary<Guid, Project> Projects { get; set; } = new Dictionary<Guid, Project>();
+
+    [Parameter]
+    public Guid? FilterProjectId { get; set; }
+
+    [Parameter]
+    public string? FilterTag { get; set; }
+
+    [Parameter]
+    public Guid? HighlightedEntryId { get; set; }
+
+    [Parameter]
+    public EventCallback<TimeEntry> OnEntryClick { get; set; }
+
+    [Parameter]
+    public EventCallback<EntryMove> OnEntryMove { get; set; }
+
+    [Parameter]
+    public EventCallback<SlotSelection> OnRangeSelect { get; set; }
+
+    [Parameter]
+    public EventCallback<TaskDrop> OnTaskDrop { get; set; }
+
+    [Parameter]
+    public EventCallback<Guid> OnEntryReturn { get; set; }
+
+    [Parameter]
+    public EventCallback<EntryMenuRequest> OnEntryMenu { get; set; }
+
+    [Parameter]
+    public bool ShowGoogle { get; set; }
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    [Parameter]
+    public bool ShowNotes { get; set; } = true;
+
+    [Parameter]
+    public bool ShowEntryDetails { get; set; } = true;
+
+    [Parameter]
+    public int StartMinute { get; set; }
+
+    [Parameter]
+    public Func<DateOnly, IReadOnlyList<GoogleEvent>>? GoogleEventsFor { get; set; }
+
+    [Parameter]
+    public EventCallback<GoogleEvent> OnGoogleEventClick { get; set; }
+
+    [Parameter]
+    public EventCallback<DayNoteChange> OnNoteSave { get; set; }
+
+    protected override void OnInitialized() => RefreshClock();
+
+    protected override void OnParametersSet()
+    {
+        _entriesByDay = Entries.ToLookup(e => e.Date);
+
+        if (HighlightedEntryId != _lastHighlightedEntryId)
+        {
+            _lastHighlightedEntryId = HighlightedEntryId;
+            _scrollToHighlightPending = HighlightedEntryId is not null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            await ScrollToHighlightedAsync();
+            return;
+        }
+
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Components/Timeline.razor.js");
+        _self = DotNetObjectReference.Create(this);
+        await _module.InvokeVoidAsync("init", _root, _self, ReadOnly);
+        await _module.InvokeVoidAsync("scrollToMinute", _root, InitialScrollMinute());
+        _ = RunClockAsync();
+    }
+
+    private async Task ScrollToHighlightedAsync()
+    {
+        if (!_scrollToHighlightPending || _module is null)
+        {
+            return;
+        }
+
+        _scrollToHighlightPending = false;
+        TimeEntry? entry = Entries.FirstOrDefault(e => e.Id == HighlightedEntryId);
+
+        if (entry is not null)
+        {
+            await _module.InvokeVoidAsync("scrollToMinute", _root, Math.Max(0, entry.StartMinute - HighlightScrollLeadMinutes));
+        }
+    }
+
+    [JSInvokable]
+    public Task OnEntryClicked(Guid id)
+    {
+        TimeEntry? entry = Entries.FirstOrDefault(e => e.Id == id);
+        return entry is null ? Task.CompletedTask : OnEntryClick.InvokeAsync(entry);
+    }
+
+    [JSInvokable]
+    public Task OnEntryMenuRequested(Guid id, double x, double y)
+    {
+        TimeEntry? entry = Entries.FirstOrDefault(e => e.Id == id);
+        return entry is null ? Task.CompletedTask : OnEntryMenu.InvokeAsync(new EntryMenuRequest(entry, x, y));
+    }
+
+    [JSInvokable]
+    public Task OnEntryMoved(Guid id, DateOnly date, int startMinute, int endMinute) =>
+        OnEntryMove.InvokeAsync(new EntryMove(id, date, startMinute, endMinute));
+
+    [JSInvokable]
+    public Task OnRangeSelected(DateOnly date, int startMinute, int endMinute) =>
+        OnRangeSelect.InvokeAsync(new SlotSelection(date, startMinute, endMinute));
+
+    [JSInvokable]
+    public Task OnEntryReturned(Guid id) => OnEntryReturn.InvokeAsync(id);
+
+    [JSInvokable]
+    public Task OnTaskDropped(Guid taskId, DateOnly date, int startMinute) =>
+        OnTaskDrop.InvokeAsync(new TaskDrop(taskId, date, startMinute));
+
+    private IReadOnlyList<GoogleEvent> GoogleFor(DateOnly day) =>
+        ShowGoogle && GoogleEventsFor is not null ? GoogleEventsFor(day) : [];
+
+    private IReadOnlyList<GoogleEvent> AllDayFor(DateOnly day) => [.. GoogleFor(day).Where(e => e.IsAllDay)];
+
+    private IReadOnlyList<TimeEntry> EntriesFor(DateOnly day) => _entriesByDay[day].ToList();
+
+    private int TotalMinutes(DateOnly day) => _entriesByDay[day].Sum(e => e.EndMinute - e.StartMinute);
+
+    private int InitialScrollMinute() =>
+        StartMinute > 0 ? StartMinute : Days.Contains(_today) ? Math.Max(0, _nowMinute - NowScrollLeadMinutes) : FirstVisibleHour * 60;
+
+    private void RefreshClock()
+    {
+        DateTime now = Clock.Now;
+        _today = DateOnly.FromDateTime(now);
+        _nowMinute = now.Hour * 60 + now.Minute;
+    }
+
+    private async Task RunClockAsync()
+    {
+        using PeriodicTimer timer = new(TimeSpan.FromMinutes(1));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_lifetime.Token))
+            {
+                RefreshClock();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _lifetime.Cancel();
+
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("dispose", _root);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+
+        _self?.Dispose();
+        _lifetime.Dispose();
+    }
+}

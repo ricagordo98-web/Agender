@@ -1,0 +1,23 @@
+<div class="empty-state">
+    <span class="empty-icon" aria-hidden="true"><Icon Name="Symbol" Size="26" /></span>
+    <h2>@Title</h2>
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <p>@Description</p>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter]
+    public IconName Symbol { get; set; } = IconName.Calendar;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

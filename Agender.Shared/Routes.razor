@@ -1,0 +1,24 @@
+﻿@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider Services
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Layout.MainLayout).Assembly" AdditionalAssemblies="_additionalAssemblies"
+            NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+</CascadingAuthenticationState>
+
+@code {
+    private IEnumerable<System.Reflection.Assembly>? _additionalAssemblies;
+
+    protected override void OnInitialized() =>
+        _additionalAssemblies = Services.GetService<IAdditionalRouteAssemblies>()?.Assemblies;
+}
+

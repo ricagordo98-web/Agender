@@ -37,7 +37,7 @@ dotnet tool run dotnet-ef migrations add <Name> -p Agender.Infrastructure -s Age
 Start a timer from the floating button (bottom right) or from the play button on a task. It is stored on the server, so it keeps running with the app closed and shows on every device. Stopping it creates the entry (split per day if it crosses midnight, minimum 1 minute); completing the task being timed also stops it.
 
 ## Google Calendar
-Optional and per user, with no configuration on the server. Each user pastes the JSON key of a Google **service account** in Settings and shares a calendar with the service account's email. The toolbar then gets a **Registos | Google** switch. In the Google view the agenda shows the Google events of the visible week (all-day events as chips in the day header; events written by the app are marked "Agender") and hides the time entries; the tasks stay in the sidebar. Clicking an event creates a time entry from it (not sent back to Google), clicking an "Agender" event opens its entry, and anything added while the Google view is on (dropping a task, dragging on the grid, "Novo registo") is flagged "Enviar para o Google Calendar" by default, so it shows up in Google. Entries are sent to a calendar (the same one, or a separate one given in the optional second field); the app is the source of truth: edits made in Google to those events are overwritten on the next sync, and a failed sync is retried with "Sincronizar agora" in Settings.
+Optional and per user, with no configuration on the server. Each user pastes the JSON key of a Google **service account** in Settings and shares a calendar with the service account's email. The toolbar then gets an **Agenda | Google Calendar** switch. In the Google view the agenda shows the Google events of the visible week (all-day events as chips in the day header; events written by the app are marked "Agender") and hides the time entries; the tasks stay in the sidebar. Clicking an event creates a time entry from it (not sent back to Google), clicking an "Agender" event opens its entry, and anything added while the Google view is on (dropping a task, dragging on the grid, "Novo registo") is flagged "Enviar para o Google Calendar" by default, so it shows up in Google. Entries are sent to a calendar (the same one, or a separate one given in the optional second field); the app is the source of truth: edits made in Google to those events are overwritten on the next sync, and a failed sync is retried with "Sincronizar agora" in Settings.
 
 To try the interface without a Google account, start the server with `Agender__DemoGoogle=true`: a fake Google backend with a few recurring events accepts any key and calendar id (development only, nothing leaves the machine).
 
@@ -49,9 +49,21 @@ Setup (once per user, Google Cloud Console and Google Calendar):
 
 The key is stored encrypted with ASP.NET Data Protection and is never sent back to the client, so in production persist the Data Protection key ring or the connection must be redone after a restart. Only keys of type `service_account` are accepted and the server always uses Google's own token endpoint.
 
-## Partilha da agenda
+## Agenda sharing
 
-Em **Partilhas** podes mostrar a tua agenda (só leitura, sem o Google Calendar) de duas formas:
+Under **Partilhas** (Sharing) you can show your agenda (read-only, without Google Calendar) in two ways:
 
-- **Com um utilizador do Agender**: indicas o email e a pessoa passa a ver a tua agenda em *Partilhas > Ver agenda*. Podes remover o acesso quando quiseres.
-- **Com um link**: gera um endereço secreto (`/p/<token>`) que funciona sem conta durante 2 dias. O link só é mostrado uma vez e só o hash fica guardado. Gerar um novo link invalida o anterior.
+- **With an Agender user**: enter their email and they can see your agenda under *Partilhas > Ver agenda*. You can remove their access at any time.
+- **With a link**: generates a secret address (`/p/<token>`) that works without an account for 2 days. The link is shown only once and only its hash is stored. Generating a new link invalidates the previous one.
+
+### Public access for the link (desktop use)
+
+The desktop launcher starts the server with `Agender:EnableTunnel=true`. When you generate a read-only link, the server starts a free [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) (`cloudflared`, downloaded to `%LOCALAPPDATA%\Agender` on first use) and the link is built with the public `https://<random>.trycloudflare.com` address. The tunnel stops when the link expires or is disabled. Requests that arrive through the tunnel can only reach the shared agenda page (`/p/...`) and static assets; sign-in, the API and the rest of the app return 404. The computer must stay on while someone is viewing the agenda.
+
+## Agendas
+
+Work is organised in **agendas** (for example *Trabalho* or *Pessoal*); each agenda groups its own projects, tasks and time entries. Every user starts with a default agenda called *Geral*. Manage them under **Agendas** (the former Projects page).
+
+- Several agendas can be shown on the grid at the same time. With two or more agendas the toolbar lists them next to the date navigation: the dot shows or hides an agenda, and clicking the name makes it the **active** one.
+- The active agenda is where new tasks, projects, time entries and timers go. The task sidebar, the project filter and the project pickers only show the active agenda's items.
+- Entry colours always come from the project. Deleting an agenda moves its projects, tasks and entries to *Geral*. Reports and the shared (read-only) agenda still cover all agendas.

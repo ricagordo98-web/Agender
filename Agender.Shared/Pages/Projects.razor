@@ -1,0 +1,338 @@
+@page "/projetos"
+@attribute [Authorize]
+@implements IDisposable
+@inject AgendaStore Store
+@inject IProjectService ProjectService
+@inject ITimeEntryService TimeEntryService
+@inject NavigationManager Navigation
+
+<PageTitle>Agendas e projetos · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Agendas e projetos" Subtitle="Organiza o trabalho em agendas (por exemplo, Trabalho ou Pessoal) e, dentro de cada uma, por cliente ou projeto.">
+        <button type="button" class="btn btn-ghost" @onclick="OpenNewAgenda">
+            <Icon Name="IconName.Plus" Size="16" /> Nova agenda
+        </button>
+        @if (Store.ActiveProjects.Any(p => p.IsArchived))
+        {
+            <label class="toggle">
+                <input type="checkbox" checked="@_showArchived" @onchange="e => _showArchived = (bool)(e.Value ?? false)" />
+                Mostrar arquivados
+            </label>
+        }
+        <button type="button" class="btn btn-primary" @onclick="OpenNew">
+            <Icon Name="IconName.Plus" Size="16" /> Novo projeto
+        </button>
+    </PageHeader>
+
+    @if (Store.IsInitialized)
+    {
+        <section class="agendas-strip" aria-label="Agendas">
+            <AgendaSwitcher Agendas="Store.Agendas" ShowVisibility="false" OnActivate="ActivateAgendaAsync" OnEdit="OpenEditAgenda" />
+            <p class="strip-hint">Os projetos e as tarefas mostrados são os da agenda ativa.</p>
+        </section>
+    }
+
+    @if (!Store.IsInitialized)
+    {
+        <div class="projects-layout" aria-busy="true">
+            <div class="project-list">
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="project-item skeleton"></div>
+                }
+            </div>
+            <div class="detail-skeleton skeleton"></div>
+        </div>
+    }
+    else if (VisibleProjects.Count == 0)
+    {
+        <EmptyState Symbol="IconName.Folder" Title="@($"Ainda não há projetos em “{Store.ActiveAgenda?.Name}”")"
+                    Description="Cria um projeto para filtrar a agenda e ver as tarefas e as horas gastas em cada um.">
+            <button type="button" class="btn btn-primary" @onclick="OpenNew">
+                <Icon Name="IconName.Plus" Size="16" /> Criar o primeiro projeto
+            </button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="projects-layout @(_mobileDetail ? "show-detail" : string.Empty)">
+            <nav class="project-list" aria-label="Projetos">
+                @foreach (Project project in VisibleProjects)
+                {
+                    <button type="button" @key="project.Id"
+                            class="project-item @EntryColorStyle.CssClass(project.Color) @(project.Id == Selected?.Id ? "selected" : string.Empty) @(project.IsArchived ? "archived" : string.Empty)"
+                            aria-current="@(project.Id == Selected?.Id ? "true" : null)" style="@EntryColorStyle.Style(project.CustomColor)"
+                            @onclick="() => SelectAsync(project)">
+                        <span class="project-swatch" aria-hidden="true"></span>
+                        <span class="item-text">
+                            <span class="item-name">@project.Name</span>
+                            @if (!string.IsNullOrEmpty(project.ClientName))
+                            {
+                                <span class="item-client">@project.ClientName</span>
+                            }
+                        </span>
+                        <span class="item-week" title="Esta semana">@TimeText.Duration(Minutes(_weekMinutes, project.Id))</span>
+                    </button>
+                }
+            </nav>
+
+            @if (Selected is Project selected)
+            {
+                <ProjectDetail Project="selected"
+                               Tasks="TasksOf(selected)"
+                               OtherProjects="OtherProjectsOf(selected)"
+                               RecentEntries="_recent"
+                               WeekMinutes="Minutes(_weekMinutes, selected.Id)"
+                               MonthMinutes="Minutes(_monthMinutes, selected.Id)"
+                               OnAddTask="title => Store.AddTaskAsync(title, selected.Id)"
+                               OnToggleTask="Store.ToggleTaskAsync"
+                               OnMoveTask="MoveTaskAsync"
+                               OnEdit="() => OpenEdit(selected)"
+                               OnArchive="() => ToggleArchiveAsync(selected)"
+                               OnDelete="() => _deleting = selected"
+                               OnShowInAgenda="() => ShowInAgenda(selected)"
+                               OnBack="() => _mobileDetail = false" />
+            }
+        </div>
+    }
+</div>
+
+@if (_editing is not null)
+{
+    <ProjectEditor @key="_editing.Id" Project="_editing" IsNew="_isNew" OnSave="SaveAsync" OnCancel="() => _editing = null" />
+}
+
+@if (_editingAgenda is not null)
+{
+    <AgendaEditor @key="_editingAgenda.Id" Agenda="_editingAgenda" IsNew="_agendaIsNew" OnSave="SaveAgendaAsync"
+                  OnDelete="() => { _deletingAgenda = _editingAgenda; _editingAgenda = null; }" OnCancel="() => _editingAgenda = null" />
+}
+
+@if (_deletingAgenda is not null)
+{
+    <ConfirmDialog Title="Eliminar agenda?" Danger="true" ConfirmLabel="Eliminar"
+                   Message="@($"A agenda “{_deletingAgenda.Name}” será eliminada. Os projetos, tarefas e registos dela passam para a agenda “{Agenda.DefaultName}”.")"
+                   OnConfirm="DeleteAgendaAsync" OnCancel="() => _deletingAgenda = null" />
+}
+
+@if (_deleting is not null)
+{
+    <ConfirmDialog Title="Eliminar projeto?" Danger="true" ConfirmLabel="Eliminar"
+                   Message="@($"O projeto “{_deleting.Name}” será eliminado. Os registos e tarefas associados ficam sem projeto.")"
+                   OnConfirm="DeleteAsync" OnCancel="() => _deleting = null" />
+}
+
+@code {
+    private const int RecentDays = 60;
+    private const int RecentCount = 10;
+
+    private IReadOnlyDictionary<Guid, int> _weekMinutes = new Dictionary<Guid, int>();
+    private IReadOnlyDictionary<Guid, int> _monthMinutes = new Dictionary<Guid, int>();
+    private IReadOnlyList<TimeEntry> _recent = [];
+    private Project? _editing;
+    private Project? _deleting;
+    private Agenda? _editingAgenda;
+    private Agenda? _deletingAgenda;
+    private bool _agendaIsNew;
+    private Guid? _selectedId;
+    private Guid? _recentFor;
+    private bool _isNew;
+    private bool _showArchived;
+    private bool _mobileDetail;
+
+    private IReadOnlyList<Project> VisibleProjects =>
+        [.. Store.ActiveProjects.Where(p => _showArchived || !p.IsArchived || p.Id == _selectedId)];
+
+    private Project? Selected =>
+        VisibleProjects.FirstOrDefault(p => p.Id == _selectedId) ?? VisibleProjects.FirstOrDefault();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnStoreChanged;
+        await Store.InitializeAsync();
+        await LoadStatsAsync();
+        await LoadRecentAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Selected is Project selected && _recentFor != selected.Id)
+        {
+            await LoadRecentAsync();
+            StateHasChanged();
+        }
+    }
+
+    private void OnStoreChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private static int Minutes(IReadOnlyDictionary<Guid, int> totals, Guid projectId) =>
+        totals.TryGetValue(projectId, out int minutes) ? minutes : 0;
+
+    private IReadOnlyList<TaskItem> TasksOf(Project project) => [.. Store.Tasks.Where(t => t.ProjectId == project.Id)];
+
+    private IReadOnlyList<Project> OtherProjectsOf(Project project) =>
+        [.. Store.ActiveProjects.Where(p => !p.IsArchived && p.Id != project.Id)];
+
+    private async Task SelectAsync(Project project)
+    {
+        _selectedId = project.Id;
+        _mobileDetail = true;
+        await LoadRecentAsync();
+    }
+
+    private async Task LoadStatsAsync()
+    {
+        DateOnly today = Store.Today;
+        DateOnly monday = today.AddDays(-(((int)today.DayOfWeek + 6) % 7));
+        DateOnly monthStart = new(today.Year, today.Month, 1);
+        DateOnly monthEnd = monthStart.AddMonths(1).AddDays(-1);
+
+        try
+        {
+            _weekMinutes = await ProjectService.GetMinutesByProjectAsync(monday, monday.AddDays(6));
+            _monthMinutes = await ProjectService.GetMinutesByProjectAsync(monthStart, monthEnd);
+        }
+        catch (Exception ex) when (ex is ServerUnavailableException or PersistenceException or UnauthorizedAccessException)
+        {
+            _weekMinutes = new Dictionary<Guid, int>();
+            _monthMinutes = new Dictionary<Guid, int>();
+        }
+    }
+
+    private async Task LoadRecentAsync()
+    {
+        if (Selected is not Project selected)
+        {
+            _recent = [];
+            _recentFor = null;
+            return;
+        }
+
+        _recentFor = selected.Id;
+
+        try
+        {
+            IReadOnlyList<TimeEntry> entries = await TimeEntryService.GetRangeAsync(Store.Today.AddDays(-(RecentDays - 1)), Store.Today);
+
+            _recent =
+            [
+                .. entries
+                    .Where(e => e.ProjectId == selected.Id)
+                    .OrderByDescending(e => e.Date)
+                    .ThenByDescending(e => e.StartMinute)
+                    .Take(RecentCount)
+            ];
+        }
+        catch (Exception ex) when (ex is ServerUnavailableException or PersistenceException or UnauthorizedAccessException)
+        {
+            _recent = [];
+        }
+    }
+
+    private void OpenNew()
+    {
+        EntryColor color = EntryColorStyle.Palette[Store.Projects.Count % EntryColorStyle.Palette.Count];
+        _editing = new Project { Color = color, AgendaId = Store.ActiveAgendaId };
+        _isNew = true;
+    }
+
+    private Task ActivateAgendaAsync(Agenda agenda)
+    {
+        _selectedId = null;
+        return agenda.IsActive ? Task.CompletedTask : Store.SetActiveAgendaAsync(agenda.Id);
+    }
+
+    private void OpenNewAgenda()
+    {
+        _editingAgenda = new Agenda { Color = EntryColorStyle.Palette[Store.Agendas.Count % EntryColorStyle.Palette.Count] };
+        _agendaIsNew = true;
+    }
+
+    private void OpenEditAgenda(Agenda agenda)
+    {
+        _editingAgenda = agenda;
+        _agendaIsNew = false;
+    }
+
+    private async Task SaveAgendaAsync(Agenda agenda)
+    {
+        if (await Store.SaveAgendaAsync(agenda, _agendaIsNew))
+        {
+            _editingAgenda = null;
+        }
+    }
+
+    private async Task DeleteAgendaAsync()
+    {
+        if (_deletingAgenda is Agenda agenda)
+        {
+            _deletingAgenda = null;
+            await Store.DeleteAgendaAsync(agenda.Id);
+            _selectedId = null;
+        }
+    }
+
+    private void OpenEdit(Project project)
+    {
+        _editing = project;
+        _isNew = false;
+    }
+
+    private async Task SaveAsync(Project project)
+    {
+        if (await Store.SaveProjectAsync(project, _isNew))
+        {
+            if (_isNew)
+            {
+                _selectedId = project.Id;
+                _mobileDetail = true;
+            }
+
+            _editing = null;
+            await LoadStatsAsync();
+        }
+    }
+
+    private Task MoveTaskAsync(TaskProjectChange change) => Store.SetTaskProjectAsync(change.Task, change.ProjectId);
+
+    private Task ToggleArchiveAsync(Project project) => Store.SaveProjectAsync(new Project
+    {
+        Id = project.Id,
+        Name = project.Name,
+        ClientName = project.ClientName,
+        Color = project.Color,
+        CustomColor = project.CustomColor,
+        AgendaId = project.AgendaId,
+        IsArchived = !project.IsArchived,
+        CreatedAt = project.CreatedAt
+    }, isNew: false);
+
+    private async Task DeleteAsync()
+    {
+        if (_deleting is null)
+        {
+            return;
+        }
+
+        Guid id = _deleting.Id;
+        _deleting = null;
+        _mobileDetail = false;
+
+        if (_selectedId == id)
+        {
+            _selectedId = null;
+        }
+
+        await Store.DeleteProjectAsync(id);
+        await LoadStatsAsync();
+    }
+
+    private void ShowInAgenda(Project project)
+    {
+        Store.SetFilter(project.Id, null);
+        Navigation.NavigateTo(string.Empty);
+    }
+
+    public void Dispose() => Store.Changed -= OnStoreChanged;
+}

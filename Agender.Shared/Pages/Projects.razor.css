@@ -1,0 +1,82 @@
+.projects-layout {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.project-list { display: grid; gap: 8px; align-content: start; }
+
+.project-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.project-item:hover { background: var(--surface-hover); }
+
+.project-item.selected {
+    border-color: color-mix(in srgb, var(--ec) 55%, var(--border));
+    background: color-mix(in srgb, var(--ec) 10%, var(--surface));
+    box-shadow: var(--shadow-sm);
+}
+
+.project-item.archived { opacity: 0.6; }
+
+.project-swatch {
+    flex: none;
+    width: 6px;
+    height: 34px;
+    border-radius: 4px;
+    background: var(--ec);
+}
+
+.item-text { display: grid; flex: 1; min-width: 0; }
+.item-name { font-weight: 700; overflow-wrap: anywhere; }
+.item-client { color: var(--text-muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.item-week { flex: none; color: var(--text-muted); font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.skeleton {
+    min-height: 62px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: linear-gradient(100deg, var(--surface) 30%, var(--surface-hover) 50%, var(--surface) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.3s linear infinite;
+}
+
+.detail-skeleton { min-height: 360px; border-radius: var(--radius-lg); }
+
+.toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted); font-weight: 600; cursor: pointer; }
+.toggle input { accent-color: var(--accent); }
+
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (max-width: 900px) {
+    .projects-layout { grid-template-columns: minmax(0, 1fr); }
+    .projects-layout.show-detail .project-list { display: none; }
+    .projects-layout:not(.show-detail) ::deep .detail { display: none; }
+}
+
+.agendas-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+
+.strip-hint { margin: 0; color: var(--text-muted); font-size: 12.5px; }

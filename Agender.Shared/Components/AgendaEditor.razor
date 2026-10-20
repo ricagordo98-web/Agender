@@ -1,0 +1,83 @@
+<Modal Title="@(IsNew ? "Nova agenda" : "Editar agenda")" OnClose="OnCancel" OnSubmit="SaveAsync">
+    <ChildContent>
+        <label class="label" for="agenda-name">Nome</label>
+        <input id="agenda-name" @ref="_name" class="field" maxlength="@Agenda.NameMaxLength" placeholder="Ex.: Trabalho, Pessoal"
+               value="@_nameText" @oninput="e => _nameText = e.Value?.ToString() ?? string.Empty" />
+
+        <span class="label">Cor</span>
+        <ColorPicker @bind-Value="_color" @bind-CustomValue="_customColor" />
+
+        @if (_error is not null)
+        {
+            <p class="error" role="alert">@_error</p>
+        }
+    </ChildContent>
+    <Footer>
+        @if (!IsNew && !Agenda.IsDefault)
+        {
+            <button type="button" class="btn btn-danger" @onclick="OnDelete">Eliminar</button>
+        }
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OnCancel">Cancelar</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync">Guardar</button>
+    </Footer>
+</Modal>
+
+@code {
+    private ElementReference _name;
+    private string _nameText = string.Empty;
+    private EntryColor _color;
+    private string? _customColor;
+    private string? _error;
+
+    [Parameter, EditorRequired]
+    public Agenda Agenda { get; set; } = default!;
+
+    [Parameter]
+    public bool IsNew { get; set; }
+
+    [Parameter]
+    public EventCallback<Agenda> OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _nameText = Agenda.Name;
+        _color = Agenda.Color;
+        _customColor = Agenda.CustomColor;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _name.FocusAsync();
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nameText))
+        {
+            _error = "Indica o nome da agenda.";
+            return;
+        }
+
+        await OnSave.InvokeAsync(new Agenda
+        {
+            Id = Agenda.Id,
+            Name = _nameText,
+            Color = _color,
+            CustomColor = _customColor,
+            IsVisible = Agenda.IsVisible,
+            IsActive = Agenda.IsActive,
+            IsDefault = Agenda.IsDefault,
+            CreatedAt = Agenda.CreatedAt
+        });
+    }
+}

@@ -1,0 +1,89 @@
+<Modal Title="@(Event.IsAgender ? "Evento criado pelo Agender" : "Evento do Google Calendar")" OnClose="OnClose">
+    <ChildContent>
+        <div class="gdlg">
+            <p class="gdlg-title">@Event.Title</p>
+            <p class="gdlg-when">
+                <Icon Name="IconName.Clock" Size="14" />
+                @WhenText
+            </p>
+            <p class="gdlg-origin">
+                @(Event.IsAgender
+                    ? "Este evento foi enviado pelo Agender a partir de um registo de tempo."
+                    : "Este evento vem do teu Google Calendar.")
+            </p>
+
+            @if (_confirming)
+            {
+                <p class="gdlg-warning" role="alert">
+                    Apagar este evento do Google Calendar?
+                    @(Event.IsAgender ? "O registo de tempo mantém-se na agenda, mas deixa de ser enviado para o Google." : "Esta ação remove-o do teu calendário.")
+                </p>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        @if (_confirming)
+        {
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _confirming = false">Cancelar</button>
+            <button type="button" class="btn btn-danger-solid" disabled="@_busy" @onclick="DeleteAsync">Apagar do Google</button>
+        }
+        else
+        {
+            <button type="button" class="btn btn-danger" @onclick="() => _confirming = true">
+                <Icon Name="IconName.Trash" Size="16" /> Apagar do Google
+            </button>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="OnClose">Fechar</button>
+            @if (Event.IsAgender && CanOpenEntry)
+            {
+                <button type="button" class="btn btn-primary" @onclick="OnOpenEntry">Abrir registo</button>
+            }
+            else if (!Event.IsAgender && !Event.IsAllDay)
+            {
+                <button type="button" class="btn btn-primary" @onclick="OnCreateEntry">Criar registo</button>
+            }
+        }
+    </Footer>
+</Modal>
+
+@code {
+    private bool _confirming;
+    private bool _busy;
+
+    [Parameter, EditorRequired]
+    public GoogleEvent Event { get; set; } = default!;
+
+    [Parameter]
+    public bool CanOpenEntry { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnCreateEntry { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpenEntry { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
+
+    private string WhenText
+    {
+        get
+        {
+            string day = DateText.Full(Event.Date);
+            string date = char.ToUpper(day[0], System.Globalization.CultureInfo.GetCultureInfo("pt-PT")) + day[1..];
+
+            return Event.IsAllDay ? $"{date} · Dia inteiro" : $"{date} · {TimeText.Range(Event.StartMinute!.Value, Event.EndMinute!.Value)}";
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        _busy = true;
+        await OnDelete.InvokeAsync();
+        _busy = false;
+    }
+}

@@ -1,0 +1,16 @@
+@page "/partilhas/{ShareId:guid}"
+@attribute [Authorize]
+@inject IAgendaSharingService SharingService
+
+<PageTitle>Agenda partilhada · Agender</PageTitle>
+
+<div class="shared-page">
+    <SharedAgendaView @key="ShareId" Loader="LoadAsync" UnavailableText="Esta partilha pode ter sido removida pelo dono." />
+</div>
+
+@code {
+    [Parameter]
+    public Guid ShareId { get; set; }
+
+    private Task<SharedAgendaDto> LoadAsync(DateOnly from, DateOnly to) => SharingService.GetSharedAgendaAsync(ShareId, from, to);
+}

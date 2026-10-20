@@ -1,0 +1,52 @@
+<div class="backdrop" @onclick="OnClose" @onkeydown="OnKeyDownAsync">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="@_titleId" @onclick:stopPropagation>
+        <header class="modal-head">
+            <h2 id="@_titleId">@Title</h2>
+            <button type="button" class="icon-btn" aria-label="Fechar" @onclick="OnClose">
+                <Icon Name="IconName.Close" />
+            </button>
+        </header>
+
+        <div class="modal-body">
+            @ChildContent
+        </div>
+
+        @if (Footer is not null)
+        {
+            <footer class="modal-foot">
+                @Footer
+            </footer>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly string _titleId = $"modal-title-{Guid.NewGuid():N}";
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public RenderFragment? Footer { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback OnSubmit { get; set; }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            await OnClose.InvokeAsync();
+        }
+        else if (args.CtrlKey && args.Key == "Enter")
+        {
+            await OnSubmit.InvokeAsync();
+        }
+    }
+}
