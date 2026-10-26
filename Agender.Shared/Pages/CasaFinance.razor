@@ -1,0 +1,80 @@
+@page "/casa/financas"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IFinanceService Finance
+
+<PageTitle>Finanças · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Finanças" Subtitle="O balanço, os movimentos e as poupanças de quem vive na casa, num só sítio." />
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        <div class="fb-tabs">
+            <SegmentedControl Label="Secção das finanças" Options="TabOptions" Value="(int)_tab" ValueChanged="v => _tab = (FinanceTab)v" />
+        </div>
+
+        @switch (_tab)
+        {
+            case FinanceTab.Balance:
+                <FinanceBalanceTab Version="_version" OnGoToSettings="GoToSettings" />
+                break;
+            case FinanceTab.Movements:
+                <FinanceMovementsTab People="_people" Goals="_goals" Accounts="_accounts" Household="Current" Version="_version" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+            case FinanceTab.Savings:
+                <FinanceSavingsTab People="_people" Goals="_goals" Version="_version" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+            default:
+                <FinanceSettingsTab People="_people" Household="Current" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+        }
+    }
+</div>
+
+@code {
+    private enum FinanceTab { Balance, Movements, Savings, Settings }
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> TabOptions =
+        [new((int)FinanceTab.Balance, "Balanço"), new((int)FinanceTab.Movements, "Movimentos"), new((int)FinanceTab.Savings, "Poupanças"), new((int)FinanceTab.Settings, "Pessoas e importação")];
+
+    private IReadOnlyList<FinancePerson> _people = [];
+    private IReadOnlyList<SavingsGoal> _goals = [];
+    private IReadOnlyList<SavingsAccount> _accounts = [];
+    private FinanceTab _tab = FinanceTab.Balance;
+    private int _version;
+    private bool _editing;
+
+    protected override bool IsEditing => _editing;
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _people = await Finance.GetPeopleAsync(cancellationToken);
+        _goals = await Finance.GetGoalsAsync(cancellationToken);
+        _accounts = await Finance.GetSavingsAccountsAsync(cancellationToken);
+        _version++;
+    }
+
+    private void SetEditing(bool editing) => _editing = editing;
+
+    private Task GoToSettings()
+    {
+        _tab = FinanceTab.Settings;
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshAfterChangeAsync()
+    {
+        _editing = false;
+        await RefreshAsync(silent: true);
+    }
+}

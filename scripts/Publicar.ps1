@@ -35,6 +35,7 @@ if ($null -eq $appSource) {
 Invoke-Step 'Copiar a app' { robocopy $appSource.DirectoryName (Join-Path $Output 'App-Windows') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null; $global:LASTEXITCODE = [int]($LASTEXITCODE -ge 8) }
 
 Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.ps1') $Output -Force
+Copy-Item (Join-Path $PSScriptRoot 'Servidor-Partilhado.ps1') $Output -Force
 
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Agender.lnk'
 $shell = New-Object -ComObject WScript.Shell

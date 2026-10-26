@@ -1,0 +1,78 @@
+@inject IHouseholdService Households
+@inject IToastService Toasts
+
+<section class="card cs-setup">
+    <span class="cs-setup-emoji" aria-hidden="true">🏡</span>
+    <h2>Vamos preparar a vossa casa</h2>
+    <p class="cs-muted">Compras, obras, finanças e agenda partilhados por quem vive consigo. Cria uma casa nova ou junta-te à de alguém com um código de convite.</p>
+
+    <div class="cs-choices" role="radiogroup" aria-label="Como queres começar">
+        <button type="button" role="radio" aria-checked="@(_mode == 0 ? "true" : "false")" class="cs-choice @(_mode == 0 ? "on" : string.Empty)" @onclick="() => _mode = 0">
+            <span class="cs-tile">🏡</span>
+            <span><strong>Criar uma casa nova</strong><small>Ficas como primeiro membro e recebes um código para convidar.</small></span>
+        </button>
+        <button type="button" role="radio" aria-checked="@(_mode == 1 ? "true" : "false")" class="cs-choice @(_mode == 1 ? "on" : string.Empty)" @onclick="() => _mode = 1">
+            <span class="cs-tile">🔑</span>
+            <span><strong>Tenho um código de convite</strong><small>Junta-te à casa do teu parceiro(a) ou família.</small></span>
+        </button>
+    </div>
+
+    @if (_mode == 0)
+    {
+        <label class="cs-field">Nome da casa
+            <input class="field" maxlength="@Household.NameMaxLength" placeholder="Ex.: Casa da Ana e do Rui" @bind="_name" @bind:event="oninput" />
+        </label>
+        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="CreateAsync">Criar casa</button>
+    }
+    else
+    {
+        <label class="cs-field">Código de convite
+            <input class="field cs-code-input" maxlength="@Household.InviteCodeLength" placeholder="ABC123" @bind="_code" @bind:event="oninput" />
+        </label>
+        <button type="button" class="btn btn-primary" disabled="@(_busy || _code.Trim().Length < Household.InviteCodeLength)" @onclick="JoinAsync">Entrar na casa</button>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="cs-error" role="alert">@_error</p>
+    }
+</section>
+
+@code {
+    private int _mode;
+    private bool _busy;
+    private string _name = string.Empty;
+    private string _code = string.Empty;
+    private string? _error;
+
+    [Parameter]
+    public EventCallback OnReady { get; set; }
+
+    private async Task CreateAsync()
+    {
+        await RunAsync(() => Households.CreateAsync(_name), "Não foi possível criar a casa. Tenta novamente.");
+    }
+
+    private async Task JoinAsync()
+    {
+        await RunAsync(() => Households.JoinAsync(_code), "Código inválido. Confirma com quem te convidou.");
+    }
+
+    private async Task RunAsync(Func<Task> action, string failure)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await action();
+            await OnReady.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            _error = ex is NotFoundException or ArgumentException ? failure : "Não foi possível contactar o servidor.";
+        }
+
+        _busy = false;
+    }
+}

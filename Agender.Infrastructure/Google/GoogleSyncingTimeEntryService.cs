@@ -1,9 +1,10 @@
+using Agender.Shared.Abstractions;
 using Agender.Shared.Domain;
 using Agender.Shared.Services;
 
 namespace Agender.Infrastructure.Google;
 
-public class GoogleSyncingTimeEntryService(ITimeEntryService inner, IGoogleEntrySync sync) : ITimeEntryService
+public class GoogleSyncingTimeEntryService(ITimeEntryService inner, IGoogleEntrySync sync, IAgendaScope scope) : ITimeEntryService
 {
     public Task<IReadOnlyList<TimeEntry>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default) =>
         inner.GetRangeAsync(from, to, cancellationToken);
@@ -15,7 +16,7 @@ public class GoogleSyncingTimeEntryService(ITimeEntryService inner, IGoogleEntry
     {
         TimeEntry created = await inner.CreateAsync(entry, cancellationToken);
 
-        if (created.SyncToGoogle)
+        if (created.SyncToGoogle && !IsForeign)
         {
             created.GoogleSyncFailed = !await sync.SyncEntryAsync(created.Id, cancellationToken);
         }
@@ -26,12 +27,24 @@ public class GoogleSyncingTimeEntryService(ITimeEntryService inner, IGoogleEntry
     public async Task UpdateAsync(TimeEntry entry, CancellationToken cancellationToken = default)
     {
         await inner.UpdateAsync(entry, cancellationToken);
+
+        if (IsForeign)
+        {
+            return;
+        }
+
         entry.GoogleSyncFailed = !await sync.SyncEntryAsync(entry.Id, cancellationToken);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        await sync.ForgetEntryAsync(id, cancellationToken);
+        if (!IsForeign)
+        {
+            await sync.ForgetEntryAsync(id, cancellationToken);
+        }
+
         await inner.DeleteAsync(id, cancellationToken);
     }
+
+    private bool IsForeign => scope.TargetId is not null;
 }

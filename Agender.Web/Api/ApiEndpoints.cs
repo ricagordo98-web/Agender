@@ -46,6 +46,7 @@ public static class ApiEndpoints
         MapGoogle(api.MapGroup("/google"));
         MapSharing(api.MapGroup("/sharing"));
         MapAgendas(api.MapGroup("/agendas"));
+        api.MapGroup("/casa").MapCasa();
 
         api.MapGet("/settings", async (IUserSettingsService service, CancellationToken ct) => (await service.GetAsync(ct)).ToDto());
 

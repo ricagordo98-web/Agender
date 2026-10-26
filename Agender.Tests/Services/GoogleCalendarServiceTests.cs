@@ -5,6 +5,7 @@ using Agender.Infrastructure.Services;
 using Agender.Shared.Domain;
 using Agender.Shared.Google;
 using Agender.Shared.Services;
+using Agender.Shared.State;
 using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -443,7 +444,7 @@ public sealed class GoogleCalendarServiceTests : IDisposable
     public async Task Decorator_UpdateKeepsTheLinkToTheGoogleEvent()
     {
         GoogleCalendarService service = await ConnectedServiceAsync();
-        GoogleSyncingTimeEntryService sut = new(new TimeEntryService(_db), service);
+        GoogleSyncingTimeEntryService sut = new(new TimeEntryService(_db), service, new AgendaScope());
 
         TimeEntry created = await sut.CreateAsync(new TimeEntry { Date = Day, StartMinute = 540, EndMinute = 600, Description = "Review", SyncToGoogle = true });
         created.GoogleSyncFailed.Should().BeFalse();
@@ -458,7 +459,7 @@ public sealed class GoogleCalendarServiceTests : IDisposable
     public async Task Decorator_DeleteRemovesTheGoogleEvent()
     {
         GoogleCalendarService service = await ConnectedServiceAsync();
-        GoogleSyncingTimeEntryService sut = new(new TimeEntryService(_db), service);
+        GoogleSyncingTimeEntryService sut = new(new TimeEntryService(_db), service, new AgendaScope());
         TimeEntry created = await sut.CreateAsync(new TimeEntry { Date = Day, StartMinute = 540, EndMinute = 600, SyncToGoogle = true });
 
         await sut.DeleteAsync(created.Id);
@@ -470,7 +471,7 @@ public sealed class GoogleCalendarServiceTests : IDisposable
     public async Task Decorator_GoogleFails_StillSavesTheEntryAndFlagsIt()
     {
         GoogleCalendarService service = await ConnectedServiceAsync();
-        GoogleSyncingTimeEntryService sut = new(new TimeEntryService(_db), service);
+        GoogleSyncingTimeEntryService sut = new(new TimeEntryService(_db), service, new AgendaScope());
         _api.FailUpserts = true;
 
         TimeEntry created = await sut.CreateAsync(new TimeEntry { Date = Day, StartMinute = 540, EndMinute = 600, SyncToGoogle = true });

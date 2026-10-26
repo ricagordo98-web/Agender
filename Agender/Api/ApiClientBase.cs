@@ -23,6 +23,11 @@ public abstract class ApiClientBase(IHttpClientFactory httpClientFactory, AuthSe
             await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
             ?? throw new PersistenceException("The server returned an empty response."), cancellationToken, timeout);
 
+    protected Task<T> SendBytesAsync<T>(HttpMethod method, string path, byte[] body, CancellationToken cancellationToken, TimeSpan? timeout = null) =>
+        ExecuteAsync(method, path, body, async response =>
+            await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
+            ?? throw new PersistenceException("The server returned an empty response."), cancellationToken, timeout);
+
     protected Task SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken) =>
         ExecuteAsync<object?>(method, path, body, _ => Task.FromResult<object?>(null), cancellationToken, null);
 
@@ -37,7 +42,12 @@ public abstract class ApiClientBase(IHttpClientFactory httpClientFactory, AuthSe
 
         using HttpRequestMessage request = new(method, $"{session.ServerUrl}{path}");
 
-        if (body is not null)
+        if (body is byte[] bytes)
+        {
+            request.Content = new ByteArrayContent(bytes);
+            request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        }
+        else if (body is not null)
         {
             request.Content = JsonContent.Create(body, options: JsonOptions);
         }

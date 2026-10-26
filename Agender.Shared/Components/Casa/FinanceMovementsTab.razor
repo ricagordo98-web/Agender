@@ -1,0 +1,485 @@
+@inject IFinanceService Finance
+@inject IToastService Toasts
+
+<div class="fm-bar">
+    <div class="cs-month-nav">
+        <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => MoveAsync(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+        <span>@CasaCatalog.MonthName(_month.Month) @_month.Year</span>
+        <button type="button" class="icon-btn" aria-label="Mês seguinte" @onclick="() => MoveAsync(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+    </div>
+
+    <div class="cs-chips" role="group" aria-label="Filtrar por pessoa">
+        <button type="button" class="cs-chip @(_owner is null ? "on" : string.Empty)" @onclick="() => SetOwnerAsync(null)">Todos</button>
+        @foreach (FinancePerson person in People)
+        {
+            string id = person.Id.ToString();
+
+            <button type="button" class="cs-chip @(_owner == id ? "on" : string.Empty)" @onclick="() => SetOwnerAsync(id)"><i style="background:@person.Color"></i>@person.Name</button>
+        }
+        <button type="button" class="cs-chip @(_owner == "shared" ? "on" : string.Empty)" @onclick='() => SetOwnerAsync("shared")'>Ambos</button>
+    </div>
+
+    <button type="button" class="btn btn-primary" @onclick="() => OpenNew(TransactionType.Expense)"><Icon Name="IconName.Plus" Size="16" /> Movimento</button>
+</div>
+
+@if (_summary is not null)
+{
+    <div class="cs-kpis">
+        <div class="card cs-kpi feature">
+            <span class="cs-icon"><Icon Name="IconName.Wallet" Size="15" /></span>
+            <small>Saldo do mês</small>
+            <strong class="@(_summary.Balance < 0 ? "expense" : string.Empty)">@CasaCatalog.Money(_summary.Balance)</strong>
+            <span class="cs-muted">@(_summary.Income > 0 ? $"{_summary.Expenses / _summary.Income * 100:0}% das entradas gastas" : "sem entradas registadas")</span>
+        </div>
+        <button type="button" class="card cs-kpi" @onclick="() => OpenNew(TransactionType.Income)">
+            <span class="cs-icon income"><Icon Name="IconName.ArrowDown" Size="15" /></span>
+            <small>Entradas</small>
+            <strong class="income">@CasaCatalog.Money(_summary.Income)</strong>
+            <span class="cs-muted">@Delta(_summary.Income, Previous?.Income)</span>
+        </button>
+        <button type="button" class="card cs-kpi" @onclick="() => OpenNew(TransactionType.Expense)">
+            <span class="cs-icon expense"><Icon Name="IconName.ArrowUp" Size="15" /></span>
+            <small>Saídas</small>
+            <strong class="expense">@CasaCatalog.Money(_summary.Expenses)</strong>
+            <span class="cs-muted">@Delta(_summary.Expenses, Previous?.Expenses)</span>
+        </button>
+        <button type="button" class="card cs-kpi" @onclick="() => OpenNew(TransactionType.Saving)">
+            <span class="cs-icon saving"><Icon Name="IconName.Target" Size="15" /></span>
+            <small>Poupança do mês</small>
+            <strong class="saving">@CasaCatalog.Money(_summary.Savings)</strong>
+            <span class="cs-muted">líquida de depósitos e levantamentos</span>
+        </button>
+    </div>
+
+    <div class="cs-two-cards">
+        <section class="card">
+            <header class="cs-card-head"><h2>Últimos 6 meses</h2></header>
+            <CasaTrend Data="_summary.Trend" />
+        </section>
+        <section class="card">
+            <header class="cs-card-head"><h2>Para onde vai o dinheiro</h2></header>
+            @if (_summary.ExpensesByCategory.Count == 0)
+            {
+                <p class="cs-muted">Sem despesas neste mês.</p>
+            }
+            else
+            {
+                <div class="cs-donut-wrap">
+                    <CasaDonut Items="Slices" Caption="Saídas" Center="@CasaCatalog.MoneyShort(_summary.Expenses)" />
+                    <div class="cs-legend-list">
+                        @foreach (CategoryTotal total in _summary.ExpensesByCategory.Take(6))
+                        {
+                            CasaCatalog.Category category = CasaCatalog.ExpenseCategory(total.Category);
+
+                            <div class="cs-legend-row">
+                                <i style="background:@category.Color"></i>
+                                <span class="cs-legend-name">@category.Emoji @total.Category</span>
+                                <CasaProgress Thin Value="@((double)(total.Total / _summary.Expenses))" Color="@category.Color" />
+                                <span class="cs-amount">@CasaCatalog.Money(total.Total)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+<section class="card cs-flush">
+    <header class="cs-card-head cs-pad">
+        <h2>Movimentos</h2>
+        <span class="spacer"></span>
+        <SegmentedControl Label="Filtrar movimentos" Options="TypeOptions" Value="_typeFilter" ValueChanged="v => _typeFilter = v" />
+    </header>
+
+    @if (_transactions.Count == 0)
+    {
+        <EmptyState Symbol="IconName.Wallet" Title="Sem movimentos" Description="Regista salários, despesas e poupanças deste mês." />
+    }
+
+    @foreach (IGrouping<DateOnly, FinanceTransaction> day in _transactions.Where(t => _typeFilter < 0 || (int)t.Type == _typeFilter).GroupBy(t => t.Date))
+    {
+        <div class="cs-section-title">@CasaCatalog.Capitalize(day.Key.ToString("dddd, d 'de' MMMM", CasaCatalog.Culture))<span class="line"></span></div>
+
+        @foreach (FinanceTransaction transaction in day)
+        {
+            <button type="button" class="cs-item cs-project-row" @key="transaction.Id" @onclick="() => OpenEdit(transaction)">
+                <span class="cs-tile sm @TileClass(transaction.Type)">@Emoji(transaction)</span>
+                <span class="cs-row-main">
+                    <span class="cs-row-title">@(string.IsNullOrWhiteSpace(transaction.Description) ? transaction.Category : transaction.Description)</span>
+                    <span class="cs-row-meta">
+                        <span>@transaction.Category</span>
+                        <span>· @OwnerName(transaction.PersonId)</span>
+                        @if (transaction.IsTransfer)
+                        {
+                            <span class="cs-badge">Troca</span>
+                        }
+                        @if (transaction.IsWithdrawal)
+                        {
+                            <span class="cs-badge">Levantamento</span>
+                        }
+                    </span>
+                </span>
+                <span class="cs-amount @(transaction.SignedValue > 0 ? "income" : transaction.Type == TransactionType.Saving ? "saving" : string.Empty)">
+                    @(transaction.SignedValue > 0 ? "+" : "−")@CasaCatalog.Money(transaction.Amount)
+                </span>
+            </button>
+        }
+    }
+</section>
+
+@if (_draft is not null)
+{
+    <Modal Title="@(_isNew ? "Novo movimento" : "Editar movimento")" OnClose="CloseEditor" OnSubmit="SaveAsync">
+        <ChildContent>
+            <SegmentedControl Label="Tipo de movimento" Options="EditorTypeOptions" Value="(int)_draft.Type" ValueChanged="v => SetType((TransactionType)v)" />
+            <label class="cs-field">Valor (€)
+                <input class="field cs-money-input" type="number" step="0.01" min="0" @bind="_draft.Amount" @bind:event="oninput" />
+            </label>
+
+            @if (_draft.Type == TransactionType.Saving)
+            {
+                <SegmentedControl Label="Sentido da poupança" Options="FlowOptions" Value="_draft.IsWithdrawal ? 1 : 0" ValueChanged="v => _draft.IsWithdrawal = v == 1" />
+            }
+
+            @if (_draft.Type == TransactionType.Expense)
+            {
+                <div class="cs-field">
+                    <span>Categoria</span>
+                    <div class="cs-chips" role="radiogroup" aria-label="Categoria">
+                        @foreach (CasaCatalog.Category category in CasaCatalog.ExpenseCategories)
+                        {
+                            <button type="button" role="radio" aria-checked="@(_draft.Category == category.Name ? "true" : "false")" class="cs-chip @(_draft.Category == category.Name ? "on" : string.Empty)" @onclick="() => _draft.Category = category.Name">@category.Emoji @category.Name</button>
+                        }
+                    </div>
+                </div>
+            }
+            else if (_draft.Type == TransactionType.Income)
+            {
+                <div class="cs-field">
+                    <span>Categoria</span>
+                    <div class="cs-chips" role="radiogroup" aria-label="Categoria">
+                        @foreach (string category in CasaCatalog.IncomeCategories)
+                        {
+                            <button type="button" role="radio" aria-checked="@(_draft.Category == category ? "true" : "false")" class="cs-chip @(_draft.Category == category ? "on" : string.Empty)" @onclick="() => _draft.Category = category">@category</button>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <label class="cs-field">Poupança
+                    <input class="field" maxlength="60" list="saving-buckets" placeholder="Ex.: Vida a Dois, Carro, Férias" @bind="_draft.Category" />
+                    <datalist id="saving-buckets">
+                        @foreach (string bucket in Buckets)
+                        {
+                            <option value="@bucket"></option>
+                        }
+                    </datalist>
+                </label>
+                <label class="cs-field">Conta de poupança
+                    <select class="field" value="@(_draft.SavingsAccountId?.ToString() ?? string.Empty)" @onchange="e => _draft.SavingsAccountId = Guid.TryParse(e.Value?.ToString(), out Guid id) ? id : null">
+                        <option value="">Sem conta</option>
+                        @foreach (SavingsAccount account in Accounts)
+                        {
+                            <option value="@account.Id">@account.Name (@CasaCatalog.Money(account.Value))</option>
+                        }
+                    </select>
+                </label>
+                <label class="cs-field">Objetivo
+                    <select class="field" value="@(_draft.GoalId?.ToString() ?? string.Empty)" @onchange="e => _draft.GoalId = Guid.TryParse(e.Value?.ToString(), out Guid id) ? id : null">
+                        <option value="">Sem objetivo</option>
+                        @foreach (SavingsGoal goal in Goals)
+                        {
+                            <option value="@goal.Id">@goal.Emoji @goal.Name</option>
+                        }
+                    </select>
+                </label>
+            }
+
+            <label class="cs-field">Descrição
+                <input class="field" maxlength="@FinanceTransaction.DescriptionMaxLength" placeholder="Ex.: Continente, Salário…" @bind="_draft.Description" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Data
+                    <input class="field" type="date" @bind="_draft.Date" />
+                </label>
+                <label class="cs-field">De quem
+                    <select class="field" value="@(_draft.PersonId?.ToString() ?? string.Empty)" @onchange="OnPersonChanged">
+                        @foreach (FinancePerson person in People)
+                        {
+                            <option value="@person.Id">@person.Name</option>
+                        }
+                        <option value="">Ambos (50/50)</option>
+                    </select>
+                </label>
+            </div>
+
+            @if (_draft.Type != TransactionType.Saving && _draft.PersonId is not null && People.Count > 1)
+            {
+                <label class="cs-check">
+                    <input type="checkbox" @bind="_draft.IsTransfer" />
+                    <span>Troca entre pessoas (o que um recebe, o outro perde)</span>
+                </label>
+            }
+        </ChildContent>
+        <Footer>
+            @if (!_isNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="() => _confirmDelete = true"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="CloseEditor">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@(_draft.Amount <= 0)" @onclick="SaveAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_confirmDelete)
+{
+    <ConfirmDialog Title="Eliminar movimento?" Danger ConfirmLabel="Eliminar" Message="O movimento é apagado para todos os membros da casa." OnConfirm="DeleteAsync" OnCancel="() => _confirmDelete = false" />
+}
+
+@code {
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> TypeOptions =
+        [new(-1, "Todos"), new((int)TransactionType.Income, "Entradas"), new((int)TransactionType.Expense, "Saídas"), new((int)TransactionType.Saving, "Poupança")];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> EditorTypeOptions =
+        [.. Enum.GetValues<TransactionType>().Select(t => new SegmentedControl.SegmentOption((int)t, CasaCatalog.Label(t)))];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> FlowOptions = [new(0, "Depósito"), new(1, "Levantamento")];
+
+    private DateTime _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private FinanceSummary? _summary;
+    private IReadOnlyList<FinanceTransaction> _transactions = [];
+    private IReadOnlyList<SavingsGoal> _goals = [];
+    private FinanceTransaction? _draft;
+    private string? _owner;
+    private int _typeFilter = -1;
+    private int _loadedVersion = -1;
+    private bool _isNew;
+    private bool _confirmDelete;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FinancePerson> People { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<SavingsGoal> Goals { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<SavingsAccount> Accounts { get; set; } = [];
+
+    [Parameter]
+    public HouseholdDto? Household { get; set; }
+
+    [Parameter]
+    public int Version { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnEditingChanged { get; set; }
+
+    private MonthTotal? Previous => _summary?.Trend.Count > 1 ? _summary.Trend[^2] : null;
+
+    private IReadOnlyList<string> Buckets => [.. _transactions.Where(t => t.Type == TransactionType.Saving).Select(t => t.Category).Distinct().OrderBy(c => c)];
+
+    private IReadOnlyList<CasaDonut.Slice> Slices =>
+        [.. _summary!.ExpensesByCategory.Select(c => new CasaDonut.Slice(c.Category, c.Total, CasaCatalog.ExpenseCategory(c.Category).Color))];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedVersion == Version || _draft is not null)
+        {
+            return;
+        }
+
+        _loadedVersion = Version;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            Task<FinanceSummary> summary = Finance.GetSummaryAsync(_month.Year, _month.Month, _owner);
+            Task<IReadOnlyList<FinanceTransaction>> transactions = Finance.GetTransactionsAsync(_month.Year, _month.Month, _owner);
+
+            await Task.WhenAll(summary, transactions);
+
+            _summary = summary.Result;
+            _transactions = transactions.Result;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível carregar os movimentos.", ToastKind.Error);
+        }
+    }
+
+    private async Task MoveAsync(int months)
+    {
+        _month = _month.AddMonths(months);
+        await LoadAsync();
+    }
+
+    private async Task SetOwnerAsync(string? owner)
+    {
+        _owner = owner;
+        await LoadAsync();
+    }
+
+    private static string Delta(decimal now, decimal? previous)
+    {
+        if (previous is null or 0)
+        {
+            return "vs. mês anterior: —";
+        }
+
+        decimal percent = (now - previous.Value) / previous.Value * 100;
+
+        return $"{(percent >= 0 ? "▲" : "▼")} {Math.Abs(percent):0}% vs. mês anterior";
+    }
+
+    private static string TileClass(TransactionType type) => type switch
+    {
+        TransactionType.Income => "income",
+        TransactionType.Saving => "saving",
+        _ => string.Empty
+    };
+
+    private string Emoji(FinanceTransaction transaction) => transaction.Type switch
+    {
+        TransactionType.Income => "💰",
+        TransactionType.Saving => _goals.FirstOrDefault(g => g.Id == transaction.GoalId)?.Emoji ?? "🐷",
+        _ => CasaCatalog.ExpenseCategory(transaction.Category).Emoji
+    };
+
+    private string OwnerName(Guid? personId) => personId is null ? "Ambos" : People.FirstOrDefault(p => p.Id == personId)?.Name ?? "—";
+
+    private void SetType(TransactionType type)
+    {
+        _draft!.Type = type;
+        _draft.Category = type switch
+        {
+            TransactionType.Income => CasaCatalog.DefaultIncomeCategory,
+            TransactionType.Expense => CasaCatalog.DefaultExpenseCategory,
+            _ => CasaCatalog.SavingCategory
+        };
+
+        if (type != TransactionType.Saving)
+        {
+            _draft.GoalId = null;
+            _draft.SavingsAccountId = null;
+            _draft.IsWithdrawal = false;
+        }
+        else
+        {
+            _draft.IsTransfer = false;
+        }
+    }
+
+    private void OnPersonChanged(ChangeEventArgs args)
+    {
+        _draft!.PersonId = Guid.TryParse(args.Value?.ToString(), out Guid id) ? id : null;
+
+        if (_draft.PersonId is null)
+        {
+            _draft.IsTransfer = false;
+        }
+    }
+
+    private void OpenNew(TransactionType type)
+    {
+        bool isCurrentMonth = _month.Year == DateTime.Today.Year && _month.Month == DateTime.Today.Month;
+        Guid? mine = People.FirstOrDefault(p => p.MemberUserId == Household?.MyUserId)?.Id ?? People.FirstOrDefault()?.Id;
+
+        _draft = new FinanceTransaction { Date = DateOnly.FromDateTime(isCurrentMonth ? DateTime.Today : _month), PersonId = mine };
+        SetType(type);
+        _isNew = true;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void OpenEdit(FinanceTransaction transaction)
+    {
+        _draft = new FinanceTransaction
+        {
+            Id = transaction.Id,
+            Type = transaction.Type,
+            Amount = transaction.Amount,
+            Category = transaction.Category,
+            Description = transaction.Description,
+            Date = transaction.Date,
+            PersonId = transaction.PersonId,
+            IsTransfer = transaction.IsTransfer,
+            IsWithdrawal = transaction.IsWithdrawal,
+            GoalId = transaction.GoalId,
+            SavingsAccountId = transaction.SavingsAccountId
+        };
+        _isNew = false;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void CloseEditor()
+    {
+        _draft = null;
+        _ = OnEditingChanged.InvokeAsync(false);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_draft is null || _draft.Amount <= 0)
+        {
+            return;
+        }
+
+        FinanceTransaction draft = _draft;
+        bool isNew = _isNew;
+        CloseEditor();
+
+        try
+        {
+            if (isNew)
+            {
+                await Finance.CreateTransactionAsync(draft);
+            }
+            else
+            {
+                await Finance.UpdateTransactionAsync(draft);
+            }
+
+            Toasts.Show(isNew ? "Movimento registado." : "Movimento atualizado.", ToastKind.Success);
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível guardar o movimento. Confirma os dados.", ToastKind.Error);
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmDelete = false;
+
+        if (_draft is null)
+        {
+            return;
+        }
+
+        Guid id = _draft.Id;
+        CloseEditor();
+
+        try
+        {
+            await Finance.DeleteTransactionAsync(id);
+            Toasts.Show("Movimento eliminado.", ToastKind.Success);
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível eliminar o movimento.", ToastKind.Error);
+        }
+    }
+}

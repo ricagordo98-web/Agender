@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Infrastructure.Services;
 
-public class TagService(IUserDbContextFactory contextFactory) : ITagService
+public class TagService(IAgendaDbContextFactory contextFactory) : ITagService
 {
     public async Task<IReadOnlyList<string>> GetAllAsync(CancellationToken cancellationToken = default)
     {

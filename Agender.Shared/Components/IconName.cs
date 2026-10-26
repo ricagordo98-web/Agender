@@ -30,5 +30,21 @@ public enum IconName
     Play,
     Stop,
     Download,
-    Share
+    Share,
+    Home,
+    Cart,
+    Wallet,
+    Gift,
+    Target,
+    Copy,
+    Mail,
+    Refresh,
+    Columns,
+    List,
+    Alert,
+    ArrowUp,
+    ArrowDown,
+    Flag,
+    Hammer,
+    Users
 }

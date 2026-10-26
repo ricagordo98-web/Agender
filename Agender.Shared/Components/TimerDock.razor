@@ -1,7 +1,8 @@
 @implements IDisposable
 @inject AgendaStore Store
+@inject AgendaScope Scope
 
-@if (Store.IsInitialized)
+@if (Store.IsInitialized && !Scope.IsForeign)
 {
     <div class="timer-dock">
         @if (Store.ActiveTimer is ActiveTimer timer)

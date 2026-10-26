@@ -29,7 +29,9 @@ public sealed class AgendaStoreTests : IDisposable
             new AgendaService(_db),
             _clock,
             _toasts,
-            new NullAppActivation());
+            new NullAppActivation(),
+            new AgendaScope(),
+            new NullChangeFeed());
     }
 
     public void Dispose()

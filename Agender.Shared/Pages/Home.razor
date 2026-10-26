@@ -6,20 +6,30 @@
 @inject GoogleCalendarState GoogleCalendar
 @inject IToastService Toasts
 @inject UserSettingsState Settings
+@inject IHouseholdService Households
+@inject AgendaScope Scope
 
 <PageTitle>Agenda · Agender</PageTitle>
 
 <div class="agenda">
+    <div class="agenda-head">
+    @if (_household is { Members.Count: > 1 } household)
+    {
+        <PeopleSwitcher Members="household.Members" MyUserId="@household.MyUserId" HouseholdScopeId="@AgendaScope.HouseholdScopeId(household.Id)" HouseholdName="@household.Name"
+                        Selected="@Scope.TargetId" SelectedLabel="@Scope.TargetLabel" OnSelect="SelectPerson" />
+    }
+
     <AgendaToolbar Days="Store.Days"
                    View="Store.View" ViewChanged="Store.ChangeViewAsync"
                    SnapMinutes="Store.SnapMinutes" SnapMinutesChanged="Store.SetSnap"
                    OnPrevious="() => Store.ShiftAsync(-1)" OnNext="() => Store.ShiftAsync(1)" OnToday="Store.GoToTodayAsync"
                    OnNewEntry="OpenNewEntryNow" OnToggleSidebar="() => _sidebarToggled = !_sidebarToggled"
                    OnSearch="Palette.Open"
-                   ShowSourceSwitch="GoogleCalendar.Status.IsConnected" ShowGoogle="GoogleCalendar.ShowGoogle" OnSourceChanged="SetSourceAsync"
+                   ShowSourceSwitch="GoogleCalendar.Status.IsConnected && !Scope.IsForeign" ShowGoogle="GoogleCalendar.ShowGoogle && !Scope.IsForeign" OnSourceChanged="SetSourceAsync"
                    GoogleLoading="GoogleCalendar.IsLoadingEvents" GoogleError="GoogleCalendar.HasEventsError" OnRetryGoogle="() => LoadGoogleAsync(force: true)"
                    Agendas="Store.Agendas" OnAgendaToggle="Store.ToggleAgendaVisibilityAsync" OnAgendaActivate="ActivateAgendaAsync"
                    FilterLabel="@FilterLabel" OnClearFilter="() => Store.SetFilter(null, null)" />
+    </div>
 
     <div class="agenda-body">
         <TaskRepository Tasks="Store.ActiveTasks" Projects="Store.ActiveProjects" IsToggled="_sidebarToggled"
@@ -40,7 +50,7 @@
                       HighlightedEntryId="Store.HighlightedEntryId"
                       OnEntryClick="OpenEditor" OnEntryMove="Store.MoveEntryAsync" OnRangeSelect="OpenNewEntry"
                       OnTaskDrop="DropTaskAsync" OnEntryReturn="ReturnToTaskListAsync" OnEntryMenu="OpenEntryMenu" OnNoteSave="Store.SaveNoteAsync"
-                      ShowGoogle="GoogleCalendar.ShowGoogle" GoogleEventsFor="GoogleCalendar.EventsOn" OnGoogleEventClick="OnGoogleEventClicked" />
+                      ShowGoogle="GoogleCalendar.ShowGoogle && !Scope.IsForeign" GoogleEventsFor="GoogleCalendar.EventsOn" OnGoogleEventClick="OnGoogleEventClicked" />
         }
     </div>
 
@@ -82,6 +92,7 @@
     private GoogleEvent? _googleEvent;
     private EntryMenuRequest? _menu;
     private TimeEntry? _confirmDelete;
+    private HouseholdDto? _household;
 
     protected override async Task OnInitializedAsync()
     {
@@ -91,12 +102,37 @@
         await GoogleCalendar.EnsureStatusAsync();
         await Settings.EnsureLoadedAsync();
         await Store.ApplySettingsAsync(Settings.Current, applyView: !Store.HasAppliedSettings);
+        await LoadHouseholdAsync();
         await Store.InitializeAsync();
 
         if (Store.ConsumePendingNewEntry())
         {
             OpenNewEntryNow();
         }
+    }
+
+    private async Task LoadHouseholdAsync()
+    {
+        try
+        {
+            _household = await Households.GetAsync();
+            Scope.MyUserId = _household?.MyUserId;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            _household = null;
+        }
+    }
+
+    private void SelectPerson(PeopleSwitcher.PersonChoice choice)
+    {
+        if (choice.Id is not null && GoogleCalendar.ShowGoogle)
+        {
+            GoogleCalendar.SetShowGoogle(false);
+            Store.SyncNewEntries = false;
+        }
+
+        Store.SelectScope(choice.Id, choice.Label);
     }
 
     private void OnNewEntryRequested() => _ = InvokeAsync(() =>
@@ -320,6 +356,7 @@
 
     public void Dispose()
     {
+        Store.SelectScope(null);
         Store.Changed -= OnStoreChanged;
         GoogleCalendar.Changed -= OnGoogleChanged;
         Store.NewEntryRequested -= OnNewEntryRequested;

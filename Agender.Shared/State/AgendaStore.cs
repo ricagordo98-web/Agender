@@ -1,5 +1,6 @@
 using Agender.Shared.Abstractions;
 using Agender.Shared.Components;
+using Agender.Shared.Contracts;
 using Agender.Shared.Domain;
 using Agender.Shared.Services;
 
@@ -15,15 +16,22 @@ public sealed class AgendaStore(
     IAgendaService agendaService,
     IClock clock,
     IToastService toasts,
-    IAppActivation activation) : IDisposable
+    IAppActivation activation,
+    AgendaScope scope,
+    IChangeFeed feed) : IDisposable
 {
     private static readonly TimeSpan HighlightDuration = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan RemoteRefreshDelay = TimeSpan.FromMilliseconds(400);
 
     private readonly CancellationTokenSource _lifetime = new();
     private List<TimeEntry> _entries = [];
     private Dictionary<DateOnly, string> _notes = [];
     private bool _initialized;
     private bool _activationHooked;
+    private bool _scopeHooked;
+    private int _refreshScheduled;
+    private Guid? _foreignActiveId;
+    private readonly HashSet<Guid> _foreignHidden = [];
 
     public event Action? Changed;
 
@@ -98,11 +106,12 @@ public sealed class AgendaStore(
 
         await clock.EnsureInitializedAsync(_lifetime.Token);
         HookActivation();
+        await HookScopeAsync();
         Anchor = clock.Today;
         Days = BuildDays();
         Tasks = await taskService.GetAllAsync(_lifetime.Token);
         await LoadReferenceDataAsync();
-        ActiveTimer = await timerService.GetActiveAsync(_lifetime.Token);
+        ActiveTimer = scope.IsForeign ? null : await timerService.GetActiveAsync(_lifetime.Token);
         await LoadRangeAsync();
         _initialized = true;
     });
@@ -116,7 +125,7 @@ public sealed class AgendaStore(
 
         Tasks = await taskService.GetAllAsync(_lifetime.Token);
         await LoadReferenceDataAsync();
-        ActiveTimer = await timerService.GetActiveAsync(_lifetime.Token);
+        ActiveTimer = scope.IsForeign ? null : await timerService.GetActiveAsync(_lifetime.Token);
         await LoadRangeAsync();
     });
 
@@ -370,8 +379,17 @@ public sealed class AgendaStore(
 
     public Task SetActiveAgendaAsync(Guid id) => RunSafeAsync(async () =>
     {
-        await agendaService.SetActiveAsync(id, _lifetime.Token);
-        await ReloadAgendasAsync();
+        if (scope.IsForeign)
+        {
+            _foreignActiveId = id;
+            _foreignHidden.Remove(id);
+            Agendas = ApplyLocalSelection(Agendas);
+        }
+        else
+        {
+            await agendaService.SetActiveAsync(id, _lifetime.Token);
+            await ReloadAgendasAsync();
+        }
 
         if (FilterProjectId is Guid filter && ProjectsById.TryGetValue(filter, out Project? project) && project.AgendaId != ActiveAgendaId)
         {
@@ -381,20 +399,30 @@ public sealed class AgendaStore(
 
     public Task SelectOnlyAgendaAsync(Guid id) => RunSafeAsync(async () =>
     {
-        await agendaService.SetActiveAsync(id, _lifetime.Token);
-        foreach (Agenda other in Agendas.Where(a => a.Id != id && a.IsVisible))
+        if (scope.IsForeign)
         {
-            await agendaService.UpdateAsync(new Agenda
-            {
-                Id = other.Id,
-                Name = other.Name,
-                Color = other.Color,
-                CustomColor = other.CustomColor,
-                IsVisible = false
-            }, _lifetime.Token);
+            _foreignActiveId = id;
+            _foreignHidden.Clear();
+            _foreignHidden.UnionWith(Agendas.Where(a => a.Id != id).Select(a => a.Id));
+            Agendas = ApplyLocalSelection(Agendas);
         }
+        else
+        {
+            await agendaService.SetActiveAsync(id, _lifetime.Token);
+            foreach (Agenda other in Agendas.Where(a => a.Id != id && a.IsVisible))
+            {
+                await agendaService.UpdateAsync(new Agenda
+                {
+                    Id = other.Id,
+                    Name = other.Name,
+                    Color = other.Color,
+                    CustomColor = other.CustomColor,
+                    IsVisible = false
+                }, _lifetime.Token);
+            }
 
-        await ReloadAgendasAsync();
+            await ReloadAgendasAsync();
+        }
 
         if (FilterProjectId is Guid filter && ProjectsById.TryGetValue(filter, out Project? project) && project.AgendaId != ActiveAgendaId)
         {
@@ -404,6 +432,17 @@ public sealed class AgendaStore(
 
     public Task ToggleAgendaVisibilityAsync(Agenda agenda) => RunSafeAsync(async () =>
     {
+        if (scope.IsForeign)
+        {
+            if (!_foreignHidden.Remove(agenda.Id))
+            {
+                _foreignHidden.Add(agenda.Id);
+            }
+
+            Agendas = ApplyLocalSelection(Agendas);
+            return;
+        }
+
         await agendaService.UpdateAsync(new Agenda
         {
             Id = agenda.Id,
@@ -448,6 +487,12 @@ public sealed class AgendaStore(
 
     public Task StartTimerAsync(string description, Guid? projectId, Guid? taskItemId) => RunSafeAsync(async () =>
     {
+        if (scope.IsForeign)
+        {
+            toasts.Show("O cronómetro só funciona na tua agenda.", ToastKind.Info);
+            return;
+        }
+
         if (ActiveTimer is not null)
         {
             await StopActiveTimerAsync();
@@ -539,9 +584,13 @@ public sealed class AgendaStore(
         await LoadRangeAsync();
     });
 
+    public void SelectScope(string? targetId, string? label = null) => scope.Select(targetId, label);
+
     public void Dispose()
     {
         activation.Activated -= OnActivated;
+        scope.Changed -= OnScopeChanged;
+        feed.Changed -= OnRemoteChangeAsync;
         _lifetime.Cancel();
         _lifetime.Dispose();
     }
@@ -622,7 +671,33 @@ public sealed class AgendaStore(
     private bool IsAgendaVisible(Guid agendaId) =>
         agendaId == Guid.Empty || Agendas.FirstOrDefault(a => a.Id == agendaId)?.IsVisible != false;
 
-    private async Task ReloadAgendasAsync() => Agendas = await agendaService.GetAllAsync(_lifetime.Token);
+    private async Task ReloadAgendasAsync()
+    {
+        IReadOnlyList<Agenda> loaded = await agendaService.GetAllAsync(_lifetime.Token);
+        Agendas = scope.IsForeign ? ApplyLocalSelection(loaded) : loaded;
+    }
+
+    private IReadOnlyList<Agenda> ApplyLocalSelection(IReadOnlyList<Agenda> agendas)
+    {
+        Guid active = _foreignActiveId is Guid chosen && agendas.Any(a => a.Id == chosen)
+            ? chosen
+            : agendas.FirstOrDefault(a => a.IsActive)?.Id ?? agendas.FirstOrDefault()?.Id ?? Guid.Empty;
+
+        return
+        [
+            .. agendas.Select(a => new Agenda
+            {
+                Id = a.Id,
+                Name = a.Name,
+                Color = a.Color,
+                CustomColor = a.CustomColor,
+                IsDefault = a.IsDefault,
+                CreatedAt = a.CreatedAt,
+                IsActive = a.Id == active,
+                IsVisible = a.Id == active || !_foreignHidden.Contains(a.Id)
+            })
+        ];
+    }
 
     private async Task ReloadProjectsAsync()
     {
@@ -742,6 +817,71 @@ public sealed class AgendaStore(
     }
 
     private void OnActivated() => _ = RefreshAsync();
+
+    private async Task HookScopeAsync()
+    {
+        if (_scopeHooked)
+        {
+            return;
+        }
+
+        _scopeHooked = true;
+        scope.Changed += OnScopeChanged;
+        feed.Changed += OnRemoteChangeAsync;
+
+        try
+        {
+            await feed.StartAsync(_lifetime.Token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+        }
+    }
+
+    private void OnScopeChanged()
+    {
+        _foreignActiveId = null;
+        _foreignHidden.Clear();
+        FilterProjectId = null;
+        FilterTag = null;
+        ActiveTimer = null;
+        _entries = [];
+        _notes = [];
+        Tasks = [];
+        Projects = [];
+        ProjectsById = new Dictionary<Guid, Project>();
+        Agendas = [];
+        NotifyChanged();
+        _ = RefreshAsync();
+    }
+
+    private Task OnRemoteChangeAsync(ChangeNotice notice)
+    {
+        if (scope.EffectiveId is string effective && notice.ScopeId == effective && Interlocked.Exchange(ref _refreshScheduled, 1) == 0)
+        {
+            _ = RefreshSoonAsync();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task RefreshSoonAsync()
+    {
+        try
+        {
+            await Task.Delay(RemoteRefreshDelay, _lifetime.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _refreshScheduled, 0);
+        }
+
+        await RefreshAsync();
+    }
 
     private void NotifyChanged() => Changed?.Invoke();
 }

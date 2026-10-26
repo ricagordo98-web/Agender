@@ -1,0 +1,134 @@
+@inject IFinanceService Finance
+
+@if (_sheet is null)
+{
+    <p class="cs-muted">A carregar…</p>
+}
+else if (_sheet.People.Count == 0 || _sheet.Years.Count == 0)
+{
+    <EmptyState Symbol="IconName.Wallet" Title="Ainda sem balanço" Description="Importa o teu Excel ou regista os primeiros movimentos para ver o balanço da casa.">
+        <button type="button" class="btn btn-primary" @onclick="() => OnGoToSettings.InvokeAsync()">Importar do Excel</button>
+    </EmptyState>
+}
+else
+{
+    BalanceYear current = _sheet.Current ?? _sheet.Years[^1];
+    decimal grand = current.Total.Sum();
+
+    <section class="fb-hero">
+        <div class="fb-title">
+            <span class="fb-eyebrow">Balanço</span>
+            <h2>@current.Year</h2>
+        </div>
+
+        <div class="fb-total">
+            <small>Total da casa</small>
+            <strong>@CasaCatalog.Money(grand)</strong>
+            <span>Conta @CasaCatalog.Money(current.Account.Sum()) · Poupanças @CasaCatalog.Money(current.Savings.Sum())</span>
+        </div>
+
+        @for (int index = 0; index < _sheet.People.Count; index++)
+        {
+            BalancePerson person = _sheet.People[index];
+            decimal total = current.Total[index];
+
+            <div class="fb-person" style="--pc:@person.Color">
+                <span class="fb-person-name"><MemberAvatar Name="@person.Name" Color="@person.Color" />@person.Name</span>
+                <strong>@CasaCatalog.Money(total)</strong>
+                <CasaProgress Thin Value="@(grand <= 0 ? 0 : (double)(total / grand))" Color="@person.Color" />
+                <small>Conta @CasaCatalog.Money(current.Account[index]) · Poupanças @CasaCatalog.Money(current.Savings[index])</small>
+            </div>
+        }
+    </section>
+
+    <section class="card fb-table-card">
+        <header class="cs-card-head"><h2>Por ano</h2><span class="cs-muted">Saldo a 31 de dezembro de cada ano</span></header>
+        <div class="fb-scroll">
+            <table class="fb-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        <th></th>
+                        @foreach (BalanceYear year in _sheet.Years)
+                        {
+                            <th class="@(year.Year == current.Year ? "now" : string.Empty)">@year.Year</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @Section("Conta", y => y.Account)
+                    @Section("Poupanças", y => y.Savings)
+                    @Section("Total", y => y.Total, emphasise: true)
+                </tbody>
+            </table>
+        </div>
+        <p class="cs-hint">O histórico das poupanças edita-se no separador <strong>Poupanças</strong>; o ano em curso usa as contas de poupança atuais.</p>
+    </section>
+
+    <section class="card">
+        <header class="cs-card-head"><h2>Evolução do total</h2></header>
+        <CasaLine Title="Evolução do total por pessoa" Labels="@_sheet.Years.Select(y => y.Year.ToString()).ToList()" Series="Series" />
+    </section>
+}
+
+@code {
+    private BalanceSheet? _sheet;
+    private int _loadedVersion = -1;
+
+    [Parameter]
+    public int Version { get; set; }
+
+    [Parameter]
+    public EventCallback OnGoToSettings { get; set; }
+
+    private IReadOnlyList<CasaLine.LineSeries> Series => _sheet is null
+        ? []
+        : [.. _sheet.People.Select((person, index) => new CasaLine.LineSeries(person.Name, person.Color, [.. _sheet.Years.Select(y => (double)y.Total[index])]))];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedVersion == Version)
+        {
+            return;
+        }
+
+        _loadedVersion = Version;
+
+        try
+        {
+            _sheet = await Finance.GetBalanceAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            _sheet ??= new BalanceSheet();
+        }
+    }
+
+    private RenderFragment Section(string label, Func<BalanceYear, IReadOnlyList<decimal>> values, bool emphasise = false) => __builder =>
+    {
+        for (int index = 0; index < _sheet!.People.Count; index++)
+        {
+            int person = index;
+
+            <tr class="@(emphasise ? "total" : string.Empty)">
+                @if (index == 0)
+                {
+                    <th class="fb-group" rowspan="@(_sheet.People.Count + 1)" scope="rowgroup">@label</th>
+                }
+                <th class="fb-name" scope="row" style="--pc:@_sheet.People[person].Color">@_sheet.People[person].Name</th>
+                @foreach (BalanceYear year in _sheet.Years)
+                {
+                    <td class="@(year.Year == (_sheet.Current?.Year ?? 0) ? "now" : string.Empty)">@CasaCatalog.Money(values(year)[person])</td>
+                }
+            </tr>
+        }
+
+        <tr class="sum @(emphasise ? "total" : string.Empty)">
+            <th class="fb-name" scope="row">Total</th>
+            @foreach (BalanceYear year in _sheet!.Years)
+            {
+                <td class="@(year.Year == (_sheet.Current?.Year ?? 0) ? "now" : string.Empty)">@CasaCatalog.Money(values(year).Sum())</td>
+            }
+        </tr>
+    };
+}

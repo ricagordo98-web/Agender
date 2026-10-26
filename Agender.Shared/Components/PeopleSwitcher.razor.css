@@ -1,0 +1,39 @@
+.people {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px 0;
+}
+
+.people-label { color: var(--text-muted); font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.person {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px 4px 5px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.person:hover { background: var(--surface-hover); }
+
+.person.active {
+    border-color: var(--pc);
+    background: color-mix(in srgb, var(--pc) 16%, var(--surface));
+    box-shadow: 0 0 0 1px var(--pc);
+}
+
+.person-name { font-size: 13.5px; font-weight: 700; }
+.person.house { padding-left: 10px; }
+.house-icon { font-size: 18px; line-height: 1; }
+.people-note { color: var(--text-muted); font-size: 12.5px; }
+.people-note strong { color: var(--text); }
+
+@media (max-width: 900px) {
+    .people { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .people-note { display: none; }
+}

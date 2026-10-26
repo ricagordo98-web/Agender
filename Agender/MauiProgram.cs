@@ -3,6 +3,7 @@ using Agender.Auth;
 using Agender.Shared;
 using Agender.Shared.Abstractions;
 using Agender.Shared.Services;
+using Agender.Shared.State;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +21,9 @@ public static class MauiProgram
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
             });
 
+        builder.Services.AddSingleton<AgendaScope>();
+        builder.Services.AddSingleton<IAgendaScope>(services => services.GetRequiredService<AgendaScope>());
+        builder.Services.AddSingleton<IChangeFeed, HubChangeFeed>();
         builder.Services.AddAgenderUi();
         builder.Services.AddSingleton<IClock, SystemClock>();
         builder.Services.AddSingleton<MauiAppActivation>();
@@ -42,6 +46,12 @@ public static class MauiProgram
         builder.Services.AddScoped<ITimerService, ApiTimerService>();
         builder.Services.AddScoped<IUserSettingsService, ApiUserSettingsService>();
         builder.Services.AddScoped<IAgendaService, ApiAgendaService>();
+        builder.Services.AddScoped<IHouseholdService, ApiHouseholdService>();
+        builder.Services.AddScoped<IShoppingService, ApiShoppingService>();
+        builder.Services.AddScoped<IHomeProjectService, ApiHomeProjectService>();
+        builder.Services.AddScoped<IFinanceService, ApiFinanceService>();
+        builder.Services.AddScoped<IFinanceImportService, ApiFinanceImportService>();
+        builder.Services.AddScoped<IFamilyEventService, ApiFamilyEventService>();
         builder.Services.AddScoped<IGoogleCalendarService, ApiGoogleCalendarService>();
         builder.Services.AddScoped<ApiAgendaSharingService>();
         builder.Services.AddScoped<IAgendaSharingService>(services => services.GetRequiredService<ApiAgendaSharingService>());

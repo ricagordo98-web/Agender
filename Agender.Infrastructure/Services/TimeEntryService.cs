@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Infrastructure.Services;
 
-public class TimeEntryService(IUserDbContextFactory contextFactory) : ITimeEntryService
+public class TimeEntryService(IAgendaDbContextFactory contextFactory) : ITimeEntryService
 {
     private const int MaxSearchPageSize = 50;
 

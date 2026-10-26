@@ -1,0 +1,333 @@
+@page "/casa/obras"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IHomeProjectService HomeProjects
+
+<PageTitle>Obras · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Obras, compras e prioridades" Subtitle="Tudo o que a casa precisa, ordenado pelo que importa mais.">
+        @if (Current is not null)
+        {
+            <SegmentedControl Label="Vista" Options="ViewOptions" Value="_board ? 0 : 1" ValueChanged="v => _board = v == 0" />
+            <button type="button" class="btn btn-primary" @onclick="() => OpenNew(HomeStatus.Idea)"><Icon Name="IconName.Plus" Size="16" /> Novo</button>
+        }
+    </PageHeader>
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        <div class="cs-kpis">
+            <div class="card cs-kpi"><span class="cs-icon"><Icon Name="IconName.Flag" Size="15" /></span><small>Em aberto</small><strong>@Open.Count()</strong><span class="cs-muted">@_items.Count(p => p.Status == HomeStatus.InProgress) em curso</span></div>
+            <div class="card cs-kpi"><span class="cs-icon expense"><Icon Name="IconName.Alert" Size="15" /></span><small>Urgentes</small><strong>@Open.Count(p => p.Priority >= HomePriority.High)</strong><span class="cs-muted">alta ou urgente</span></div>
+            <div class="card cs-kpi"><span class="cs-icon saving"><Icon Name="IconName.Wallet" Size="15" /></span><small>Orçamento previsto</small><strong>@CasaCatalog.Money(Open.Sum(p => p.EstimatedCost ?? 0))</strong><span class="cs-muted">por concluir</span></div>
+            <div class="card cs-kpi"><span class="cs-icon income"><Icon Name="IconName.Check" Size="15" /></span><small>Concluídos</small><strong>@_items.Count(p => p.Status == HomeStatus.Done)</strong><span class="cs-muted">@CasaCatalog.Money(_items.Where(p => p.Status == HomeStatus.Done).Sum(p => p.ActualCost ?? p.EstimatedCost ?? 0)) gastos</span></div>
+        </div>
+
+        <div class="cs-chips scroll" role="group" aria-label="Filtrar por tipo">
+            <button type="button" class="cs-chip @(_kind is null ? "on" : string.Empty)" @onclick="() => _kind = null">Todos</button>
+            @foreach (HomeKind kind in Enum.GetValues<HomeKind>())
+            {
+                <button type="button" class="cs-chip @(_kind == kind ? "on" : string.Empty)" @onclick="() => _kind = kind">@CasaCatalog.Emoji(kind) @CasaCatalog.Label(kind)</button>
+            }
+        </div>
+
+        @if (_items.Count == 0)
+        {
+            <EmptyState Symbol="IconName.Hammer" Title="Nada pendente" Description="Regista compras para a casa, obras e reparações — e define prioridades.">
+                <button type="button" class="btn btn-primary" @onclick="() => OpenNew(HomeStatus.Idea)">Adicionar</button>
+            </EmptyState>
+        }
+        else if (_board)
+        {
+            <div class="cs-board">
+                @foreach (HomeStatus status in Enum.GetValues<HomeStatus>())
+                {
+                    List<HomeProject> column = [.. Filtered.Where(p => p.Status == status)];
+
+                    <section class="cs-column" aria-label="@CasaCatalog.Label(status)">
+                        <header>
+                            <i style="background:@CasaCatalog.Color(status)"></i>
+                            <h2>@CasaCatalog.Label(status)</h2>
+                            <span class="cs-badge">@column.Count</span>
+                            <span class="spacer"></span>
+                            <button type="button" class="icon-btn" aria-label="Adicionar em @CasaCatalog.Label(status)" @onclick="() => OpenNew(status)"><Icon Name="IconName.Plus" Size="16" /></button>
+                        </header>
+                        @foreach (HomeProject project in column)
+                        {
+                            <button type="button" class="cs-pcard" @key="project.Id" @onclick="() => OpenEdit(project)">
+                                <span class="cs-prio-bar" style="background:@CasaCatalog.Color(project.Priority)"></span>
+                                <span class="cs-pbody">
+                                    <span class="cs-prow">
+                                        <span class="cs-prio" style="--c:@CasaCatalog.Color(project.Priority)">@CasaCatalog.Label(project.Priority)</span>
+                                        <span title="@CasaCatalog.Label(project.Kind)">@CasaCatalog.Emoji(project.Kind)</span>
+                                    </span>
+                                    <strong>@project.Title</strong>
+                                    <small>@(project.Room ?? CasaCatalog.Label(project.Kind))</small>
+                                    @if (project.Tasks.Count > 0)
+                                    {
+                                        <CasaProgress Thin Value="@(project.Tasks.Count(t => t.Done) / (double)project.Tasks.Count)" />
+                                    }
+                                    <span class="cs-pfoot">
+                                        @if (project.EstimatedCost is decimal cost)
+                                        {
+                                            <span>@CasaCatalog.Money(project.ActualCost ?? cost)</span>
+                                        }
+                                        @if (project.DueDate is DateOnly due)
+                                        {
+                                            <span class="@(due < Today && project.Status != HomeStatus.Done ? "late" : string.Empty)"><Icon Name="IconName.Clock" Size="13" /> @due.ToString("d MMM", CasaCatalog.Culture)</span>
+                                        }
+                                    </span>
+                                </span>
+                            </button>
+                        }
+                    </section>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="card cs-flush">
+                @foreach (IGrouping<HomePriority, HomeProject> group in Filtered.Where(p => p.Status != HomeStatus.Done).GroupBy(p => p.Priority).OrderByDescending(g => g.Key))
+                {
+                    <div class="cs-section-title"><span class="cs-prio" style="--c:@CasaCatalog.Color(group.Key)">@CasaCatalog.Label(group.Key)</span><span class="line"></span>@group.Count()</div>
+
+                    @foreach (HomeProject project in group.OrderBy(p => p.DueDate ?? DateOnly.MaxValue))
+                    {
+                        <button type="button" class="cs-item cs-project-row" @key="project.Id" @onclick="() => OpenEdit(project)">
+                            <span class="cs-tile sm">@CasaCatalog.Emoji(project.Kind)</span>
+                            <span class="cs-row-main">
+                                <span class="cs-row-title">@project.Title</span>
+                                <span class="cs-row-meta">
+                                    <span>@CasaCatalog.Label(project.Kind)</span>
+                                    @if (project.Room is not null)
+                                    {
+                                        <span>· @project.Room</span>
+                                    }
+                                    <span>· @CasaCatalog.Label(project.Status)</span>
+                                    @if (project.Tasks.Count > 0)
+                                    {
+                                        <span>· @project.Tasks.Count(t => t.Done)/@project.Tasks.Count tarefas</span>
+                                    }
+                                </span>
+                            </span>
+                            @if (project.DueDate is DateOnly due)
+                            {
+                                <span class="cs-badge @(due < Today ? "hot" : string.Empty)"><Icon Name="IconName.Clock" Size="12" /> @due.ToString("d MMM", CasaCatalog.Culture)</span>
+                            }
+                            @if (project.EstimatedCost is decimal cost)
+                            {
+                                <span class="cs-amount">@CasaCatalog.Money(cost)</span>
+                            }
+                        </button>
+                    }
+                }
+            </div>
+        }
+    }
+</div>
+
+@if (_draft is not null)
+{
+    <Modal Title="@(_isNew ? "Novo item" : _draft.Title)" OnClose="CloseEditor" OnSubmit="SaveAsync">
+        <ChildContent>
+            <label class="cs-field">Título
+                <input class="field" maxlength="@HomeProject.TitleMaxLength" placeholder="Ex.: Comprar sofá novo" @bind="_draft.Title" @bind:event="oninput" />
+            </label>
+            <div class="cs-field">
+                <span>Tipo</span>
+                <div class="cs-chips" role="radiogroup" aria-label="Tipo">
+                    @foreach (HomeKind kind in Enum.GetValues<HomeKind>())
+                    {
+                        <button type="button" role="radio" aria-checked="@(_draft.Kind == kind ? "true" : "false")" class="cs-chip @(_draft.Kind == kind ? "on" : string.Empty)" @onclick="() => _draft.Kind = kind">@CasaCatalog.Emoji(kind) @CasaCatalog.Label(kind)</button>
+                    }
+                </div>
+            </div>
+            <div class="cs-two">
+                <div class="cs-field">
+                    <span>Prioridade</span>
+                    <SegmentedControl Label="Prioridade" Options="PriorityOptions" Value="(int)_draft.Priority" ValueChanged="v => _draft.Priority = (HomePriority)v" />
+                </div>
+                <label class="cs-field">Estado
+                    <select class="field" @bind="_draft.Status">
+                        @foreach (HomeStatus status in Enum.GetValues<HomeStatus>())
+                        {
+                            <option value="@status">@CasaCatalog.Label(status)</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <div class="cs-two">
+                <label class="cs-field">Divisão
+                    <select class="field" @bind="_draft.Room">
+                        <option value="">—</option>
+                        @foreach (string room in CasaCatalog.Rooms)
+                        {
+                            <option value="@room">@room</option>
+                        }
+                    </select>
+                </label>
+                <label class="cs-field">Data limite
+                    <input class="field" type="date" @bind="_draft.DueDate" />
+                </label>
+            </div>
+            <div class="cs-two">
+                <label class="cs-field">Custo estimado (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_draft.EstimatedCost" />
+                </label>
+                <label class="cs-field">Custo real (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_draft.ActualCost" />
+                </label>
+            </div>
+            <label class="cs-field">Notas
+                <textarea class="field" rows="3" maxlength="@HomeProject.DescriptionMaxLength" placeholder="Medidas, orçamentos, contactos…" @bind="_draft.Description"></textarea>
+            </label>
+            <label class="cs-field">Link
+                <input class="field" maxlength="@HomeProject.LinkMaxLength" placeholder="https://loja.pt/produto" @bind="_draft.Link" />
+            </label>
+            <div class="cs-field">
+                <span>Tarefas @(_draft.Tasks.Count > 0 ? $"· {_draft.Tasks.Count(t => t.Done)}/{_draft.Tasks.Count}" : string.Empty)</span>
+                @foreach (HomeTask task in _draft.Tasks)
+                {
+                    <div class="cs-task @(task.Done ? "done" : string.Empty)">
+                        <button type="button" class="cs-check-btn @(task.Done ? "on" : string.Empty)" role="checkbox" aria-checked="@(task.Done ? "true" : "false")" aria-label="@task.Title" @onclick="() => task.Done = !task.Done"><Icon Name="IconName.Check" Size="14" /></button>
+                        <span>@task.Title</span>
+                        <button type="button" class="icon-btn" aria-label="Remover tarefa" @onclick="() => _draft.Tasks.Remove(task)"><Icon Name="IconName.Close" Size="14" /></button>
+                    </div>
+                }
+                <form class="cs-inline" @onsubmit="AddTask" @onsubmit:preventDefault>
+                    <input class="field" maxlength="@HomeProject.TitleMaxLength" aria-label="Nova tarefa" placeholder="Nova tarefa (ex.: pedir orçamento)" @bind="_newTask" @bind:event="oninput" />
+                    <button type="submit" class="btn btn-ghost" disabled="@string.IsNullOrWhiteSpace(_newTask)">Adicionar</button>
+                </form>
+            </div>
+        </ChildContent>
+        <Footer>
+            @if (!_isNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="() => _confirmDelete = true"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="CloseEditor">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_draft.Title)" @onclick="SaveAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_confirmDelete)
+{
+    <ConfirmDialog Title="Eliminar item?" Danger ConfirmLabel="Eliminar" Message="Este item e as suas tarefas são apagados para todos os membros da casa."
+                   OnConfirm="DeleteAsync" OnCancel="() => _confirmDelete = false" />
+}
+
+@code {
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions = [new(0, "Quadro"), new(1, "Prioridades")];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> PriorityOptions =
+        [.. Enum.GetValues<HomePriority>().Select(p => new SegmentedControl.SegmentOption((int)p, CasaCatalog.Label(p)))];
+
+    private IReadOnlyList<HomeProject> _items = [];
+    private HomeProject? _draft;
+    private HomeKind? _kind;
+    private string _newTask = string.Empty;
+    private bool _board = true;
+    private bool _isNew;
+    private bool _confirmDelete;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Today);
+
+    protected override bool IsEditing => _draft is not null;
+
+    private IEnumerable<HomeProject> Open => _items.Where(p => p.Status != HomeStatus.Done);
+
+    private IEnumerable<HomeProject> Filtered => _items.Where(p => _kind is null || p.Kind == _kind);
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken) => _items = await HomeProjects.GetAllAsync(cancellationToken);
+
+    private void OpenNew(HomeStatus status)
+    {
+        _draft = new HomeProject { Status = status, Kind = _kind ?? HomeKind.Purchase };
+        _isNew = true;
+        _newTask = string.Empty;
+    }
+
+    private void OpenEdit(HomeProject project)
+    {
+        _draft = new HomeProject
+        {
+            Id = project.Id,
+            Title = project.Title,
+            Description = project.Description,
+            Kind = project.Kind,
+            Priority = project.Priority,
+            Status = project.Status,
+            Room = project.Room,
+            EstimatedCost = project.EstimatedCost,
+            ActualCost = project.ActualCost,
+            DueDate = project.DueDate,
+            Link = project.Link,
+            Tasks = [.. project.Tasks.Select(t => new HomeTask { Title = t.Title, Done = t.Done, Order = t.Order })]
+        };
+        _isNew = false;
+        _newTask = string.Empty;
+    }
+
+    private void CloseEditor() => _draft = null;
+
+    private void AddTask()
+    {
+        if (_draft is null || string.IsNullOrWhiteSpace(_newTask))
+        {
+            return;
+        }
+
+        _draft.Tasks.Add(new HomeTask { Title = _newTask.Trim(), Order = _draft.Tasks.Count });
+        _newTask = string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_draft is null || string.IsNullOrWhiteSpace(_draft.Title))
+        {
+            return;
+        }
+
+        HomeProject draft = _draft;
+        bool isNew = _isNew;
+        draft.Room = string.IsNullOrEmpty(draft.Room) ? null : draft.Room;
+        _draft = null;
+
+        await RunAsync(async () =>
+        {
+            if (isNew)
+            {
+                await HomeProjects.CreateAsync(draft, Cancellation);
+            }
+            else
+            {
+                await HomeProjects.UpdateAsync(draft, Cancellation);
+            }
+        }, isNew ? "Adicionado." : "Guardado.");
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmDelete = false;
+
+        if (_draft is null)
+        {
+            return;
+        }
+
+        Guid id = _draft.Id;
+        _draft = null;
+        await RunAsync(() => HomeProjects.DeleteAsync(id, Cancellation), "Eliminado.");
+    }
+}

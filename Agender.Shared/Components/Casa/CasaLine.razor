@@ -1,0 +1,75 @@
+@using System.Globalization
+
+<div class="cs-trend">
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@Title">
+        @{
+            double max = Nice(Math.Max(1, Series.Count == 0 ? 1 : Series.Max(s => s.Values.Count == 0 ? 0 : s.Values.Max())));
+            double min = Math.Min(0, Series.Count == 0 ? 0 : Series.Min(s => s.Values.Count == 0 ? 0 : s.Values.Min()));
+            double range = Math.Max(1, max - min);
+            double plotHeight = Height - 36;
+            int count = Math.Max(1, Labels.Count);
+            double step = count == 1 ? 0 : (Width - 80) / (count - 1);
+        }
+
+        @for (int tick = 0; tick <= 4; tick++)
+        {
+            double y = 10 + plotHeight * tick / 4.0;
+            double tickValue = max - range * tick / 4.0;
+
+            <line x1="64" x2="@Width" y1="@Format(y)" y2="@Format(y)" stroke="var(--grid-line)" stroke-dasharray="3 4" />
+            @((MarkupString)$"<text x=\"58\" y=\"{Format(y + 4)}\" text-anchor=\"end\">{CasaCatalog.MoneyShort((decimal)tickValue)}</text>")
+        }
+
+        @for (int index = 0; index < Labels.Count; index++)
+        {
+            @((MarkupString)$"<text x=\"{Format(64 + step * index)}\" y=\"{Format(Height - 8)}\" text-anchor=\"middle\">{Labels[index]}</text>")
+        }
+
+        @foreach (LineSeries series in Series)
+        {
+            string points = string.Join(' ', series.Values.Select((v, i) => $"{Format(64 + step * i)},{Format(10 + plotHeight - (v - min) / range * plotHeight)}"));
+
+            <polyline points="@points" fill="none" stroke="@series.Color" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+
+            @for (int index = 0; index < series.Values.Count; index++)
+            {
+                <circle cx="@Format(64 + step * index)" cy="@Format(10 + plotHeight - (series.Values[index] - min) / range * plotHeight)" r="4" fill="var(--surface)" stroke="@series.Color" stroke-width="2.5">
+                    <title>@series.Name · @Labels[index]: @CasaCatalog.Money((decimal)series.Values[index])</title>
+                </circle>
+            }
+        }
+    </svg>
+
+    <div class="cs-legend">
+        @foreach (LineSeries series in Series)
+        {
+            <span><i style="background:@series.Color"></i>@series.Name</span>
+        }
+    </div>
+</div>
+
+@code {
+    private const double Width = 560;
+    private const double Height = 270;
+
+    public record LineSeries(string Name, string Color, IReadOnlyList<double> Values);
+
+    [Parameter]
+    public IReadOnlyList<string> Labels { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<LineSeries> Series { get; set; } = [];
+
+    [Parameter]
+    public string Title { get; set; } = "Evolução";
+
+    private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static double Nice(double value)
+    {
+        double power = Math.Pow(10, Math.Floor(Math.Log10(value)));
+        double mantissa = value / power;
+
+        return (mantissa <= 1.5 ? 1.5 : mantissa <= 2 ? 2 : mantissa <= 3 ? 3 : mantissa <= 5 ? 5 : 10) * power;
+    }
+}

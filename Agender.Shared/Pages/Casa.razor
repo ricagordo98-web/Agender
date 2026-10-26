@@ -1,0 +1,333 @@
+@page "/casa"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IJSRuntime JS
+
+<PageTitle>Casa · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="@(Current?.Name ?? "Casa")" Subtitle="Compras, obras, finanças e agenda partilhados por quem vive consigo." />
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else if (_dashboard is not null)
+    {
+        <div class="cs-dash">
+            <a class="card cs-feature" href="casa/financas">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>
+                    <h2>Saldo de @CasaCatalog.MonthName(_dashboard.Finance.Month)</h2>
+                    <span class="cs-link">Finanças <Icon Name="IconName.ChevronRight" Size="14" /></span>
+                </header>
+                <div class="cs-balance @(_dashboard.Finance.Balance < 0 ? "expense" : string.Empty)">@CasaCatalog.Money(_dashboard.Finance.Balance)</div>
+                <p class="cs-muted">disponível depois de despesas e poupança</p>
+                <div class="cs-mini-stats">
+                    <div><small>Entradas</small><strong class="income">@CasaCatalog.Money(_dashboard.Finance.Income)</strong></div>
+                    <div><small>Saídas</small><strong class="expense">@CasaCatalog.Money(_dashboard.Finance.Expenses)</strong></div>
+                    <div><small>Poupado</small><strong class="saving">@CasaCatalog.Money(_dashboard.Finance.Savings)</strong></div>
+                </div>
+            </a>
+
+            <section class="card">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Calendar" Size="16" /></span>
+                    <h2>Próximos dias</h2>
+                    <a class="cs-link" href="casa/eventos">Agenda da casa <Icon Name="IconName.ChevronRight" Size="14" /></a>
+                </header>
+                @if (_dashboard.Upcoming.Count == 0)
+                {
+                    <p class="cs-muted">Nada marcado para as próximas duas semanas. 🌿</p>
+                }
+                @foreach (EventOccurrence occurrence in _dashboard.Upcoming.Take(4))
+                {
+                    <div class="cs-row">
+                        <span class="cs-date @(occurrence.Start.Date == Today ? "today" : string.Empty)">
+                            <strong>@occurrence.Start.Day</strong>
+                            <small>@MonthShort(occurrence.Start)</small>
+                        </span>
+                        <span class="cs-row-main">
+                            <span class="cs-row-title">@CasaCatalog.Emoji(occurrence.Event.Kind) @occurrence.Event.Title</span>
+                            <span class="cs-row-meta">@When(occurrence)@(string.IsNullOrEmpty(occurrence.Event.Location) ? string.Empty : " · " + occurrence.Event.Location)</span>
+                        </span>
+                    </div>
+                }
+            </section>
+
+            <section class="card">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Cart" Size="16" /></span>
+                    <h2>Compras</h2>
+                    <span class="cs-badge">@_dashboard.PendingShoppingItems por comprar</span>
+                    <a class="cs-link" href="casa/compras">Ver listas <Icon Name="IconName.ChevronRight" Size="14" /></a>
+                </header>
+                @if (_dashboard.Lists.Count == 0)
+                {
+                    <p class="cs-muted">Ainda não há listas. <a href="casa/compras">Criar a primeira</a></p>
+                }
+                @foreach (ShoppingList list in _dashboard.Lists.Take(3))
+                {
+                    <a class="cs-row link" href="casa/compras/@list.Id">
+                        <span class="cs-tile sm" style="background:color-mix(in srgb, @list.Color 18%, transparent)">@list.Emoji</span>
+                        <span class="cs-row-main">
+                            <span class="cs-row-title">@list.Name</span>
+                            <CasaProgress Thin Value="@(list.TotalCount == 0 ? 0 : 1 - (double)list.PendingCount / list.TotalCount)" Color="@list.Color" />
+                        </span>
+                        <span class="cs-muted">@list.PendingCount</span>
+                    </a>
+                }
+            </section>
+
+            <section class="card">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Gift" Size="16" /></span>
+                    <h2>Aniversários</h2>
+                </header>
+                @if (_dashboard.Birthdays.Count == 0)
+                {
+                    <p class="cs-muted">Adiciona os aniversários da família na agenda da casa.</p>
+                }
+                @foreach (EventOccurrence birthday in _dashboard.Birthdays)
+                {
+                    int days = (birthday.Start.Date - Today).Days;
+
+                    <div class="cs-row">
+                        <span class="cs-tile sm" style="background:color-mix(in srgb, #FF9AB5 18%, transparent)">🎂</span>
+                        <span class="cs-row-main">
+                            <span class="cs-row-title">@birthday.Event.Title</span>
+                            <span class="cs-row-meta">@birthday.Start.ToString("d 'de' MMMM", CasaCatalog.Culture)@(birthday.Years > 0 && birthday.Event.Start.Year > 1900 ? $" · faz {birthday.Years} anos" : string.Empty)</span>
+                        </span>
+                        <span class="cs-badge @(days <= 7 ? "hot" : string.Empty)">@(days == 0 ? "Hoje!" : days == 1 ? "Amanhã" : $"em {days} dias")</span>
+                    </div>
+                }
+            </section>
+
+            <section class="card cs-wide">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Hammer" Size="16" /></span>
+                    <h2>Prioridades da casa</h2>
+                    <span class="cs-badge">@_dashboard.OpenProjects em aberto</span>
+                    <a class="cs-link" href="casa/obras">Ver tudo <Icon Name="IconName.ChevronRight" Size="14" /></a>
+                </header>
+                @if (_dashboard.TopProjects.Count == 0)
+                {
+                    <p class="cs-muted">Sem obras ou compras pendentes. A casa está em dia! ✨</p>
+                }
+                <div class="cs-cards">
+                    @foreach (HomeProject project in _dashboard.TopProjects)
+                    {
+                        <a class="cs-pcard" href="casa/obras">
+                            <span class="cs-prio" style="--c:@CasaCatalog.Color(project.Priority)">@CasaCatalog.Label(project.Priority)</span>
+                            <strong>@project.Title</strong>
+                            <small>@(project.Room ?? CasaCatalog.Label(project.Kind)) · @CasaCatalog.Label(project.Status)</small>
+                            <span class="cs-pfoot">
+                                @if (project.EstimatedCost is decimal cost)
+                                {
+                                    <span>@CasaCatalog.Money(cost)</span>
+                                }
+                                @if (project.DueDate is DateOnly due)
+                                {
+                                    <span><Icon Name="IconName.Clock" Size="13" /> @due.ToString("d MMM", CasaCatalog.Culture)</span>
+                                }
+                            </span>
+                        </a>
+                    }
+                </div>
+            </section>
+
+            @if (_dashboard.Goals.Count > 0)
+            {
+                <section class="card cs-wide">
+                    <header class="cs-card-head">
+                        <span class="cs-icon"><Icon Name="IconName.Target" Size="16" /></span>
+                        <h2>Objetivos de poupança</h2>
+                        <a class="cs-link" href="casa/financas">Gerir <Icon Name="IconName.ChevronRight" Size="14" /></a>
+                    </header>
+                    <div class="cs-cards">
+                        @foreach (SavingsGoal goal in _dashboard.Goals)
+                        {
+                            <div class="cs-goal">
+                                <div class="cs-row">
+                                    <span class="cs-tile sm" style="background:color-mix(in srgb, @goal.Color 18%, transparent)">@goal.Emoji</span>
+                                    <span class="cs-row-main">
+                                        <span class="cs-row-title">@goal.Name</span>
+                                        <span class="cs-row-meta">@CasaCatalog.Money(goal.Current) de @CasaCatalog.Money(goal.Target)</span>
+                                    </span>
+                                    <strong>@((goal.Progress * 100).ToString("0"))%</strong>
+                                </div>
+                                <CasaProgress Value="@goal.Progress" Color="@goal.Color" />
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+        </div>
+
+        <div class="cs-settings">
+            <section class="card">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Mail" Size="16" /></span>
+                    <h2>Convidar para a casa</h2>
+                </header>
+                <p class="cs-muted">Partilha este código com quem vive consigo. Quem já tem conta no Agender escolhe “Tenho um código de convite” nesta página e passa a ver tudo.</p>
+                <div class="cs-code" aria-label="Código de convite">@Current.InviteCode</div>
+                <div class="cs-actions">
+                    <button type="button" class="btn btn-primary" @onclick="CopyCodeAsync"><Icon Name="IconName.Copy" Size="16" /> Copiar código</button>
+                    <button type="button" class="btn btn-ghost" @onclick="NewCodeAsync"><Icon Name="IconName.Refresh" Size="16" /> Novo código</button>
+                </div>
+
+                <div class="cs-section-title flat">Ou convida por email <span class="line"></span></div>
+                <p class="cs-muted">A pessoa cria conta no Agender com este email e entra na casa sozinha, sem código. O convite dura 14 dias.</p>
+                <form class="cs-inline" @onsubmit="InviteAsync" @onsubmit:preventDefault>
+                    <input class="field" type="email" autocomplete="off" maxlength="256" aria-label="Email a convidar" placeholder="email@exemplo.pt" @bind="_inviteEmail" @bind:event="oninput" />
+                    <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_inviteEmail)">Convidar</button>
+                </form>
+                @foreach (InviteDto invite in Current.Invites ?? [])
+                {
+                    <div class="cs-row">
+                        <span class="cs-avatar muted"><Icon Name="IconName.Mail" Size="14" /></span>
+                        <span class="cs-row-main">
+                            <span class="cs-row-title">@invite.Email</span>
+                            <span class="cs-row-meta">Convite pendente até @invite.ExpiresAt.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                        </span>
+                        <button type="button" class="icon-btn" aria-label="Cancelar convite" title="Cancelar convite" @onclick="() => CancelInviteAsync(invite)"><Icon Name="IconName.Close" Size="16" /></button>
+                    </div>
+                }
+            </section>
+
+            <section class="card">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Users" Size="16" /></span>
+                    <h2>Membros</h2>
+                    <span class="cs-badge">@Current.Members.Count</span>
+                </header>
+                @foreach (MemberDto member in Current.Members)
+                {
+                    <div class="cs-row">
+                        <MemberAvatar Name="@member.DisplayName" Color="@member.Color" />
+                        <span class="cs-row-main">
+                            <span class="cs-row-title">@member.DisplayName</span>
+                            <span class="cs-row-meta">@member.Email</span>
+                        </span>
+                    </div>
+                }
+
+                <label class="cs-field">Nome da casa
+                    <span class="cs-inline">
+                        <input class="field" maxlength="@Agender.Shared.Domain.Household.NameMaxLength" @bind="_houseName" @bind:event="oninput" />
+                        <button type="button" class="btn btn-ghost" disabled="@(string.IsNullOrWhiteSpace(_houseName) || _houseName.Trim() == Current.Name)" @onclick="RenameAsync">Guardar</button>
+                    </span>
+                </label>
+
+                <div class="cs-field">
+                    <span>A tua cor</span>
+                    <div class="cs-swatches" role="radiogroup" aria-label="A tua cor">
+                        @foreach (string color in CasaCatalog.MemberColors)
+                        {
+                            <button type="button" role="radio" aria-checked="@(MyColor == color ? "true" : "false")" aria-label="@color" class="cs-swatch @(MyColor == color ? "on" : string.Empty)"
+                                    style="background:@color" @onclick="() => SetColorAsync(color)"></button>
+                        }
+                    </div>
+                </div>
+
+                <div class="cs-actions">
+                    <button type="button" class="btn btn-danger" @onclick="() => _confirmLeave = true">Sair desta casa</button>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@if (_confirmLeave)
+{
+    <ConfirmDialog Title="Sair desta casa?" Danger ConfirmLabel="Sair"
+                   Message="Deixas de ver as listas, obras, finanças e eventos da casa. Se fores o último membro, tudo é apagado. Podes voltar a entrar com um código."
+                   OnConfirm="LeaveAsync" OnCancel="() => _confirmLeave = false" />
+}
+
+@code {
+    private CasaDashboard? _dashboard;
+    private string _houseName = string.Empty;
+    private bool _confirmLeave;
+    private string _inviteEmail = string.Empty;
+    private bool _nameSeeded;
+
+    private static DateTime Today => DateTime.Today;
+
+    private string MyColor => Current?.Members.FirstOrDefault(m => m.UserId == Current.MyUserId)?.Color ?? string.Empty;
+
+    protected override bool IsEditing => _confirmLeave || !string.IsNullOrWhiteSpace(_inviteEmail);
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _dashboard = await Households.GetDashboardAsync(cancellationToken);
+
+        if (!_nameSeeded && Current is not null)
+        {
+            _houseName = Current.Name;
+            _nameSeeded = true;
+        }
+    }
+
+    private async Task CopyCodeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Current!.InviteCode);
+            Toasts.Show("Código copiado.", ToastKind.Success);
+        }
+        catch (JSException)
+        {
+            Toasts.Show("Não foi possível copiar. Seleciona o código e copia manualmente.", ToastKind.Error);
+        }
+    }
+
+    private Task NewCodeAsync() => RunAsync(() => Households.NewInviteCodeAsync(Cancellation), "Novo código gerado. O anterior deixou de funcionar.");
+
+    private async Task RenameAsync()
+    {
+        if (await RunAsync(() => Households.RenameAsync(_houseName, Cancellation), "Nome da casa atualizado."))
+        {
+            _houseName = Current?.Name ?? _houseName;
+        }
+    }
+
+    private async Task InviteAsync()
+    {
+        string email = _inviteEmail.Trim();
+
+        if (email.Length > 0 && await RunAsync(() => Households.InviteAsync(email, Cancellation), $"Convite enviado a {email}. Quando criar conta com este email, entra na casa."))
+        {
+            _inviteEmail = string.Empty;
+        }
+    }
+
+    private Task CancelInviteAsync(InviteDto invite) => RunAsync(() => Households.CancelInviteAsync(invite.Id, Cancellation), "Convite cancelado.");
+
+    private Task SetColorAsync(string color) => RunAsync(() => Households.SetMyColorAsync(color, Cancellation), "Cor atualizada.");
+
+    private async Task LeaveAsync()
+    {
+        _confirmLeave = false;
+        _nameSeeded = false;
+        _dashboard = null;
+        await RunAsync(() => Households.LeaveAsync(Cancellation), "Saíste da casa.");
+    }
+
+    private static string MonthShort(DateTime date) => date.ToString("MMM", CasaCatalog.Culture).TrimEnd('.');
+
+    private static string When(EventOccurrence occurrence)
+    {
+        string day = occurrence.Start.Date == DateTime.Today
+            ? "Hoje"
+            : occurrence.Start.Date == DateTime.Today.AddDays(1) ? "Amanhã" : CasaCatalog.Capitalize(occurrence.Start.ToString("ddd", CasaCatalog.Culture).TrimEnd('.'));
+
+        return occurrence.Event.AllDay ? day : $"{day}, {occurrence.Start:HH:mm}";
+    }
+}

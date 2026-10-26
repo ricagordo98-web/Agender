@@ -25,7 +25,7 @@ public sealed class UnclaimedDataServiceTests : IDisposable
             await legacy.SaveChangesAsync();
         }
 
-        IUserDbContextFactory owner = _db.ForUser("user-a");
+        IAgendaDbContextFactory owner = _db.ForUser("user-a");
         (await new TimeEntryService(owner).GetRangeAsync(Day, Day)).Should().BeEmpty();
 
         await new UnclaimedDataService(new FixedContextFactory(_db)).ClaimAsync("user-a");

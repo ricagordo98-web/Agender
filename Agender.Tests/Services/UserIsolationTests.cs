@@ -11,8 +11,8 @@ public sealed class UserIsolationTests : IDisposable
     private static readonly DateOnly Day = new(2026, 10, 12);
 
     private readonly TestDb _db = new();
-    private readonly IUserDbContextFactory _userA;
-    private readonly IUserDbContextFactory _userB;
+    private readonly IAgendaDbContextFactory _userA;
+    private readonly IAgendaDbContextFactory _userB;
 
     public UserIsolationTests()
     {

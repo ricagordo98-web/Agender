@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Infrastructure.Services;
 
-public class AgendaService(IUserDbContextFactory contextFactory) : IAgendaService
+public class AgendaService(IAgendaDbContextFactory contextFactory) : IAgendaService
 {
     public async Task<IReadOnlyList<Agenda>> GetAllAsync(CancellationToken cancellationToken = default)
     {

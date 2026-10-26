@@ -1,0 +1,16 @@
+<div class="cs-progress @(Thin ? "thin" : string.Empty)" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Percent">
+    <span style="width:@(Percent)%;@(Color is null ? string.Empty : $"background:{Color}")"></span>
+</div>
+
+@code {
+    [Parameter]
+    public double Value { get; set; }
+
+    [Parameter]
+    public string? Color { get; set; }
+
+    [Parameter]
+    public bool Thin { get; set; }
+
+    private int Percent => (int)Math.Round(Math.Clamp(Value, 0, 1) * 100);
+}

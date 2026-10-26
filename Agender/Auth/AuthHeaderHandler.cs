@@ -1,14 +1,22 @@
 using System.Net;
 using System.Net.Http.Headers;
+using Agender.Shared.Abstractions;
+using Agender.Shared.State;
 
 namespace Agender.Auth;
 
-public sealed class AuthHeaderHandler(AuthSession session) : DelegatingHandler
+public sealed class AuthHeaderHandler(AuthSession session, AgendaScope scope) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         string? token = await session.GetAccessTokenAsync();
         request.Headers.Authorization = token is null ? null : new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Remove(IAgendaScope.HeaderName);
+
+        if (scope.TargetId is string target)
+        {
+            request.Headers.TryAddWithoutValidation(IAgendaScope.HeaderName, target);
+        }
 
         HttpResponseMessage response = await base.SendAsync(request, cancellationToken);
 
@@ -33,6 +41,11 @@ public sealed class AuthHeaderHandler(AuthSession session) : DelegatingHandler
     {
         HttpRequestMessage clone = new(request.Method, request.RequestUri) { Version = request.Version };
         clone.Headers.Authorization = request.Headers.Authorization;
+
+        if (request.Headers.TryGetValues(IAgendaScope.HeaderName, out IEnumerable<string>? scopeValues))
+        {
+            clone.Headers.TryAddWithoutValidation(IAgendaScope.HeaderName, scopeValues);
+        }
 
         if (request.Content is not null)
         {

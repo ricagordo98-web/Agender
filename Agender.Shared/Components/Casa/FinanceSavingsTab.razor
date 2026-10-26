@@ -1,0 +1,421 @@
+@inject IFinanceService Finance
+@inject IToastService Toasts
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>
+        <h2>Contas de poupança</h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OpenNewAccount"><Icon Name="IconName.Plus" Size="16" /> Conta</button>
+    </header>
+
+    @if (_accounts.Count == 0)
+    {
+        <p class="cs-muted">Regista aqui as contas onde estão as poupanças. O total entra no balanço do ano em curso.</p>
+    }
+    else
+    {
+        <div class="fb-scroll">
+            <table class="fb-table accounts">
+                <thead>
+                    <tr><th>Conta</th><th>Titular</th><th>Banco</th><th class="num">Valor</th><th class="num">Inicial</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (SavingsAccount account in _accounts)
+                    {
+                        <tr @key="account.Id">
+                            <td>@account.Name</td>
+                            <td>@OwnerName(account.PersonId)</td>
+                            <td>@(account.Bank ?? "—")</td>
+                            <td class="num">@CasaCatalog.Money(account.Value)</td>
+                            <td class="num cs-muted">@CasaCatalog.Money(account.InitialValue)</td>
+                            <td class="num"><button type="button" class="icon-btn" aria-label="Editar @account.Name" @onclick="() => OpenEditAccount(account)"><Icon Name="IconName.Pencil" Size="15" /></button></td>
+                        </tr>
+                    }
+                    <tr class="total">
+                        <td colspan="3">Total</td>
+                        <td class="num">@CasaCatalog.Money(_accounts.Sum(a => a.Value))</td>
+                        <td class="num">@CasaCatalog.Money(_accounts.Sum(a => a.InitialValue))</td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.BarChart" Size="16" /></span>
+        <h2>Histórico por ano</h2>
+    </header>
+    <p class="cs-muted">Valor das poupanças de cada pessoa no fim de cada ano (já com a parte dos "Ambos"). Substitui o cálculo automático desse ano; o ano em curso usa as contas acima se não houver valor aqui.</p>
+
+    <div class="fb-scroll">
+        <table class="fb-table accounts">
+            <thead>
+                <tr>
+                    <th>Ano</th>
+                    @foreach (FinancePerson person in People)
+                    {
+                        <th class="num">@person.Name</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (int year in Years)
+                {
+                    <tr @key="year">
+                        <td>@year</td>
+                        @foreach (FinancePerson person in People)
+                        {
+                            SavingsSnapshot? snapshot = _snapshots.FirstOrDefault(s => s.Year == year && s.PersonId == person.Id);
+
+                            <td class="num">
+                                <button type="button" class="fb-cell" @onclick="() => OpenSnapshot(year, person, snapshot)">@(snapshot is null ? "—" : CasaCatalog.Money(snapshot.Value))</button>
+                            </td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="cs-actions">
+        <button type="button" class="btn btn-ghost" @onclick="AddYear"><Icon Name="IconName.Plus" Size="16" /> Ano anterior</button>
+    </div>
+</section>
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Target" Size="16" /></span>
+        <h2>Objetivos de poupança</h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OpenNewGoal"><Icon Name="IconName.Plus" Size="16" /> Objetivo</button>
+    </header>
+    @if (Goals.Count == 0)
+    {
+        <p class="cs-muted">Define objetivos (férias, fundo de emergência, carro…) e acompanha o progresso juntos. Os depósitos ligados a um objetivo, nos Movimentos, somam-lhe automaticamente.</p>
+    }
+    <div class="cs-cards">
+        @foreach (SavingsGoal goal in Goals)
+        {
+            <div class="cs-goal" @key="goal.Id">
+                <div class="cs-row">
+                    <span class="cs-tile sm" style="background:color-mix(in srgb, @goal.Color 18%, transparent)">@goal.Emoji</span>
+                    <span class="cs-row-main">
+                        <span class="cs-row-title">@goal.Name</span>
+                        <span class="cs-row-meta">@(goal.Deadline is DateOnly deadline ? $"até {deadline.ToString("MMM yyyy", CasaCatalog.Culture)}" : "sem prazo")</span>
+                    </span>
+                    <button type="button" class="icon-btn" aria-label="Editar @goal.Name" @onclick="() => OpenEditGoal(goal)"><Icon Name="IconName.Pencil" Size="15" /></button>
+                </div>
+                <div class="cs-goal-values">
+                    <strong>@CasaCatalog.Money(goal.Current)</strong>
+                    <span class="cs-muted">de @CasaCatalog.Money(goal.Target)</span>
+                </div>
+                <CasaProgress Value="@goal.Progress" Color="@goal.Color" />
+                <div class="cs-goal-foot">
+                    <span class="cs-muted">@((goal.Progress * 100).ToString("0"))% · faltam @CasaCatalog.Money(Math.Max(0, goal.Target - goal.Current))</span>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@if (_account is not null)
+{
+    <Modal Title="@(_accountIsNew ? "Nova conta de poupança" : "Editar conta")" OnClose="() => _account = null" OnSubmit="SaveAccountAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@SavingsAccount.NameMaxLength" placeholder="Ex.: Depósito a prazo" @bind="_account.Name" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Titular
+                    <select class="field" value="@(_account.PersonId?.ToString() ?? string.Empty)" @onchange="e => _account.PersonId = Guid.TryParse(e.Value?.ToString(), out Guid id) ? id : null">
+                        @foreach (FinancePerson person in People)
+                        {
+                            <option value="@person.Id">@person.Name</option>
+                        }
+                        <option value="">Ambos (50/50)</option>
+                    </select>
+                </label>
+                <label class="cs-field">Banco
+                    <input class="field" maxlength="@SavingsAccount.BankMaxLength" placeholder="Ex.: BPI" @bind="_account.Bank" />
+                </label>
+            </div>
+            <div class="cs-two">
+                <label class="cs-field">Valor atual (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_account.Value" />
+                </label>
+                <label class="cs-field">Valor inicial (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_account.InitialValue" />
+                </label>
+            </div>
+        </ChildContent>
+        <Footer>
+            @if (!_accountIsNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteAccountAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _account = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_account.Name)" @onclick="SaveAccountAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_snapshotDraft is not null)
+{
+    <Modal Title="@($"Poupanças de {_snapshotDraft.Person.Name} em {_snapshotDraft.Year}")" OnClose="() => _snapshotDraft = null" OnSubmit="SaveSnapshotAsync">
+        <ChildContent>
+            <label class="cs-field">Valor no fim do ano (€)
+                <input class="field cs-money-input" type="number" step="0.01" min="0" @bind="_snapshotDraft.Value" />
+            </label>
+        </ChildContent>
+        <Footer>
+            @if (_snapshotDraft.Existing is not null)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteSnapshotAsync"><Icon Name="IconName.Trash" Size="16" /> Limpar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _snapshotDraft = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" @onclick="SaveSnapshotAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_goal is not null)
+{
+    <Modal Title="@(_goalIsNew ? "Novo objetivo" : "Editar objetivo")" OnClose="() => _goal = null" OnSubmit="SaveGoalAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@SavingsGoal.NameMaxLength" placeholder="Ex.: Férias nos Açores" @bind="_goal.Name" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Meta (€)
+                    <input class="field" type="number" step="50" min="0" @bind="_goal.Target" @bind:event="oninput" />
+                </label>
+                <label class="cs-field">Prazo
+                    <input class="field" type="date" @bind="_goal.Deadline" />
+                </label>
+            </div>
+            @if (!_goalIsNew)
+            {
+                <label class="cs-field">Valor acumulado (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_goal.Current" />
+                </label>
+            }
+            <EmojiColorPicker Emojis="CasaCatalog.GoalEmojis" @bind-Emoji="_goal.Emoji" @bind-Color="_goal.Color" />
+        </ChildContent>
+        <Footer>
+            @if (!_goalIsNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteGoalAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _goal = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(_goal.Name) || _goal.Target <= 0)" @onclick="SaveGoalAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private sealed class SnapshotDraft(int year, FinancePerson person, SavingsSnapshot? existing)
+    {
+        public int Year { get; } = year;
+
+        public FinancePerson Person { get; } = person;
+
+        public SavingsSnapshot? Existing { get; } = existing;
+
+        public decimal Value { get; set; } = existing?.Value ?? 0;
+    }
+
+    private IReadOnlyList<SavingsAccount> _accounts = [];
+    private IReadOnlyList<SavingsSnapshot> _snapshots = [];
+    private SavingsAccount? _account;
+    private SnapshotDraft? _snapshotDraft;
+    private SavingsGoal? _goal;
+    private int _loadedVersion = -1;
+    private int _extraYear;
+    private bool _accountIsNew;
+    private bool _goalIsNew;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FinancePerson> People { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<SavingsGoal> Goals { get; set; } = [];
+
+    [Parameter]
+    public int Version { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnEditingChanged { get; set; }
+
+    private IReadOnlyList<int> Years
+    {
+        get
+        {
+            int current = DateTime.Today.Year;
+            int first = Math.Min(_snapshots.Count == 0 ? current : _snapshots.Min(s => s.Year), _extraYear == 0 ? current : _extraYear);
+
+            return [.. Enumerable.Range(first, current - first + 1).Reverse()];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedVersion == Version || _account is not null || _snapshotDraft is not null || _goal is not null)
+        {
+            return;
+        }
+
+        _loadedVersion = Version;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _accounts = await Finance.GetSavingsAccountsAsync();
+            _snapshots = await Finance.GetSavingsSnapshotsAsync();
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível carregar as poupanças.", ToastKind.Error);
+        }
+    }
+
+    private string OwnerName(Guid? personId) => personId is null ? "Ambos" : People.FirstOrDefault(p => p.Id == personId)?.Name ?? "—";
+
+    private void AddYear() => _extraYear = Years.Min() - 1;
+
+    private void OpenNewAccount()
+    {
+        _account = new SavingsAccount { PersonId = People.FirstOrDefault()?.Id };
+        _accountIsNew = true;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void OpenEditAccount(SavingsAccount account)
+    {
+        _account = new SavingsAccount { Id = account.Id, Name = account.Name, PersonId = account.PersonId, Bank = account.Bank, Value = account.Value, InitialValue = account.InitialValue };
+        _accountIsNew = false;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void OpenSnapshot(int year, FinancePerson person, SavingsSnapshot? existing)
+    {
+        _snapshotDraft = new SnapshotDraft(year, person, existing);
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void OpenNewGoal()
+    {
+        _goal = new SavingsGoal { Emoji = "🎯", Color = CasaCatalog.ListColors[(Goals.Count + 2) % CasaCatalog.ListColors.Length] };
+        _goalIsNew = true;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void OpenEditGoal(SavingsGoal goal)
+    {
+        _goal = new SavingsGoal { Id = goal.Id, Name = goal.Name, Emoji = goal.Emoji, Target = goal.Target, Current = goal.Current, Deadline = goal.Deadline, Color = goal.Color };
+        _goalIsNew = false;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private async Task SaveAccountAsync()
+    {
+        if (_account is null || string.IsNullOrWhiteSpace(_account.Name))
+        {
+            return;
+        }
+
+        SavingsAccount account = _account;
+        bool isNew = _accountIsNew;
+
+        await RunAsync(async () =>
+        {
+            if (isNew)
+            {
+                await Finance.CreateSavingsAccountAsync(account);
+            }
+            else
+            {
+                await Finance.UpdateSavingsAccountAsync(account);
+            }
+        }, isNew ? "Conta adicionada." : "Conta atualizada.", () => _account = null);
+    }
+
+    private Task DeleteAccountAsync()
+    {
+        Guid id = _account!.Id;
+        return RunAsync(() => Finance.DeleteSavingsAccountAsync(id), "Conta eliminada.", () => _account = null);
+    }
+
+    private Task SaveSnapshotAsync()
+    {
+        SnapshotDraft draft = _snapshotDraft!;
+        return RunAsync(() => Finance.SetSavingsSnapshotAsync(draft.Year, draft.Person.Id, draft.Value), "Histórico atualizado.", () => _snapshotDraft = null);
+    }
+
+    private Task DeleteSnapshotAsync()
+    {
+        Guid id = _snapshotDraft!.Existing!.Id;
+        return RunAsync(() => Finance.DeleteSavingsSnapshotAsync(id), "Valor removido.", () => _snapshotDraft = null);
+    }
+
+    private async Task SaveGoalAsync()
+    {
+        if (_goal is null || string.IsNullOrWhiteSpace(_goal.Name) || _goal.Target <= 0)
+        {
+            return;
+        }
+
+        SavingsGoal goal = _goal;
+        bool isNew = _goalIsNew;
+
+        await RunAsync(async () =>
+        {
+            if (isNew)
+            {
+                await Finance.CreateGoalAsync(goal);
+            }
+            else
+            {
+                await Finance.UpdateGoalAsync(goal);
+            }
+        }, isNew ? "Objetivo criado." : "Objetivo atualizado.", () => _goal = null);
+    }
+
+    private Task DeleteGoalAsync()
+    {
+        Guid id = _goal!.Id;
+        return RunAsync(() => Finance.DeleteGoalAsync(id), "Objetivo eliminado.", () => _goal = null);
+    }
+
+    private async Task RunAsync(Func<Task> action, string success, Action close)
+    {
+        try
+        {
+            await action();
+            close();
+            Toasts.Show(success, ToastKind.Success);
+            await LoadAsync();
+            await OnEditingChanged.InvokeAsync(false);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível guardar. Confirma os dados.", ToastKind.Error);
+        }
+    }
+
+    private static bool IsExpected(Exception ex) =>
+        ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException;
+}

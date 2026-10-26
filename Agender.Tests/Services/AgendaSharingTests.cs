@@ -243,7 +243,7 @@ public sealed class AgendaSharingTests : IDisposable
 
     private async Task<Guid> SeedSharedAgendaAsync()
     {
-        IUserDbContextFactory owner = _db.ForUser(Owner);
+        IAgendaDbContextFactory owner = _db.ForUser(Owner);
         Project project = await new ProjectService(owner).CreateAsync(new Project { Name = "Cliente X" });
         await new ProjectService(owner).CreateAsync(new Project { Name = "Outro projeto" });
         await new TimeEntryService(owner).CreateAsync(new TimeEntry { Date = Day, StartMinute = 540, EndMinute = 600, Description = "Reunião", ProjectId = project.Id });

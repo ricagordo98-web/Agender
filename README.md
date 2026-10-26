@@ -67,3 +67,28 @@ Work is organised in **agendas** (for example *Trabalho* or *Pessoal*); each age
 - Several agendas can be shown on the grid at the same time. With two or more agendas the toolbar lists them next to the date navigation: the dot shows or hides an agenda, and clicking the name makes it the **active** one.
 - The active agenda is where new tasks, projects, time entries and timers go. The task sidebar, the project filter and the project pickers only show the active agenda's items.
 - Entry colours always come from the project. Deleting an agenda moves its projects, tasks and entries to *Geral*. Reports and the shared (read-only) agenda still cover all agendas.
+
+## Home (Casa)
+
+The **Casa** section brings household management to Agender (it replaces the standalone *Lar* app). It is shared by a household, unlike the rest of Agender, which is private to each user.
+
+- **Household**: create one (optionally with sample data), join with a 6-character invite code, or be invited by email: add a person's email and, when they create an account with it, they join on their own (invites last 14 days). A user belongs to one household; each member has a colour. Leaving as the last member deletes the household data.
+- **Shopping**: several lists with quick add (`2 leite`, `1,5 kg maçãs`), automatic category by product name, quantities, units, prices, notes, "in the cart" section, clear bought items, copy as text. Lists can also be shared by email with people outside the household (edit or read-only).
+- **Works**: purchases, renovations, repairs, maintenance and decoration with priority, status (board or priority list), room, estimated and actual cost, due date, link and tasks.
+- **Finance**: modelled on the couple's spreadsheet. Every movement belongs to a person or to **Ambos** (shared, split in equal parts) and can be a **Troca** (a transfer: what one person receives the other loses). Four sections: **Balanço** (balance per person and per year, account + savings + total, with a chart), **Movimentos** (monthly summary, trend, categories, filter by person, income/expense/saving with deposits and withdrawals), **Poupanças** (savings accounts, yearly history and goals) and **Pessoas e importação**.
+- **Excel import**: upload the workbook (sheets *Registos*, *Poupanças* and *Consulta*), check the preview (counts, category names harmonised, resulting balances) and import. A new import replaces what came from Excel before and keeps the movements created in the app; editing an imported movement makes it a manual one. Balances follow the spreadsheet formulas (own movements + half of "Ambos" + transfers) and were checked against the *Consulta* sheet.
+- **Household agenda**: day, week and month views, recurring events (weekly, monthly, yearly) and birthdays that repeat every year with the age.
+
+Changes made by another member show up in real time (with a periodic refresh as a fallback). The API lives under `/api/casa` and, like the rest of the API, is not reachable through the public tunnel.
+
+### Agendas of the household members
+
+When the household has two or more members, the agenda page shows a strip with each member, plus **Casa** (a shared household agenda). Click a person to see and edit their agendas (tasks, projects, entries, notes, agendas); the strip says whose agenda you are editing and the timer and Google Calendar are hidden, because they are personal. Leaving the agenda page returns you to your own agenda.
+
+- Access is checked on the server: you can only act as members of your own household or as your household's shared agenda, never as anyone else. The scope travels in the `X-Agender-Scope` header (the web app sets it in-process).
+- Changes are pushed in real time: the web app uses an in-process feed and the Windows app a SignalR connection to `/hubs/changes`. Whoever made the change is not notified of their own change.
+- Google Calendar synchronisation is skipped when you edit somebody else's agenda.
+
+### Running the server for the household
+
+`scripts/Servidor-Partilhado.ps1` starts the server listening on every network interface (`-Port` defaults to 5018). Use `-AbrirFirewall` (as administrator) once to allow the port on private networks and `-InstalarTarefa` to start it at every logon. Prefer a private network such as Tailscale to reach it from outside the house and set `Agender:AllowRegistration=false` after both accounts exist.

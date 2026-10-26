@@ -1,0 +1,40 @@
+@if (Emojis.Count > 0)
+{
+    <div class="cs-field">
+        <span>Ícone</span>
+        <div class="cs-emojis" role="radiogroup" aria-label="Ícone">
+            @foreach (string emoji in Emojis)
+            {
+                <button type="button" role="radio" aria-checked="@(Emoji == emoji ? "true" : "false")" class="@(Emoji == emoji ? "on" : string.Empty)" @onclick="() => EmojiChanged.InvokeAsync(emoji)">@emoji</button>
+            }
+        </div>
+    </div>
+}
+
+<div class="cs-field">
+    <span>Cor</span>
+    <div class="cs-swatches" role="radiogroup" aria-label="Cor">
+        @foreach (string color in CasaCatalog.ListColors)
+        {
+            <button type="button" role="radio" aria-checked="@(Color == color ? "true" : "false")" aria-label="@color" class="cs-swatch @(Color == color ? "on" : string.Empty)"
+                    style="background:@color" @onclick="() => ColorChanged.InvokeAsync(color)"></button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<string> Emojis { get; set; } = [];
+
+    [Parameter]
+    public string Emoji { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> EmojiChanged { get; set; }
+
+    [Parameter]
+    public string Color { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> ColorChanged { get; set; }
+}

@@ -1,0 +1,539 @@
+@page "/casa/eventos"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IFamilyEventService Events
+
+<PageTitle>Agenda da casa · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="@Title" Subtitle="Compromissos, aniversários e lembretes de toda a família.">
+        @if (Current is not null)
+        {
+            <SegmentedControl Label="Vista" Options="ViewOptions" Value="(int)_view" ValueChanged="v => SetViewAsync((View)v)" />
+            <div class="cs-month-nav">
+                <button type="button" class="icon-btn" aria-label="Anterior" @onclick="() => MoveAsync(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+                <button type="button" class="btn btn-ghost" @onclick="GoTodayAsync">Hoje</button>
+                <button type="button" class="icon-btn" aria-label="Seguinte" @onclick="() => MoveAsync(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+            </div>
+            <button type="button" class="btn btn-primary" @onclick="() => OpenNew(_selected)"><Icon Name="IconName.Plus" Size="16" /> Evento</button>
+        }
+    </PageHeader>
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        <div class="cs-events-layout">
+            <div>
+                @if (_view == View.Month)
+                {
+                    <div class="card cs-flush">
+                        <div class="cs-cal" role="grid" aria-label="@Title">
+                            @foreach (string weekday in WeekDays)
+                            {
+                                <div class="cs-cal-wd" role="columnheader">@weekday</div>
+                            }
+                            @for (DateTime cursor = GridStart; cursor < GridStart.AddDays(42); cursor = cursor.AddDays(1))
+                            {
+                                DateTime day = cursor;
+                                List<EventOccurrence> items = On(day);
+
+                                <div class="cs-cal-cell @(day.Month != _anchor.Month ? "out" : string.Empty) @(day == Today ? "today" : string.Empty) @(day == _selected ? "sel" : string.Empty)"
+                                     role="gridcell" tabindex="0" aria-label="@day.ToString("d 'de' MMMM", CasaCatalog.Culture), @items.Count eventos"
+                                     @onclick="() => _selected = day" @ondblclick="() => OpenNew(day)" @onkeydown="e => OnCellKey(e, day)">
+                                    <span class="cs-cal-num">@day.Day</span>
+                                    @foreach (EventOccurrence occurrence in items.Take(3))
+                                    {
+                                        <span class="cs-cal-ev" style="--c:@CasaCatalog.Color(occurrence.Event.Kind)">@(occurrence.Event.AllDay ? string.Empty : occurrence.Start.ToString("HH:mm") + " ")@occurrence.Event.Title</span>
+                                    }
+                                    @if (items.Count > 3)
+                                    {
+                                        <span class="cs-cal-more">+@(items.Count - 3) mais</span>
+                                    }
+                                    <span class="cs-cal-dots">
+                                        @foreach (EventOccurrence occurrence in items.Take(3))
+                                        {
+                                            <i style="--c:@CasaCatalog.Color(occurrence.Event.Kind)"></i>
+                                        }
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                else if (_view == View.Week)
+                {
+                    <div class="cs-week">
+                        @for (int index = 0; index < 7; index++)
+                        {
+                            DateTime day = WeekStart(_anchor).AddDays(index);
+
+                            <section class="cs-week-day @(day == Today ? "today" : string.Empty)" aria-label="@day.ToString("dddd, d 'de' MMMM", CasaCatalog.Culture)">
+                                <button type="button" class="cs-week-head" @onclick="() => OpenDayAsync(day)">
+                                    <small>@day.ToString("ddd", CasaCatalog.Culture).TrimEnd('.')</small>
+                                    <strong>@day.Day</strong>
+                                </button>
+                                <div class="cs-week-events">
+                                    @foreach (EventOccurrence occurrence in On(day))
+                                    {
+                                        @Pill(occurrence)
+                                    }
+                                    <button type="button" class="cs-add" @onclick="() => OpenNew(day)"><Icon Name="IconName.Plus" Size="14" /> Adicionar</button>
+                                </div>
+                            </section>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <section class="card">
+                        <header class="cs-card-head">
+                            <span class="cs-date @(_selected == Today ? "today" : string.Empty)"><strong>@_selected.Day</strong><small>@_selected.ToString("MMM", CasaCatalog.Culture).TrimEnd('.')</small></span>
+                            <span class="cs-row-main">
+                                <h2>@CasaCatalog.Capitalize(_selected.ToString("dddd", CasaCatalog.Culture))</h2>
+                                <span class="cs-row-meta">@On(_selected).Count compromissos</span>
+                            </span>
+                        </header>
+
+                        @{
+                            List<EventOccurrence> allDay = [.. On(_selected).Where(o => o.Event.AllDay)];
+                        }
+
+                        @if (allDay.Count > 0)
+                        {
+                            <div class="cs-stack">
+                                @foreach (EventOccurrence occurrence in allDay)
+                                {
+                                    @Pill(occurrence)
+                                }
+                            </div>
+                        }
+
+                        <div class="cs-timeline">
+                            @for (int hour = 7; hour <= 23; hour++)
+                            {
+                                int current = hour;
+
+                                <div class="cs-tl-row">
+                                    <span class="cs-tl-hour">@current.ToString("00"):00</span>
+                                    <div class="cs-tl-slot" role="button" tabindex="0" aria-label="Novo evento às @current.ToString("00"):00" @onclick="() => OpenNew(_selected.AddHours(current))">
+                                        @foreach (EventOccurrence occurrence in On(_selected).Where(o => !o.Event.AllDay && o.Start.Hour == current))
+                                        {
+                                            @Pill(occurrence)
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+
+            <aside class="cs-side">
+                @if (_view == View.Month)
+                {
+                    <section class="card">
+                        <header class="cs-card-head">
+                            <span class="cs-date @(_selected == Today ? "today" : string.Empty)"><strong>@_selected.Day</strong><small>@_selected.ToString("MMM", CasaCatalog.Culture).TrimEnd('.')</small></span>
+                            <span class="cs-row-main">
+                                <h2>@CasaCatalog.Capitalize(_selected.ToString("dddd", CasaCatalog.Culture))</h2>
+                                <span class="cs-row-meta">@On(_selected).Count compromissos</span>
+                            </span>
+                            <button type="button" class="icon-btn" aria-label="Novo evento" @onclick="() => OpenNew(_selected)"><Icon Name="IconName.Plus" Size="16" /></button>
+                        </header>
+                        @if (On(_selected).Count == 0)
+                        {
+                            <p class="cs-muted">Dia livre. ☀️</p>
+                        }
+                        <div class="cs-stack">
+                            @foreach (EventOccurrence occurrence in On(_selected))
+                            {
+                                @Pill(occurrence)
+                            }
+                        </div>
+                    </section>
+                }
+
+                <section class="card">
+                    <header class="cs-card-head">
+                        <span class="cs-icon"><Icon Name="IconName.Gift" Size="16" /></span>
+                        <h2>Próximos aniversários</h2>
+                    </header>
+                    @if (_birthdays.Count == 0)
+                    {
+                        <p class="cs-muted">Adiciona um evento do tipo Aniversário — repete todos os anos automaticamente.</p>
+                    }
+                    @foreach (EventOccurrence birthday in _birthdays.Take(6))
+                    {
+                        int days = (birthday.Start.Date - Today).Days;
+
+                        <button type="button" class="cs-row link" @onclick="() => OpenEdit(birthday.Event)">
+                            <span class="cs-tile sm" style="background:color-mix(in srgb, #FF9AB5 18%, transparent)">🎂</span>
+                            <span class="cs-row-main">
+                                <span class="cs-row-title">@birthday.Event.Title</span>
+                                <span class="cs-row-meta">@birthday.Start.ToString("d 'de' MMMM", CasaCatalog.Culture)@(birthday.Years > 0 && birthday.Event.Start.Year > 1900 ? $" · {birthday.Years} anos" : string.Empty)</span>
+                            </span>
+                            <span class="cs-badge @(days <= 7 ? "hot" : string.Empty)">@(days == 0 ? "Hoje" : days == 1 ? "Amanhã" : $"{days} d")</span>
+                        </button>
+                    }
+                </section>
+
+                <section class="card">
+                    <header class="cs-card-head"><h2>Legenda</h2></header>
+                    <div class="cs-chips">
+                        @foreach (FamilyEventKind kind in Enum.GetValues<FamilyEventKind>())
+                        {
+                            <span class="cs-chip static"><i style="background:@CasaCatalog.Color(kind)"></i>@CasaCatalog.Label(kind)</span>
+                        }
+                    </div>
+                </section>
+            </aside>
+        </div>
+    }
+</div>
+
+@if (_draft is not null)
+{
+    <Modal Title="@(_isNew ? "Novo evento" : "Editar evento")" OnClose="() => _draft = null" OnSubmit="SaveAsync">
+        <ChildContent>
+            <label class="cs-field">Título
+                <input class="field" maxlength="@FamilyEvent.TitleMaxLength" placeholder="@(_draft.Kind == FamilyEventKind.Birthday ? "Ex.: Aniversário da Avó" : "Ex.: Consulta, jantar, reunião…")" @bind="_draft.Title" @bind:event="oninput" />
+            </label>
+            <div class="cs-field">
+                <span>Tipo</span>
+                <div class="cs-chips" role="radiogroup" aria-label="Tipo">
+                    @foreach (FamilyEventKind kind in Enum.GetValues<FamilyEventKind>())
+                    {
+                        <button type="button" role="radio" aria-checked="@(_draft.Kind == kind ? "true" : "false")" class="cs-chip @(_draft.Kind == kind ? "on" : string.Empty)" @onclick="() => SetKind(kind)">@CasaCatalog.Emoji(kind) @CasaCatalog.Label(kind)</button>
+                    }
+                </div>
+            </div>
+            <label class="cs-field">@(_draft.Kind == FamilyEventKind.Birthday ? "Data de nascimento" : "Data")
+                <input class="field" type="date" value="@_draft.Start.ToString("yyyy-MM-dd")" @onchange="OnDateChanged" />
+            </label>
+            @if (_draft.Kind != FamilyEventKind.Birthday)
+            {
+                <label class="cs-check">
+                    <input type="checkbox" @bind="_draft.AllDay" />
+                    <span>Dia inteiro</span>
+                </label>
+                @if (!_draft.AllDay)
+                {
+                    <div class="cs-two">
+                        <label class="cs-field">Início
+                            <input class="field" type="time" value="@_start.ToString("HH:mm")" @onchange="OnStartChanged" />
+                        </label>
+                        <label class="cs-field">Fim
+                            <input class="field" type="time" value="@_end.ToString("HH:mm")" @onchange="OnEndChanged" />
+                        </label>
+                    </div>
+                }
+                <div class="cs-two">
+                    <label class="cs-field">Repetir
+                        <select class="field" @bind="_draft.Recurrence">
+                            @foreach (EventRecurrence recurrence in Enum.GetValues<EventRecurrence>())
+                            {
+                                <option value="@recurrence">@CasaCatalog.Label(recurrence)</option>
+                            }
+                        </select>
+                    </label>
+                    <label class="cs-field">Para quem
+                        <select class="field" @bind="_draft.MemberId">
+                            <option value="">Toda a família</option>
+                            @foreach (MemberDto member in Current!.Members)
+                            {
+                                <option value="@member.UserId">@member.DisplayName</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+                <label class="cs-field">Local
+                    <input class="field" maxlength="@FamilyEvent.LocationMaxLength" placeholder="Opcional" @bind="_draft.Location" />
+                </label>
+            }
+            else
+            {
+                <p class="cs-hint">Repete todos os anos 🎂</p>
+            }
+            <label class="cs-field">Notas
+                <textarea class="field" rows="2" maxlength="@FamilyEvent.NotesMaxLength" placeholder="@(_draft.Kind == FamilyEventKind.Birthday ? "Ideias de presente…" : "Opcional")" @bind="_draft.Notes"></textarea>
+            </label>
+        </ChildContent>
+        <Footer>
+            @if (!_isNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="() => _confirmDelete = true"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _draft = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_draft.Title)" @onclick="SaveAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_confirmDelete)
+{
+    <ConfirmDialog Title="Eliminar evento?" Danger ConfirmLabel="Eliminar" Message="Se o evento se repete, todas as ocorrências desaparecem."
+                   OnConfirm="DeleteAsync" OnCancel="() => _confirmDelete = false" />
+}
+
+@code {
+    private enum View { Day, Week, Month }
+
+    private static readonly string[] WeekDays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
+        [new((int)View.Day, "Dia"), new((int)View.Week, "Semana"), new((int)View.Month, "Mês")];
+
+    private View _view = View.Month;
+    private DateTime _anchor = DateTime.Today;
+    private DateTime _selected = DateTime.Today;
+    private IReadOnlyList<EventOccurrence> _occurrences = [];
+    private IReadOnlyList<EventOccurrence> _birthdays = [];
+    private FamilyEvent? _draft;
+    private TimeOnly _start = new(9, 0);
+    private TimeOnly _end = new(10, 0);
+    private bool _isNew;
+    private bool _confirmDelete;
+
+    private static DateTime Today => DateTime.Today;
+
+    protected override bool IsEditing => _draft is not null || _confirmDelete;
+
+    private static DateTime WeekStart(DateTime date) => date.Date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+
+    private DateTime GridStart => WeekStart(new DateTime(_anchor.Year, _anchor.Month, 1));
+
+    private (DateTime From, DateTime To) Range => _view switch
+    {
+        View.Day => (_selected, _selected.AddDays(1)),
+        View.Week => (WeekStart(_anchor), WeekStart(_anchor).AddDays(7)),
+        _ => (GridStart, GridStart.AddDays(42))
+    };
+
+    private string Title => _view switch
+    {
+        View.Day => CasaCatalog.Capitalize(_selected.ToString("d 'de' MMMM", CasaCatalog.Culture)),
+        View.Week => $"{WeekStart(_anchor):dd} – {WeekStart(_anchor).AddDays(6).ToString("d 'de' MMMM", CasaCatalog.Culture)}",
+        _ => $"{CasaCatalog.MonthName(_anchor.Month)} {_anchor.Year}"
+    };
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        (DateTime from, DateTime to) = Range;
+        Task<IReadOnlyList<EventOccurrence>> visible = Events.GetAsync(from, to, cancellationToken);
+        Task<IReadOnlyList<EventOccurrence>> upcoming = Events.GetAsync(DateTime.Today, DateTime.Today.AddYears(1), cancellationToken);
+
+        await Task.WhenAll(visible, upcoming);
+
+        _occurrences = visible.Result;
+        _birthdays = [.. upcoming.Result.Where(o => o.Event.Kind == FamilyEventKind.Birthday).OrderBy(o => o.Start)];
+    }
+
+    private List<EventOccurrence> On(DateTime day) =>
+    [
+        .. _occurrences
+            .Where(o => o.Start.Date == day.Date || (o.End.HasValue && o.Start.Date < day.Date && o.End.Value.Date >= day.Date))
+            .OrderBy(o => !o.Event.AllDay)
+            .ThenBy(o => o.Start)
+    ];
+
+    private RenderFragment Pill(EventOccurrence occurrence) => __builder =>
+    {
+        <button type="button" class="cs-pill" style="--c:@CasaCatalog.Color(occurrence.Event.Kind)" @onclick="() => OpenEdit(occurrence.Event)" @onclick:stopPropagation="true">
+            <strong>@CasaCatalog.Emoji(occurrence.Event.Kind) @occurrence.Event.Title</strong>
+            <small>
+                @(occurrence.Event.AllDay ? "Dia inteiro" : occurrence.Start.ToString("HH:mm") + (occurrence.End.HasValue ? " – " + occurrence.End.Value.ToString("HH:mm") : string.Empty))
+                @if (!string.IsNullOrEmpty(occurrence.Event.Location))
+                {
+                    <span> · @occurrence.Event.Location</span>
+                }
+                @if (occurrence.Event.Kind == FamilyEventKind.Birthday && occurrence.Years > 0)
+                {
+                    <span> · @occurrence.Years anos</span>
+                }
+                @if (occurrence.Event.MemberName is not null)
+                {
+                    <span> · @occurrence.Event.MemberName</span>
+                }
+            </small>
+        </button>
+    };
+
+    private async Task SetViewAsync(View view)
+    {
+        _view = view;
+        _anchor = _selected;
+        await RefreshAsync(silent: false);
+    }
+
+    private async Task MoveAsync(int direction)
+    {
+        switch (_view)
+        {
+            case View.Month:
+                _anchor = _anchor.AddMonths(direction);
+                _selected = _anchor.Year == Today.Year && _anchor.Month == Today.Month ? Today : new DateTime(_anchor.Year, _anchor.Month, 1);
+                break;
+            case View.Week:
+                _anchor = _anchor.AddDays(7 * direction);
+                _selected = WeekStart(_anchor);
+                break;
+            default:
+                _selected = _selected.AddDays(direction);
+                _anchor = _selected;
+                break;
+        }
+
+        await RefreshAsync(silent: false);
+    }
+
+    private Task OpenDayAsync(DateTime day)
+    {
+        _selected = day;
+        return SetViewAsync(View.Day);
+    }
+
+    private async Task GoTodayAsync()
+    {
+        _anchor = _selected = Today;
+        await RefreshAsync(silent: false);
+    }
+
+    private void OnCellKey(KeyboardEventArgs args, DateTime day)
+    {
+        if (args.Key is "Enter" or " ")
+        {
+            _selected = day;
+        }
+    }
+
+    private void SetKind(FamilyEventKind kind)
+    {
+        _draft!.Kind = kind;
+
+        if (kind == FamilyEventKind.Birthday)
+        {
+            _draft.AllDay = true;
+            _draft.Recurrence = EventRecurrence.Yearly;
+        }
+    }
+
+    private void OnDateChanged(ChangeEventArgs args)
+    {
+        if (DateTime.TryParse(args.Value?.ToString(), out DateTime date))
+        {
+            _draft!.Start = date.Date + _draft.Start.TimeOfDay;
+        }
+    }
+
+    private void OnStartChanged(ChangeEventArgs args)
+    {
+        if (TimeOnly.TryParse(args.Value?.ToString(), out TimeOnly value))
+        {
+            _start = value;
+
+            if (_end <= _start)
+            {
+                _end = _start.AddHours(1);
+            }
+        }
+    }
+
+    private void OnEndChanged(ChangeEventArgs args)
+    {
+        if (TimeOnly.TryParse(args.Value?.ToString(), out TimeOnly value))
+        {
+            _end = value;
+        }
+    }
+
+    private void OpenNew(DateTime when)
+    {
+        bool hasTime = when.TimeOfDay != TimeSpan.Zero;
+
+        _draft = new FamilyEvent { Start = when.Date };
+        _start = hasTime ? TimeOnly.FromTimeSpan(when.TimeOfDay) : new TimeOnly(9, 0);
+        _end = _start.AddHours(1);
+        _isNew = true;
+    }
+
+    private void OpenEdit(FamilyEvent item)
+    {
+        _draft = new FamilyEvent
+        {
+            Id = item.Id,
+            Title = item.Title,
+            Start = item.Start,
+            End = item.End,
+            AllDay = item.AllDay,
+            Kind = item.Kind,
+            Recurrence = item.Recurrence,
+            Location = item.Location,
+            Notes = item.Notes,
+            MemberId = item.MemberId ?? string.Empty
+        };
+        _start = TimeOnly.FromDateTime(item.Start);
+        _end = item.End.HasValue ? TimeOnly.FromDateTime(item.End.Value) : _start.AddHours(1);
+        _isNew = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_draft is null || string.IsNullOrWhiteSpace(_draft.Title))
+        {
+            return;
+        }
+
+        FamilyEvent draft = _draft;
+        bool isNew = _isNew;
+        DateTime day = draft.Start.Date;
+
+        if (draft.AllDay || draft.Kind == FamilyEventKind.Birthday)
+        {
+            draft.Start = day;
+            draft.End = null;
+        }
+        else
+        {
+            draft.Start = day + _start.ToTimeSpan();
+            draft.End = day + _end.ToTimeSpan();
+        }
+
+        draft.MemberId = string.IsNullOrEmpty(draft.MemberId) ? null : draft.MemberId;
+        _draft = null;
+
+        await RunAsync(async () =>
+        {
+            if (isNew)
+            {
+                await Events.CreateAsync(draft, Cancellation);
+            }
+            else
+            {
+                await Events.UpdateAsync(draft, Cancellation);
+            }
+        }, isNew ? "Evento criado." : "Evento atualizado.");
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmDelete = false;
+
+        if (_draft is null)
+        {
+            return;
+        }
+
+        Guid id = _draft.Id;
+        _draft = null;
+        await RunAsync(() => Events.DeleteAsync(id, Cancellation), "Evento eliminado.");
+    }
+}

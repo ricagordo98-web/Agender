@@ -8,6 +8,7 @@ using Agender.Shared.Abstractions;
 using Agender.Web.Api;
 using Agender.Web.Auth;
 using Agender.Web.Components;
+using Agender.Web.Realtime;
 using Agender.Web.Tunnel;
 using FluentValidation;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -68,6 +69,8 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddAuthentication(options => options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme);
 builder.Services.AddAuthorization();
 builder.Services.AddValidatorsFromAssemblyContaining<TimeEntryDtoValidator>();
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<ChangeForwarder>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
@@ -97,12 +100,15 @@ app.UseWhen(
 app.UseHttpsRedirection();
 
 app.UseAuthApiAllowlist();
+app.UseHubQueryToken();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseAgendaScopeHeader();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapAgenderApi();
+app.MapHub<ChangeHub>(ChangeHub.Path);
 
 app.MapGet("/conta/sair", async (HttpContext context, SignInManager<AgenderUser> signInManager) =>
 {

@@ -1,0 +1,485 @@
+@page "/casa/compras/{Id:guid}"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IShoppingService Shopping
+@inject IJSRuntime JS
+
+<PageTitle>@(_list?.Name ?? "Lista") · Agender</PageTitle>
+
+<div class="page">
+    <CasaTabs />
+    <a class="cs-back" href="casa/compras"><Icon Name="IconName.ChevronLeft" Size="16" /> Listas</a>
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else if (_list is null)
+    {
+        <EmptyState Symbol="IconName.Cart" Title="Lista não encontrada" Description="A lista foi eliminada ou já não tens acesso a ela." />
+    }
+    else
+    {
+        <header class="cs-list-head">
+            <span class="cs-tile big" style="background:color-mix(in srgb, @_list.Color 18%, transparent)">@_list.Emoji</span>
+            <div class="cs-list-title">
+                <h1>@_list.Name</h1>
+                <p>
+                    @(_pending.Count == 0 && _list.Items.Count > 0 ? "Tudo comprado! 🎉" : $"{_pending.Count} por comprar · {_done.Count} no carrinho")
+                    @if (_list.IsSharedWithMe)
+                    {
+                        <span> · partilhada por @_list.OwnerHouseholdName</span>
+                    }
+                </p>
+            </div>
+            <div class="cs-actions">
+                @if (!_list.IsSharedWithMe)
+                {
+                    <button type="button" class="btn btn-ghost" @onclick="() => _showShare = true"><Icon Name="IconName.Mail" Size="16" /> Partilhar</button>
+                }
+                <button type="button" class="btn btn-ghost" @onclick="CopyTextAsync" title="Copiar como texto"><Icon Name="IconName.Copy" Size="16" /> Copiar</button>
+                @if (!_list.IsSharedWithMe)
+                {
+                    <button type="button" class="icon-btn" aria-label="Editar lista" title="Editar lista" @onclick="OpenEditList"><Icon Name="IconName.Pencil" /></button>
+                }
+            </div>
+        </header>
+
+        @if (_list.Items.Count > 0)
+        {
+            <div class="cs-progress-line">
+                <CasaProgress Value="@(_done.Count / (double)_list.Items.Count)" Color="@_list.Color" />
+                @if (Total > 0)
+                {
+                    <span class="cs-muted">≈ @CasaCatalog.Money(Total)</span>
+                }
+            </div>
+        }
+
+        @if (_list.CanEdit)
+        {
+            <form class="cs-quick-add" @onsubmit="QuickAddAsync" @onsubmit:preventDefault>
+                <Icon Name="IconName.Plus" Size="18" />
+                <input class="bare" aria-label="Adicionar artigo" placeholder="Adicionar artigo…  ex.: 2 leite, 1 kg maçãs" maxlength="@ShoppingItem.NameMaxLength"
+                       value="@_newText" @oninput="e => _newText = e.Value?.ToString() ?? string.Empty" />
+                <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_newText)">Adicionar</button>
+            </form>
+
+            @if (!string.IsNullOrWhiteSpace(_newText))
+            {
+                QuickAddParser.Parsed parsed = QuickAddParser.Parse(_newText);
+                CasaCatalog.Category guessed = CasaCatalog.ShoppingCategory(CasaCatalog.GuessCategory(parsed.Name));
+
+                <p class="cs-hint">→ @CasaCatalog.Quantity(parsed.Quantity) @parsed.Unit <strong>@parsed.Name</strong> em @guessed.Emoji @guessed.Name</p>
+            }
+        }
+
+        @if (Categories.Count > 1)
+        {
+            <div class="cs-chips scroll" role="group" aria-label="Filtrar por categoria">
+                <button type="button" class="cs-chip @(_filter is null ? "on" : string.Empty)" @onclick="() => _filter = null">Todas</button>
+                @foreach (string category in Categories)
+                {
+                    <button type="button" class="cs-chip @(_filter == category ? "on" : string.Empty)" @onclick="() => _filter = category">@CasaCatalog.ShoppingCategory(category).Emoji @category</button>
+                }
+            </div>
+        }
+
+        <div class="card cs-flush">
+            @if (_list.Items.Count == 0)
+            {
+                <EmptyState Symbol="IconName.Tasks" Title="Lista vazia" Description="Escreve acima o que falta lá em casa. A categoria é escolhida automaticamente." />
+            }
+
+            @foreach (IGrouping<string, ShoppingItem> group in _pending.Where(i => _filter is null || i.Category == _filter).GroupBy(i => i.Category).OrderBy(g => Array.FindIndex(CasaCatalog.ShoppingCategories, c => c.Name == g.Key)))
+            {
+                <div class="cs-section-title"><span>@CasaCatalog.ShoppingCategory(group.Key).Emoji</span> @group.Key <span class="line"></span> <span>@group.Count()</span></div>
+
+                @foreach (ShoppingItem item in group)
+                {
+                    @ItemRow(item)
+                }
+            }
+
+            @if (_done.Count > 0)
+            {
+                <button type="button" class="cs-section-title toggle" aria-expanded="@(_showDone ? "true" : "false")" @onclick="() => _showDone = !_showDone">
+                    <Icon Name="IconName.Check" Size="14" /> No carrinho <span class="line"></span> @_done.Count
+                    <Icon Name="@(_showDone ? IconName.ArrowDown : IconName.ChevronRight)" Size="14" />
+                </button>
+
+                @if (_showDone)
+                {
+                    @foreach (ShoppingItem item in _done.Where(i => _filter is null || i.Category == _filter))
+                    {
+                        @ItemRow(item)
+                    }
+
+                    @if (_list.CanEdit)
+                    {
+                        <div class="cs-pad">
+                            <button type="button" class="btn btn-ghost" @onclick="ClearDoneAsync"><Icon Name="IconName.Trash" Size="16" /> Limpar comprados</button>
+                        </div>
+                    }
+                }
+            }
+        </div>
+    }
+</div>
+
+@if (_editItem is not null)
+{
+    <Modal Title="Editar artigo" OnClose="() => _editItem = null" OnSubmit="SaveItemAsync">
+        <ChildContent>
+            <label class="cs-field">Artigo
+                <input class="field" maxlength="@ShoppingItem.NameMaxLength" @bind="_editItem.Name" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <div class="cs-field">
+                    <span>Quantidade</span>
+                    <div class="cs-stepper">
+                        <button type="button" class="icon-btn" aria-label="Menos" @onclick="() => _editItem.Quantity = Math.Max(0.5m, _editItem.Quantity - 1)">−</button>
+                        <input class="field" type="number" step="0.5" min="0.5" aria-label="Quantidade" @bind="_editItem.Quantity" />
+                        <button type="button" class="icon-btn" aria-label="Mais" @onclick="() => _editItem.Quantity += 1"><Icon Name="IconName.Plus" Size="16" /></button>
+                    </div>
+                </div>
+                <label class="cs-field">Unidade
+                    <select class="field" @bind="_editItem.Unit">
+                        <option value="">—</option>
+                        @foreach (string unit in CasaCatalog.Units)
+                        {
+                            <option value="@unit">@unit</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <div class="cs-field">
+                <span>Categoria</span>
+                <div class="cs-chips" role="radiogroup" aria-label="Categoria">
+                    @foreach (CasaCatalog.Category category in CasaCatalog.ShoppingCategories)
+                    {
+                        <button type="button" role="radio" aria-checked="@(_editItem.Category == category.Name ? "true" : "false")" class="cs-chip @(_editItem.Category == category.Name ? "on" : string.Empty)"
+                                @onclick="() => _editItem.Category = category.Name">@category.Emoji @category.Name</button>
+                    }
+                </div>
+            </div>
+            <div class="cs-two">
+                <label class="cs-field">Preço estimado (€)
+                    <input class="field" type="number" step="0.01" min="0" placeholder="Opcional" @bind="_editItem.Price" />
+                </label>
+                <label class="cs-field">Nota
+                    <input class="field" maxlength="@ShoppingItem.NoteMaxLength" placeholder="Marca, tamanho…" @bind="_editItem.Note" />
+                </label>
+            </div>
+            @if (!string.IsNullOrEmpty(_editItem.AddedBy))
+            {
+                <p class="cs-hint">Adicionado por @_editItem.AddedBy</p>
+            }
+        </ChildContent>
+        <Footer>
+            <button type="button" class="btn btn-danger" @onclick="DeleteItemAsync"><Icon Name="IconName.Trash" Size="16" /> Remover</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _editItem = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" @onclick="SaveItemAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_showShare && _list is not null)
+{
+    <Modal Title="Partilhar lista" OnClose="() => _showShare = false" OnSubmit="AddShareAsync">
+        <ChildContent>
+            <p class="cs-muted">Os membros da tua casa já têm acesso. Convida outras pessoas pelo email com que criaram conta no Agender.</p>
+            <form class="cs-inline" @onsubmit="AddShareAsync" @onsubmit:preventDefault>
+                <input class="field" type="email" autocomplete="off" maxlength="256" aria-label="Email" placeholder="email@exemplo.pt" @bind="_shareEmail" @bind:event="oninput" />
+                <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_shareEmail)">Convidar</button>
+            </form>
+            <label class="cs-check">
+                <input type="checkbox" @bind="_shareCanEdit" />
+                <span>Pode adicionar e marcar artigos</span>
+            </label>
+
+            <div class="cs-section-title flat">Com acesso <span class="line"></span></div>
+            @foreach (MemberDto member in Current!.Members)
+            {
+                <div class="cs-row">
+                    <MemberAvatar Name="@member.DisplayName" Color="@member.Color" />
+                    <span class="cs-row-main">
+                        <span class="cs-row-title">@member.DisplayName</span>
+                        <span class="cs-row-meta">@member.Email</span>
+                    </span>
+                    <span class="cs-badge gold">Casa</span>
+                </div>
+            }
+            @foreach (ListShare share in _list.Shares)
+            {
+                <div class="cs-row">
+                    <span class="cs-avatar muted"><Icon Name="IconName.Mail" Size="14" /></span>
+                    <span class="cs-row-main">
+                        <span class="cs-row-title">@share.Email</span>
+                        <span class="cs-row-meta">@(share.CanEdit ? "Pode editar" : "Só leitura")</span>
+                    </span>
+                    <button type="button" class="icon-btn" aria-label="Remover acesso" title="Remover acesso" @onclick="() => RemoveShareAsync(share)"><Icon Name="IconName.Close" Size="16" /></button>
+                </div>
+            }
+        </ChildContent>
+        <Footer>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-primary" @onclick="() => _showShare = false">Concluído</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_showEditList)
+{
+    <Modal Title="Editar lista" OnClose="() => _showEditList = false" OnSubmit="SaveListAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@ShoppingList.NameMaxLength" @bind="_editList.Name" @bind:event="oninput" />
+            </label>
+            <EmojiColorPicker Emojis="CasaCatalog.ListEmojis" @bind-Emoji="_editList.Emoji" @bind-Color="_editList.Color" />
+        </ChildContent>
+        <Footer>
+            <button type="button" class="btn btn-danger" @onclick="() => _confirmDelete = true"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _showEditList = false">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_editList.Name)" @onclick="SaveListAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_confirmDelete)
+{
+    <ConfirmDialog Title="Eliminar lista?" Danger ConfirmLabel="Eliminar" Message="A lista e todos os artigos são apagados para todos os que a veem."
+                   OnConfirm="DeleteListAsync" OnCancel="() => _confirmDelete = false" />
+}
+
+@code {
+    private ShoppingList? _list;
+    private List<ShoppingItem> _pending = [];
+    private List<ShoppingItem> _done = [];
+    private ShoppingItem? _editItem;
+    private ShoppingList _editList = new();
+    private string _newText = string.Empty;
+    private string _shareEmail = string.Empty;
+    private string? _filter;
+    private bool _showDone = true;
+    private bool _showShare;
+    private bool _showEditList;
+    private bool _confirmDelete;
+    private bool _shareCanEdit = true;
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    protected override bool IsEditing => _editItem is not null || _showShare || _showEditList || _confirmDelete || !string.IsNullOrWhiteSpace(_newText);
+
+    private decimal Total => _list?.Items.Where(i => i.Price.HasValue).Sum(i => i.Price!.Value * i.Quantity) ?? 0;
+
+    private List<string> Categories => _list is null
+        ? []
+        : [.. _list.Items.Select(i => i.Category).Distinct().OrderBy(c => Array.FindIndex(CasaCatalog.ShoppingCategories, x => x.Name == c))];
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _list = await Shopping.GetListAsync(Id, cancellationToken);
+            Split();
+        }
+        catch (NotFoundException)
+        {
+            _list = null;
+        }
+    }
+
+    private void Split()
+    {
+        _pending = [.. _list!.Items.Where(i => !i.IsChecked)];
+        _done = [.. _list.Items.Where(i => i.IsChecked)];
+    }
+
+    private RenderFragment ItemRow(ShoppingItem item) => __builder =>
+    {
+        <div class="cs-item @(item.IsChecked ? "done" : string.Empty)" @key="item.Id">
+            <button type="button" class="cs-check-btn @(item.IsChecked ? "on" : string.Empty)" role="checkbox" aria-checked="@(item.IsChecked ? "true" : "false")"
+                    aria-label="@(item.IsChecked ? "Voltar a pôr na lista" : "Marcar como comprado")" disabled="@(!_list!.CanEdit)" @onclick="() => ToggleAsync(item)">
+                <Icon Name="IconName.Check" Size="14" />
+            </button>
+            <button type="button" class="cs-item-main" disabled="@(!_list!.CanEdit)" @onclick="() => OpenItem(item)">
+                <span class="cs-row-title">@item.Name</span>
+                @if (!string.IsNullOrEmpty(item.Note) || item.Price.HasValue)
+                {
+                    <span class="cs-row-meta">
+                        @if (!string.IsNullOrEmpty(item.Note))
+                        {
+                            <span>@item.Note</span>
+                        }
+                        @if (item.Price is decimal price)
+                        {
+                            <span>@CasaCatalog.Money(price * item.Quantity)</span>
+                        }
+                    </span>
+                }
+            </button>
+            @if (item.Quantity != 1 || !string.IsNullOrEmpty(item.Unit))
+            {
+                <span class="cs-qty">@CasaCatalog.Quantity(item.Quantity)@(string.IsNullOrEmpty(item.Unit) ? "×" : " " + item.Unit)</span>
+            }
+        </div>
+    };
+
+    private async Task QuickAddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newText))
+        {
+            return;
+        }
+
+        QuickAddParser.Parsed parsed = QuickAddParser.Parse(_newText);
+        string text = _newText;
+        _newText = string.Empty;
+
+        if (!await RunAsync(() => Shopping.AddItemAsync(Id, new ShoppingItem { Name = parsed.Name, Quantity = parsed.Quantity, Unit = parsed.Unit }, Cancellation)))
+        {
+            _newText = text;
+        }
+    }
+
+    private async Task ToggleAsync(ShoppingItem item)
+    {
+        item.IsChecked = !item.IsChecked;
+        Split();
+
+        try
+        {
+            await Shopping.UpdateItemAsync(item, Cancellation);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            item.IsChecked = !item.IsChecked;
+            Split();
+            Toasts.Show("Não foi possível atualizar o artigo.", ToastKind.Error);
+        }
+    }
+
+    private void OpenItem(ShoppingItem item)
+    {
+        if (!_list!.CanEdit)
+        {
+            return;
+        }
+
+        _editItem = new ShoppingItem
+        {
+            Id = item.Id,
+            ListId = item.ListId,
+            Name = item.Name,
+            Quantity = item.Quantity,
+            Unit = item.Unit,
+            Category = item.Category,
+            IsChecked = item.IsChecked,
+            Price = item.Price,
+            Note = item.Note,
+            AddedBy = item.AddedBy
+        };
+    }
+
+    private async Task SaveItemAsync()
+    {
+        if (_editItem is null || string.IsNullOrWhiteSpace(_editItem.Name))
+        {
+            return;
+        }
+
+        ShoppingItem item = _editItem;
+        _editItem = null;
+        await RunAsync(() => Shopping.UpdateItemAsync(item, Cancellation));
+    }
+
+    private async Task DeleteItemAsync()
+    {
+        if (_editItem is null)
+        {
+            return;
+        }
+
+        Guid itemId = _editItem.Id;
+        _editItem = null;
+        await RunAsync(() => Shopping.DeleteItemAsync(itemId, Cancellation), "Artigo removido.");
+    }
+
+    private Task ClearDoneAsync() => RunAsync(() => Shopping.ClearCheckedAsync(Id, Cancellation), "Lista limpa.");
+
+    private async Task AddShareAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_shareEmail))
+        {
+            return;
+        }
+
+        string email = _shareEmail.Trim();
+        _shareEmail = string.Empty;
+        await RunAsync(() => Shopping.ShareAsync(Id, email, _shareCanEdit, Cancellation), $"Lista partilhada com {email}.");
+    }
+
+    private Task RemoveShareAsync(ListShare share) => RunAsync(() => Shopping.UnshareAsync(Id, share.Id, Cancellation), "Acesso removido.");
+
+    private async Task CopyTextAsync()
+    {
+        if (_list is null)
+        {
+            return;
+        }
+
+        List<string> lines = [$"{_list.Emoji} {_list.Name}", string.Empty];
+
+        foreach (IGrouping<string, ShoppingItem> group in _pending.GroupBy(i => i.Category))
+        {
+            lines.Add($"{CasaCatalog.ShoppingCategory(group.Key).Emoji} {group.Key}");
+            lines.AddRange(group.Select(i => $"  ☐ {i.Name}{(i.Quantity != 1 || i.Unit is not null ? $" ({CasaCatalog.Quantity(i.Quantity)}{(i.Unit is null ? "×" : " " + i.Unit)})" : string.Empty)}"));
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", string.Join('\n', lines));
+            Toasts.Show("Lista copiada — cola onde quiseres.", ToastKind.Success);
+        }
+        catch (JSException)
+        {
+            Toasts.Show("Não foi possível copiar a lista.", ToastKind.Error);
+        }
+    }
+
+    private void OpenEditList()
+    {
+        _editList = new ShoppingList { Id = _list!.Id, Name = _list.Name, Emoji = _list.Emoji, Color = _list.Color };
+        _showEditList = true;
+    }
+
+    private async Task SaveListAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_editList.Name))
+        {
+            return;
+        }
+
+        _showEditList = false;
+        await RunAsync(() => Shopping.UpdateListAsync(_editList, Cancellation));
+    }
+
+    private async Task DeleteListAsync()
+    {
+        _confirmDelete = false;
+        _showEditList = false;
+
+        if (await RunAsync(() => Shopping.DeleteListAsync(Id, Cancellation), "Lista eliminada.", reload: false))
+        {
+            Navigation.NavigateTo("casa/compras");
+        }
+    }
+}

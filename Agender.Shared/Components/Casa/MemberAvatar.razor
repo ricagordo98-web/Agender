@@ -1,0 +1,12 @@
+<span class="cs-avatar @(Large ? "large" : string.Empty)" style="background:@Color" title="@Name" aria-hidden="true">@CasaCatalog.Initials(Name)</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Color { get; set; } = CasaCatalog.MemberColors[0];
+
+    [Parameter]
+    public bool Large { get; set; }
+}

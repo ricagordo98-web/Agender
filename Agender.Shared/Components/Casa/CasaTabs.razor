@@ -1,0 +1,22 @@
+<nav class="cs-tabs" aria-label="Secções da casa">
+    @foreach (TabItem tab in Tabs)
+    {
+        <NavLink class="cs-tab" href="@tab.Href" Match="@tab.Match">
+            <Icon Name="tab.Icon" Size="16" />
+            <span>@tab.Label</span>
+        </NavLink>
+    }
+</nav>
+
+@code {
+    private record TabItem(string Href, string Label, IconName Icon, NavLinkMatch Match);
+
+    private static readonly TabItem[] Tabs =
+    [
+        new("casa", "Resumo", IconName.Home, NavLinkMatch.All),
+        new("casa/compras", "Compras", IconName.Cart, NavLinkMatch.Prefix),
+        new("casa/obras", "Obras", IconName.Hammer, NavLinkMatch.Prefix),
+        new("casa/financas", "Finanças", IconName.Wallet, NavLinkMatch.Prefix),
+        new("casa/eventos", "Agenda da casa", IconName.Calendar, NavLinkMatch.Prefix)
+    ];
+}

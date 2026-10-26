@@ -1,0 +1,132 @@
+@page "/casa/compras"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IShoppingService Shopping
+
+<PageTitle>Compras · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Listas de compras" Subtitle="@Subtitle">
+        @if (Current is not null)
+        {
+            <button type="button" class="btn btn-primary" @onclick="OpenNew"><Icon Name="IconName.Plus" Size="16" /> Nova lista</button>
+        }
+    </PageHeader>
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else if (_lists.Count == 0)
+    {
+        <EmptyState Symbol="IconName.Cart" Title="Sem listas ainda" Description="Cria a primeira lista e partilha-a com quem vai às compras.">
+            <button type="button" class="btn btn-primary" @onclick="OpenNew">Criar lista</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="cs-cards wide">
+            @foreach (ShoppingList list in _lists)
+            {
+                <a class="card cs-list-card" href="casa/compras/@list.Id" style="--c:@list.Color">
+                    <span class="cs-row">
+                        <span class="cs-tile" style="background:color-mix(in srgb, @list.Color 18%, transparent)">@list.Emoji</span>
+                        <span class="cs-row-main">
+                            <span class="cs-row-title strong">@list.Name</span>
+                            <span class="cs-row-meta">@(list.PendingCount == 0 && list.TotalCount > 0 ? "Tudo comprado ✓" : $"{list.PendingCount} de {list.TotalCount} por comprar")</span>
+                        </span>
+                    </span>
+                    <span class="cs-preview">
+                        @foreach (ShoppingItem item in list.Items.Take(3))
+                        {
+                            <span>@item.Name</span>
+                        }
+                        @if (list.PendingCount > 3)
+                        {
+                            <span class="cs-muted">e mais @(list.PendingCount - 3)…</span>
+                        }
+                    </span>
+                    <CasaProgress Thin Value="@(list.TotalCount == 0 ? 0 : 1 - (double)list.PendingCount / list.TotalCount)" Color="@list.Color" />
+                    <span class="cs-card-foot">
+                        @if (list.IsSharedWithMe)
+                        {
+                            <span class="cs-badge gold"><Icon Name="IconName.Share" Size="12" /> De @list.OwnerHouseholdName</span>
+                        }
+                        else if (list.Shares.Count > 0)
+                        {
+                            <span class="cs-badge"><Icon Name="IconName.Users" Size="12" /> Partilhada com @list.Shares.Count</span>
+                        }
+                        <span class="cs-muted">@Ago(list.UpdatedAt)</span>
+                    </span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@if (_showNew)
+{
+    <Modal Title="Nova lista" OnClose="() => _showNew = false" OnSubmit="CreateAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@ShoppingList.NameMaxLength" placeholder="Ex.: Compras da semana" @bind="_draft.Name" @bind:event="oninput" />
+            </label>
+            <EmojiColorPicker Emojis="CasaCatalog.ListEmojis" @bind-Emoji="_draft.Emoji" @bind-Color="_draft.Color" />
+        </ChildContent>
+        <Footer>
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _showNew = false">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_draft.Name)" @onclick="CreateAsync">Criar lista</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private IReadOnlyList<ShoppingList> _lists = [];
+    private ShoppingList _draft = new();
+    private bool _showNew;
+
+    protected override bool IsEditing => _showNew;
+
+    private string Subtitle => $"{_lists.Sum(l => l.PendingCount)} artigos por comprar em {_lists.Count} {(_lists.Count == 1 ? "lista" : "listas")}";
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken) => _lists = await Shopping.GetListsAsync(cancellationToken);
+
+    private void OpenNew()
+    {
+        _draft = new ShoppingList { Emoji = "🛒", Color = CasaCatalog.ListColors[_lists.Count % CasaCatalog.ListColors.Length] };
+        _showNew = true;
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_draft.Name))
+        {
+            return;
+        }
+
+        ShoppingList? created = null;
+
+        if (await RunAsync(async () => created = await Shopping.CreateListAsync(_draft, Cancellation), reload: false) && created is not null)
+        {
+            _showNew = false;
+            Navigation.NavigateTo($"casa/compras/{created.Id}");
+        }
+    }
+
+    private static string Ago(DateTime utc)
+    {
+        TimeSpan elapsed = DateTime.UtcNow - utc;
+
+        return elapsed.TotalMinutes < 1 ? "agora mesmo"
+            : elapsed.TotalHours < 1 ? $"há {(int)elapsed.TotalMinutes} min"
+            : elapsed.TotalDays < 1 ? $"há {(int)elapsed.TotalHours} h"
+            : elapsed.TotalDays < 7 ? $"há {(int)elapsed.TotalDays} d"
+            : utc.ToLocalTime().ToString("d MMM", CasaCatalog.Culture);
+    }
+}

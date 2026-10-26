@@ -1,0 +1,71 @@
+@using System.Globalization
+@using Agender.Shared.Contracts
+
+<div class="cs-trend">
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="Evolução mensal">
+        @{
+            double max = Nice(Math.Max(1, Data.Count == 0 ? 1 : (double)Data.Max(d => Math.Max(d.Income, d.Expenses))));
+            double plotHeight = Height - 34;
+            int count = Math.Max(1, Data.Count);
+            double slot = (Width - 64) / count;
+            double barWidth = Math.Min(18, slot / 4);
+        }
+
+        @for (int step = 0; step <= 3; step++)
+        {
+            double y = 8 + plotHeight * step / 3.0;
+
+            <line x1="64" x2="@Width" y1="@Format(y)" y2="@Format(y)" stroke="var(--grid-line)" stroke-dasharray="3 4" />
+            @((MarkupString)$"<text x=\"58\" y=\"{Format(y + 4)}\" text-anchor=\"end\">{CasaCatalog.MoneyShort((decimal)(max * (3 - step) / 3))}</text>")
+        }
+
+        @for (int index = 0; index < Data.Count; index++)
+        {
+            MonthTotal month = Data[index];
+            double centerX = 64 + slot * index + slot / 2;
+            double incomeHeight = (double)month.Income / max * plotHeight;
+            double expenseHeight = (double)month.Expenses / max * plotHeight;
+            bool isLast = index == Data.Count - 1;
+
+            <rect x="@Format(centerX - barWidth - 2)" y="@Format(8 + plotHeight - incomeHeight)" width="@Format(barWidth)" height="@Format(Math.Max(0, incomeHeight))" rx="5" fill="#10b981" opacity="@(isLast ? "1" : ".55")" />
+            <rect x="@Format(centerX + 2)" y="@Format(8 + plotHeight - expenseHeight)" width="@Format(barWidth)" height="@Format(Math.Max(0, expenseHeight))" rx="5" fill="#ef4444" opacity="@(isLast ? "1" : ".55")" />
+            @((MarkupString)$"<text x=\"{Format(centerX)}\" y=\"{Format(Height - 6)}\" text-anchor=\"middle\" class=\"{(isLast ? "now" : string.Empty)}\">{CasaCatalog.MonthName(month.Month)[..3]}</text>")
+        }
+
+        @if (Data.Count > 1)
+        {
+            string points = string.Join(' ', Data.Select((d, i) => $"{Format(64 + slot * i + slot / 2)},{Format(8 + plotHeight - (double)d.Savings / max * plotHeight)}"));
+
+            <polyline points="@points" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+
+            @for (int index = 0; index < Data.Count; index++)
+            {
+                <circle cx="@Format(64 + slot * index + slot / 2)" cy="@Format(8 + plotHeight - (double)Data[index].Savings / max * plotHeight)" r="3.5" fill="var(--surface)" stroke="#6366f1" stroke-width="2" />
+            }
+        }
+    </svg>
+
+    <div class="cs-legend">
+        <span><i style="background:#10b981"></i>Entradas</span>
+        <span><i style="background:#ef4444"></i>Saídas</span>
+        <span><i style="background:#6366f1"></i>Poupança</span>
+    </div>
+</div>
+
+@code {
+    private const double Width = 560;
+    private const double Height = 230;
+
+    [Parameter]
+    public IReadOnlyList<MonthTotal> Data { get; set; } = [];
+
+    private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static double Nice(double value)
+    {
+        double power = Math.Pow(10, Math.Floor(Math.Log10(value)));
+        double mantissa = value / power;
+
+        return (mantissa <= 1.5 ? 1.5 : mantissa <= 2 ? 2 : mantissa <= 3 ? 3 : mantissa <= 5 ? 5 : 10) * power;
+    }
+}

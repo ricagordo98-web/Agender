@@ -1,0 +1,347 @@
+@inject IFinanceService Finance
+@inject IFinanceImportService Importer
+@inject IToastService Toasts
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Users" Size="16" /></span>
+        <h2>Pessoas das finanças</h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OpenNewPerson"><Icon Name="IconName.Plus" Size="16" /> Pessoa</button>
+    </header>
+    <p class="cs-muted">Cada movimento pertence a uma pessoa ou a "Ambos" (dividido em partes iguais). Liga cada pessoa ao respetivo membro da casa para saberem quem é quem.</p>
+
+    @foreach (FinancePerson person in People)
+    {
+        <div class="cs-row" @key="person.Id">
+            <MemberAvatar Name="@person.Name" Color="@person.Color" />
+            <span class="cs-row-main">
+                <span class="cs-row-title">@person.Name</span>
+                <span class="cs-row-meta">@(MemberLabel(person) ?? "Sem membro ligado")</span>
+            </span>
+            <button type="button" class="icon-btn" aria-label="Editar @person.Name" @onclick="() => OpenEditPerson(person)"><Icon Name="IconName.Pencil" Size="15" /></button>
+        </div>
+    }
+</section>
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Download" Size="16" /></span>
+        <h2>Importar do Excel</h2>
+    </header>
+    <p class="cs-muted">Escolhe o ficheiro (.xlsx) com o livro <strong>Registos</strong> (e, se existirem, as <strong>Poupanças</strong> e a <strong>Consulta</strong>). Primeiro vês uma pré-visualização; só depois é que importas. Uma nova importação substitui o que veio antes do Excel, sem tocar nos movimentos criados aqui.</p>
+
+    <div class="fi-drop">
+        <InputFile OnChange="OnFileSelected" accept=".xlsx" aria-label="Ficheiro Excel" />
+        @if (_fileName is not null)
+        {
+            <span class="cs-muted">@_fileName</span>
+        }
+    </div>
+
+    @if (_busy)
+    {
+        <p class="cs-hint" role="status">A processar o ficheiro…</p>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="cs-error" role="alert">@_error</p>
+    }
+
+    @if (_report is ImportReport report)
+    {
+        <div class="fi-report" aria-live="polite">
+            <h3>@(report.Applied ? "Importação concluída" : "Pré-visualização")</h3>
+            <div class="cs-kpis">
+                <div class="card cs-kpi"><small>Linhas lidas</small><strong>@report.RowsRead</strong><span class="cs-muted">@report.RowsSkipped ignoradas</span></div>
+                <div class="card cs-kpi"><small>Movimentos</small><strong>@report.RowsImported</strong><span class="cs-muted">@report.TransfersImported trocas · @report.SharedImported de "Ambos"</span></div>
+                <div class="card cs-kpi"><small>Contas de poupança</small><strong>@report.AccountsImported</strong><span class="cs-muted">@report.SnapshotsImported valores históricos</span></div>
+                <div class="card cs-kpi"><small>Pessoas</small><strong>@report.People.Count</strong><span class="cs-muted">@string.Join(", ", report.People)</span></div>
+            </div>
+
+            @if (report.Preview.Total.Count > 0)
+            {
+                <div class="fi-balances">
+                    <strong>Balanço de @report.Preview.Year depois da importação</strong>
+                    <div class="fb-scroll">
+                        <table class="fb-table accounts">
+                            <thead><tr><th>Pessoa</th><th class="num">Conta</th><th class="num">Poupanças</th><th class="num">Total</th></tr></thead>
+                            <tbody>
+                                @for (int index = 0; index < report.Preview.Total.Count; index++)
+                                {
+                                    string name = index < _previewNames.Count ? _previewNames[index] : $"Pessoa {index + 1}";
+
+                                    <tr>
+                                        <td>@name</td>
+                                        <td class="num">@CasaCatalog.Money(report.Preview.Account[index])</td>
+                                        <td class="num">@CasaCatalog.Money(report.Preview.Savings[index])</td>
+                                        <td class="num">@CasaCatalog.Money(report.Preview.Total[index])</td>
+                                    </tr>
+                                }
+                                <tr class="total">
+                                    <td>Total</td>
+                                    <td class="num">@CasaCatalog.Money(report.Preview.Account.Sum())</td>
+                                    <td class="num">@CasaCatalog.Money(report.Preview.Savings.Sum())</td>
+                                    <td class="num">@CasaCatalog.Money(report.Preview.Total.Sum())</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="cs-hint">Confere estes valores com a folha "Consulta" do teu Excel.</p>
+                </div>
+            }
+
+            @if (report.Normalized.Count > 0)
+            {
+                <details class="fi-details">
+                    <summary>@report.Normalized.Count nomes de categorias harmonizados</summary>
+                    <ul>
+                        @foreach (NameChange change in report.Normalized.Take(25))
+                        {
+                            <li>«@change.From» → «@change.To» <span class="cs-muted">(@change.Count)</span></li>
+                        }
+                    </ul>
+                </details>
+            }
+
+            @if (report.Warnings.Count > 0)
+            {
+                <details class="fi-details">
+                    <summary>@report.Warnings.Count avisos</summary>
+                    <ul>
+                        @foreach (string warning in report.Warnings.Take(25))
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </details>
+            }
+
+            @if (!report.Applied)
+            {
+                <div class="cs-actions">
+                    <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="ApplyAsync">Importar @report.RowsImported movimentos</button>
+                    <button type="button" class="btn btn-ghost" @onclick="Reset">Cancelar</button>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@if (_person is not null)
+{
+    <Modal Title="@(_personIsNew ? "Nova pessoa" : "Editar pessoa")" OnClose="() => _person = null" OnSubmit="SavePersonAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@FinancePerson.NameMaxLength" @bind="_person.Name" @bind:event="oninput" />
+            </label>
+            <label class="cs-field">Membro da casa
+                <select class="field" value="@(_person.MemberUserId ?? string.Empty)" @onchange="e => _person.MemberUserId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString()">
+                    <option value="">Sem membro ligado</option>
+                    @foreach (MemberDto member in Household?.Members ?? [])
+                    {
+                        <option value="@member.UserId">@member.DisplayName</option>
+                    }
+                </select>
+            </label>
+            <div class="cs-field">
+                <span>Cor</span>
+                <div class="cs-swatches" role="radiogroup" aria-label="Cor">
+                    @foreach (string color in Palette)
+                    {
+                        <button type="button" role="radio" aria-checked="@(_person.Color == color ? "true" : "false")" aria-label="@color" class="cs-swatch @(_person.Color == color ? "on" : string.Empty)" style="background:@color" @onclick="() => _person.Color = color"></button>
+                    }
+                </div>
+            </div>
+        </ChildContent>
+        <Footer>
+            @if (!_personIsNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeletePersonAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _person = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_person.Name)" @onclick="SavePersonAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private static readonly string[] Palette = ["#EA9999", "#3D85C6", "#8B8948", "#6FCF97", "#BB6BD9", "#F2994A", "#56CCF2", "#FF7A6B"];
+
+    private FinancePerson? _person;
+    private ImportReport? _report;
+    private byte[]? _file;
+    private string? _fileName;
+    private string? _error;
+    private List<string> _previewNames = [];
+    private bool _personIsNew;
+    private bool _busy;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FinancePerson> People { get; set; } = [];
+
+    [Parameter]
+    public HouseholdDto? Household { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnEditingChanged { get; set; }
+
+    private string? MemberLabel(FinancePerson person) =>
+        person.MemberUserId is null ? null : Household?.Members.FirstOrDefault(m => m.UserId == person.MemberUserId)?.DisplayName;
+
+    private void OpenNewPerson()
+    {
+        _person = new FinancePerson { Color = Palette[People.Count % Palette.Length] };
+        _personIsNew = true;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private void OpenEditPerson(FinancePerson person)
+    {
+        _person = new FinancePerson { Id = person.Id, Name = person.Name, Color = person.Color, MemberUserId = person.MemberUserId, Order = person.Order };
+        _personIsNew = false;
+        _ = OnEditingChanged.InvokeAsync(true);
+    }
+
+    private async Task SavePersonAsync()
+    {
+        if (_person is null || string.IsNullOrWhiteSpace(_person.Name))
+        {
+            return;
+        }
+
+        FinancePerson person = _person;
+        bool isNew = _personIsNew;
+
+        try
+        {
+            if (isNew)
+            {
+                await Finance.CreatePersonAsync(person);
+            }
+            else
+            {
+                await Finance.UpdatePersonAsync(person);
+            }
+
+            _person = null;
+            Toasts.Show(isNew ? "Pessoa adicionada." : "Pessoa atualizada.", ToastKind.Success);
+            await OnEditingChanged.InvokeAsync(false);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível guardar. O nome tem de ser único e o membro só pode estar ligado a uma pessoa.", ToastKind.Error);
+        }
+    }
+
+    private async Task DeletePersonAsync()
+    {
+        Guid id = _person!.Id;
+
+        try
+        {
+            await Finance.DeletePersonAsync(id);
+            _person = null;
+            Toasts.Show("Pessoa eliminada.", ToastKind.Success);
+            await OnEditingChanged.InvokeAsync(false);
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não é possível eliminar uma pessoa com movimentos ou poupanças.", ToastKind.Error);
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs args)
+    {
+        _error = null;
+        _report = null;
+        _file = null;
+        IBrowserFile? browserFile = args.File;
+
+        if (browserFile is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _fileName = browserFile.Name;
+
+        try
+        {
+            using MemoryStream buffer = new();
+            await using Stream stream = browserFile.OpenReadStream(maxAllowedSize: 25 * 1024 * 1024);
+            await stream.CopyToAsync(buffer);
+            _file = buffer.ToArray();
+            await ImportAsync(apply: false);
+        }
+        catch (IOException)
+        {
+            _error = "O ficheiro é demasiado grande (máximo 25 MB).";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        _busy = true;
+
+        try
+        {
+            await ImportAsync(apply: true);
+
+            if (_report is { Applied: true })
+            {
+                Toasts.Show("Importação concluída.", ToastKind.Success);
+                await OnChanged.InvokeAsync();
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ImportAsync(bool apply)
+    {
+        if (_file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _report = await Importer.ImportAsync(_file, apply);
+            IReadOnlyList<FinancePerson> people = await Finance.GetPeopleAsync();
+            _previewNames = [.. people.Select(p => p.Name).Concat(_report.People.Where(n => people.All(p => !string.Equals(p.Name, n, StringComparison.OrdinalIgnoreCase))))];
+        }
+        catch (ArgumentException)
+        {
+            _error = "Não consegui ler este ficheiro. Confirma que é o Excel das finanças (.xlsx) com o livro «Registos».";
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            _error = "Não foi possível importar. Tenta novamente.";
+        }
+    }
+
+    private void Reset()
+    {
+        _report = null;
+        _file = null;
+        _fileName = null;
+        _error = null;
+    }
+
+    private static bool IsExpected(Exception ex) =>
+        ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException;
+}

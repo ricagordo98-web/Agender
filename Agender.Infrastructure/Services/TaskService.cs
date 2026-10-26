@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Infrastructure.Services;
 
-public class TaskService(IUserDbContextFactory contextFactory) : ITaskService
+public class TaskService(IAgendaDbContextFactory contextFactory) : ITaskService
 {
     public async Task<IReadOnlyList<TaskItem>> GetAllAsync(CancellationToken cancellationToken = default)
     {

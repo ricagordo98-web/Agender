@@ -1,6 +1,8 @@
 using Agender.Infrastructure.Data;
 using Agender.Infrastructure.Google;
 using Agender.Infrastructure.Identity;
+using Agender.Infrastructure.Realtime;
+using Agender.Shared.Abstractions;
 using Agender.Infrastructure.Sharing;
 using Agender.Infrastructure.Services;
 using Agender.Shared.Services;
@@ -21,13 +23,18 @@ public static class ServiceCollectionExtensions
             Directory.CreateDirectory(directory);
         }
 
-        services.AddDbContextFactory<AgenderDbContext>(options => options.UseSqlite($"Data Source={databasePath}"));
+        services.AddDbContextFactory<AgenderDbContext>(options => options.UseSqlite($"Data Source={databasePath}").AddInterceptors(new WriteTrackingInterceptor()));
         services.AddScoped<ICurrentUser, TCurrentUser>();
         services.AddScoped<IUserDbContextFactory, UserDbContextFactory>();
+        services.AddScoped<IAgendaDbContextFactory, AgendaDbContextFactory>();
+        services.AddSingleton<ChangeBus>();
+        services.AddSingleton<IChangePublisher>(provider => provider.GetRequiredService<ChangeBus>());
+        services.AddScoped<IChangeFeed, InProcessChangeFeed>();
         services.AddScoped<TimeEntryService>();
         services.AddScoped<ITimeEntryService>(provider => new GoogleSyncingTimeEntryService(
             provider.GetRequiredService<TimeEntryService>(),
-            provider.GetRequiredService<IGoogleEntrySync>()));
+            provider.GetRequiredService<IGoogleEntrySync>(),
+            provider.GetRequiredService<IAgendaScope>()));
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<IDayNoteService, DayNoteService>();
         services.AddScoped<IProjectService, ProjectService>();
@@ -35,6 +42,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITimerService, TimerService>();
         services.AddScoped<IUserSettingsService, UserSettingsService>();
         services.AddScoped<IAgendaService, AgendaService>();
+        services.AddScoped<IHouseholdService, HouseholdService>();
+        services.AddScoped<IShoppingService, ShoppingService>();
+        services.AddScoped<IHomeProjectService, HomeProjectService>();
+        services.AddScoped<IFinanceService, FinanceService>();
+        services.AddScoped<IFinanceImportService, FinanceImportService>();
+        services.AddScoped<IFamilyEventService, FamilyEventService>();
 
         services.AddDataProtection();
         services.TryAddSingleton(TimeProvider.System);

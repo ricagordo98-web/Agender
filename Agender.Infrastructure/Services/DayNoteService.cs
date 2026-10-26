@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Infrastructure.Services;
 
-public class DayNoteService(IUserDbContextFactory contextFactory) : IDayNoteService
+public class DayNoteService(IAgendaDbContextFactory contextFactory) : IDayNoteService
 {
     public async Task<IReadOnlyList<DayNote>> GetRangeAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
     {

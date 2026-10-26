@@ -1,0 +1,51 @@
+@using System.Globalization
+
+<div class="cs-donut" style="max-width:@(Size)px">
+    <svg viewBox="0 0 120 120" role="img" aria-label="@Caption">
+        <circle cx="60" cy="60" r="@Radius" fill="none" stroke="var(--surface-hover)" stroke-width="@Thickness" />
+        @if (Total > 0)
+        {
+            double offset = 0;
+
+            @foreach (Slice slice in Items)
+            {
+                double length = (double)slice.Value / Total * Circumference;
+                double gap = Items.Count > 1 ? Math.Min(2, length / 3) : 0;
+
+                <circle cx="60" cy="60" r="@Radius" fill="none" stroke="@slice.Color" stroke-width="@Thickness"
+                        stroke-dasharray="@Format(Math.Max(0, length - gap)) @Format(Circumference)" stroke-dashoffset="@Format(-offset)"
+                        transform="rotate(-90 60 60)" />
+
+                offset += length;
+            }
+        }
+    </svg>
+    <div class="cs-donut-center">
+        <span>@Caption</span>
+        <strong>@Center</strong>
+    </div>
+</div>
+
+@code {
+    private const double Radius = 48;
+    private const double Thickness = 14;
+    private static readonly double Circumference = 2 * Math.PI * Radius;
+
+    public record Slice(string Label, decimal Value, string Color);
+
+    [Parameter]
+    public IReadOnlyList<Slice> Items { get; set; } = [];
+
+    [Parameter]
+    public string? Center { get; set; }
+
+    [Parameter]
+    public string? Caption { get; set; }
+
+    [Parameter]
+    public int Size { get; set; } = 170;
+
+    private double Total => Items.Sum(i => (double)i.Value);
+
+    private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

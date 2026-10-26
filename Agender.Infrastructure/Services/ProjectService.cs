@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Infrastructure.Services;
 
-public class ProjectService(IUserDbContextFactory contextFactory) : IProjectService
+public class ProjectService(IAgendaDbContextFactory contextFactory) : IProjectService
 {
     public async Task<IReadOnlyList<Project>> GetAllAsync(CancellationToken cancellationToken = default)
     {

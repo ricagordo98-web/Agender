@@ -1,0 +1,54 @@
+<div class="people" role="group" aria-label="Agenda de quem queres ver">
+    <span class="people-label">Agenda de</span>
+
+    @foreach (MemberDto member in Members)
+    {
+        bool isMe = member.UserId == MyUserId;
+        string id = member.UserId;
+        bool selected = isMe ? Selected is null : Selected == id;
+
+        <button type="button" class="person @(selected ? "active" : string.Empty)" aria-pressed="@(selected ? "true" : "false")"
+                style="--pc:@member.Color" @onclick="() => OnSelect.InvokeAsync(new PersonChoice(isMe ? null : id, isMe ? null : member.DisplayName))">
+            <MemberAvatar Name="@member.DisplayName" Color="@member.Color" />
+            <span class="person-name">@(isMe ? "Eu" : FirstName(member.DisplayName))</span>
+        </button>
+    }
+
+    <button type="button" class="person house @(Selected == HouseholdScopeId ? "active" : string.Empty)" aria-pressed="@(Selected == HouseholdScopeId ? "true" : "false")"
+            style="--pc:#D4B483" @onclick="() => OnSelect.InvokeAsync(new PersonChoice(HouseholdScopeId, HouseholdName))">
+        <span class="house-icon" aria-hidden="true">🏠</span>
+        <span class="person-name">Casa</span>
+    </button>
+
+    @if (Selected is not null)
+    {
+        <span class="people-note" role="status">A editar a agenda de <strong>@SelectedLabel</strong> — as alterações ficam guardadas lá.</span>
+    }
+</div>
+
+@code {
+    public record PersonChoice(string? Id, string? Label);
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<MemberDto> Members { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public string MyUserId { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string HouseholdScopeId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string HouseholdName { get; set; } = "Casa";
+
+    [Parameter]
+    public string? Selected { get; set; }
+
+    [Parameter]
+    public string? SelectedLabel { get; set; }
+
+    [Parameter]
+    public EventCallback<PersonChoice> OnSelect { get; set; }
+
+    private static string FirstName(string name) => name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? name;
+}
