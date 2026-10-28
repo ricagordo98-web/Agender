@@ -20,6 +20,38 @@
     else if (_dashboard is not null)
     {
         <div class="cs-dash">
+            <a class="card wd-banner cs-wide" href="casa/casamento">
+                <span class="wd-heart"><Icon Name="IconName.Heart" Size="22" /></span>
+                <span class="wd-hero-main">
+                    <small>Casamento</small>
+                    @if (_dashboard.WeddingDate is DateOnly wedding)
+                    {
+                        <strong>@wedding.ToString("d 'de' MMMM 'de' yyyy", CasaCatalog.Culture)</strong>
+                    }
+                    else
+                    {
+                        <strong>Ainda sem data marcada</strong>
+                    }
+                </span>
+                @if (_dashboard.WeddingDate is DateOnly weddingDay)
+                {
+                    int daysToWedding = weddingDay.DayNumber - DateOnly.FromDateTime(DateTime.Today).DayNumber;
+
+                    <span class="wd-count">
+                        @if (daysToWedding > 0)
+                        {
+                            <strong>@daysToWedding</strong>
+                            <small>@(daysToWedding == 1 ? "dia" : "dias")</small>
+                        }
+                        else if (daysToWedding == 0)
+                        {
+                            <strong>Hoje!</strong>
+                        }
+                    </span>
+                }
+                <span class="cs-link">Abrir <Icon Name="IconName.ChevronRight" Size="14" /></span>
+            </a>
+
             <a class="card cs-feature" href="casa/financas">
                 <header class="cs-card-head">
                     <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>

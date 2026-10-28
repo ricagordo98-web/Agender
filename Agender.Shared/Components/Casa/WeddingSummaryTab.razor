@@ -1,0 +1,78 @@
+@inherits WeddingTabBase
+
+@{
+    int people = Overview.Guests.Where(g => g.Status != GuestStatus.Declined).Sum(g => g.People);
+    int confirmed = Overview.Guests.Where(g => g.Status == GuestStatus.Confirmed).Sum(g => g.People);
+    decimal cost = Overview.Categories.Sum(c => c.Cost);
+    decimal paid = Overview.Categories.Sum(c => c.Paid);
+    int done = Overview.Tasks.Count(t => t.Done);
+    List<WeddingTask> next = [.. Overview.Tasks.Where(t => !t.Done).Take(5)];
+    DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+}
+
+<div class="cs-dash">
+    <section class="card">
+        <header class="cs-card-head">
+            <span class="cs-icon"><Icon Name="IconName.Users" Size="16" /></span>
+            <h2>Convidados</h2>
+        </header>
+        <div class="cs-balance">@confirmed<small class="cs-muted"> / @people</small></div>
+        <p class="cs-muted">pessoas confirmadas (sem contar quem recusou)</p>
+        <CasaProgress Value="@(people == 0 ? 0 : (double)confirmed / people)" Color="#6FCF97" />
+    </section>
+
+    <section class="card">
+        <header class="cs-card-head">
+            <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>
+            <h2>Orçamento</h2>
+        </header>
+        <div class="cs-balance">@CasaCatalog.Money(paid)</div>
+        <p class="cs-muted">pago de @CasaCatalog.Money(cost) contratado (previsto @CasaCatalog.Money(Overview.Categories.Sum(c => c.Planned)))</p>
+        <CasaProgress Value="@(cost <= 0 ? 0 : Math.Min(1, (double)(paid / cost)))" Color="#D4B483" />
+    </section>
+
+    <section class="card">
+        <header class="cs-card-head">
+            <span class="cs-icon"><Icon Name="IconName.Check" Size="16" /></span>
+            <h2>Tarefas</h2>
+            <span class="cs-badge">@done de @Overview.Tasks.Count</span>
+        </header>
+        @if (next.Count == 0)
+        {
+            <p class="cs-muted">@(Overview.Tasks.Count == 0 ? "Sem tarefas ainda. Cria-as no separador Tarefas." : "Tudo feito. 🎉")</p>
+        }
+        @foreach (WeddingTask task in next)
+        {
+            <div class="cs-row" @key="task.Id">
+                <span class="cs-row-main">
+                    <span class="cs-row-title">@task.Title</span>
+                    <span class="cs-row-meta @(task.DueDate is DateOnly due && due < today ? "wd-late" : string.Empty)">@(task.DueDate is DateOnly d ? "até " + d.ToString("d MMM yyyy", CasaCatalog.Culture) : "sem prazo")</span>
+                </span>
+            </div>
+        }
+    </section>
+
+    <section class="card">
+        <header class="cs-card-head">
+            <span class="cs-icon"><Icon Name="IconName.Gift" Size="16" /></span>
+            <h2>Fornecedores</h2>
+            <span class="cs-badge">@Overview.Vendors.Count</span>
+        </header>
+        @if (Overview.Vendors.Count == 0)
+        {
+            <p class="cs-muted">Ainda sem fornecedores.</p>
+        }
+        @foreach (VendorStatus status in Enum.GetValues<VendorStatus>())
+        {
+            int count = Overview.Vendors.Count(v => v.Status == status);
+
+            @if (count > 0)
+            {
+                <div class="cs-row">
+                    <span class="cs-row-main"><span class="cs-row-title">@WeddingCatalog.Label(status)</span></span>
+                    <span class="cs-badge" style="background:color-mix(in srgb, @WeddingCatalog.Color(status) 22%, transparent)">@count</span>
+                </div>
+            }
+        }
+    </section>
+</div>

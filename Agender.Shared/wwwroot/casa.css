@@ -668,3 +668,19 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
     .fb-hero { grid-template-columns: 1fr; }
     .fb-title h2 { font-size: 30px; }
 }
+
+.wd-hero, .wd-banner { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; background: linear-gradient(135deg, color-mix(in srgb, #FF9AB5 20%, var(--surface, transparent)), color-mix(in srgb, #D4B483 16%, var(--surface, transparent))); }
+.wd-banner { text-decoration: none; color: inherit; margin-bottom: 0; }
+.wd-heart { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: color-mix(in srgb, #FF9AB5 30%, transparent); color: #E0527A; flex: none; }
+.wd-hero-main { display: grid; gap: 2px; flex: 1 1 220px; }
+.wd-hero-main small { color: var(--text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.wd-hero-main strong { font-size: 20px; letter-spacing: -0.01em; }
+.wd-hero-main strong::first-letter { text-transform: uppercase; }
+.wd-count { display: grid; justify-items: center; line-height: 1; padding: 0 12px; }
+.wd-count strong { font-size: 40px; font-variant-numeric: tabular-nums; }
+.wd-count small { color: var(--text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.wd-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.wd-filters .field { max-width: 260px; }
+.wd-check { width: 18px; height: 18px; flex: none; accent-color: #6FCF97; }
+.wd-done { text-decoration: line-through; opacity: 0.6; }
+.wd-late { color: #ef4444; font-weight: 700; }

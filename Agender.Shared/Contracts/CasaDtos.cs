@@ -95,6 +95,21 @@ public class CasaDashboard
     public List<EventOccurrence> Birthdays { get; set; } = [];
 
     public List<SavingsGoal> Goals { get; set; } = [];
+
+    public DateOnly? WeddingDate { get; set; }
+}
+
+public class WeddingOverview
+{
+    public WeddingSettings Settings { get; set; } = new();
+
+    public List<WeddingGuest> Guests { get; set; } = [];
+
+    public List<WeddingCategory> Categories { get; set; } = [];
+
+    public List<WeddingVendor> Vendors { get; set; } = [];
+
+    public List<WeddingTask> Tasks { get; set; } = [];
 }
 
 public record ChangeNotice(string ScopeId, string ActorId);

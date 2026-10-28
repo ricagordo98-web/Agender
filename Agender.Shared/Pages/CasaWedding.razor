@@ -1,0 +1,155 @@
+@page "/casa/casamento"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IWeddingService Wedding
+
+<PageTitle>Casamento · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Casamento" Subtitle="Convidados, orçamento, fornecedores e tarefas, partilhados por vocês os dois." />
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        <section class="card wd-hero">
+            <span class="wd-heart"><Icon Name="IconName.Heart" Size="26" /></span>
+            @if (_overview.Settings.Date is DateOnly date)
+            {
+                int days = date.DayNumber - DateOnly.FromDateTime(DateTime.Today).DayNumber;
+
+                <div class="wd-hero-main">
+                    <small>O grande dia</small>
+                    <strong>@date.ToString("dddd, d 'de' MMMM 'de' yyyy", CasaCatalog.Culture)</strong>
+                    @if (!string.IsNullOrEmpty(_overview.Settings.Venue))
+                    {
+                        <span class="cs-muted">@_overview.Settings.Venue</span>
+                    }
+                </div>
+                <div class="wd-count">
+                    @if (days > 0)
+                    {
+                        <strong>@days</strong>
+                        <small>@(days == 1 ? "dia" : "dias")</small>
+                    }
+                    else if (days == 0)
+                    {
+                        <strong>Hoje!</strong>
+                    }
+                    else
+                    {
+                        <small>já passou</small>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="wd-hero-main">
+                    <small>O grande dia</small>
+                    <strong>Ainda sem data marcada</strong>
+                    <span class="cs-muted">Quando a tiverem, marquem-na aqui: os dois veem a contagem decrescente.</span>
+                </div>
+            }
+            <button type="button" class="btn @(_overview.Settings.Date is null ? "btn-primary" : "btn-ghost")" @onclick="OpenSettings">
+                <Icon Name="IconName.Calendar" Size="16" /> @(_overview.Settings.Date is null ? "Marcar a data" : "Alterar")
+            </button>
+        </section>
+
+        <div class="fb-tabs">
+            <SegmentedControl Label="Secção do casamento" Options="TabOptions" Value="(int)_tab" ValueChanged="v => _tab = (WeddingTab)v" />
+        </div>
+
+        @switch (_tab)
+        {
+            case WeddingTab.Summary:
+                <WeddingSummaryTab Overview="_overview" Household="Current" />
+                break;
+            case WeddingTab.Guests:
+                <WeddingGuestsTab Overview="_overview" Household="Current" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+            case WeddingTab.Budget:
+                <WeddingBudgetTab Overview="_overview" Household="Current" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+            case WeddingTab.Vendors:
+                <WeddingVendorsTab Overview="_overview" Household="Current" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+            default:
+                <WeddingTasksTab Overview="_overview" Household="Current" OnChanged="RefreshAfterChangeAsync" OnEditingChanged="SetEditing" />
+                break;
+        }
+
+        @if (_settings is not null)
+        {
+            <Modal Title="Data e local do casamento" OnClose="CloseSettings" OnSubmit="SaveSettingsAsync">
+                <ChildContent>
+                    <label class="cs-field">Data
+                        <input class="field" type="date" @bind="_settings.Date" />
+                    </label>
+                    <label class="cs-field">Local
+                        <input class="field" maxlength="@WeddingSettings.VenueMaxLength" placeholder="Ex.: Quinta do Lago" @bind="_settings.Venue" />
+                    </label>
+                </ChildContent>
+                <Footer>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-ghost" @onclick="CloseSettings">Cancelar</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveSettingsAsync">Guardar</button>
+                </Footer>
+            </Modal>
+        }
+    }
+</div>
+
+@code {
+    private enum WeddingTab { Summary, Guests, Budget, Vendors, Tasks }
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> TabOptions =
+        [new((int)WeddingTab.Summary, "Resumo"), new((int)WeddingTab.Guests, "Convidados"), new((int)WeddingTab.Budget, "Orçamento"), new((int)WeddingTab.Vendors, "Fornecedores"), new((int)WeddingTab.Tasks, "Tarefas")];
+
+    private WeddingOverview _overview = new();
+    private WeddingSettings? _settings;
+    private WeddingTab _tab = WeddingTab.Summary;
+    private bool _editing;
+
+    protected override bool IsEditing => _editing;
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken) =>
+        _overview = await Wedding.GetAsync(cancellationToken);
+
+    private void SetEditing(bool editing) => _editing = editing;
+
+    private async Task RefreshAfterChangeAsync()
+    {
+        _editing = false;
+        await RefreshAsync(silent: true);
+    }
+
+    private void OpenSettings()
+    {
+        _settings = new WeddingSettings { Date = _overview.Settings.Date, Venue = _overview.Settings.Venue };
+        _editing = true;
+    }
+
+    private void CloseSettings()
+    {
+        _settings = null;
+        _editing = false;
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        WeddingSettings settings = _settings!;
+
+        if (await RunAsync(() => Wedding.SaveSettingsAsync(settings), "Data guardada.", reload: false))
+        {
+            CloseSettings();
+            await RefreshAsync(silent: true);
+        }
+    }
+}

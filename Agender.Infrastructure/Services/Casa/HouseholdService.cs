@@ -176,6 +176,12 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         await context.FinanceTransactions.Where(t => t.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.SavingsGoals.Where(g => g.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.FamilyEvents.Where(e => e.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.WeddingDetails.Where(w => w.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.WeddingGuests.Where(g => g.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.WeddingPayments.Where(p => p.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.WeddingCategories.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.WeddingVendors.Where(v => v.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.WeddingTasks.Where(t => t.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.HouseholdInvites.Where(i => i.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.Households.Where(h => h.Id == householdId).ExecuteDeleteAsync(cancellationToken);
         await PurgeHouseholdAgendaAsync(context, householdId, cancellationToken);
@@ -208,6 +214,7 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         dashboard.Upcoming = [.. EventExpander.Expand(events.Where(e => e.Kind != FamilyEventKind.Birthday), today, today.AddDays(DashboardUpcomingDays)).OrderBy(o => o.Start).Take(6)];
         dashboard.Birthdays = [.. EventExpander.Expand(events.Where(e => e.Kind == FamilyEventKind.Birthday), today, today.AddDays(DashboardBirthdayDays)).OrderBy(o => o.Start).Take(4)];
         dashboard.Goals = await context.SavingsGoals.AsNoTracking().Where(g => g.HouseholdId == householdId).OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
+        dashboard.WeddingDate = await context.WeddingDetails.AsNoTracking().Where(w => w.HouseholdId == householdId).Select(w => w.Date).FirstOrDefaultAsync(cancellationToken);
 
         return dashboard;
     }

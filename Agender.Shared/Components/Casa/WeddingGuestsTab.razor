@@ -1,0 +1,188 @@
+@inherits WeddingTabBase
+
+@{
+    List<WeddingGuest> guests = Filtered();
+    int total = Overview.Guests.Sum(g => g.People);
+    int confirmed = Overview.Guests.Where(g => g.Status == GuestStatus.Confirmed).Sum(g => g.People);
+    int declined = Overview.Guests.Where(g => g.Status == GuestStatus.Declined).Sum(g => g.People);
+}
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Users" Size="16" /></span>
+        <h2>Convidados</h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" @onclick="OpenNew"><Icon Name="IconName.Plus" Size="16" /> Convidado</button>
+    </header>
+
+    <div class="cs-mini-stats">
+        <div><small>Pessoas</small><strong>@(total - declined)</strong></div>
+        <div><small>Confirmadas</small><strong class="income">@confirmed</strong></div>
+        <div><small>Por responder</small><strong>@Overview.Guests.Where(g => g.Status is GuestStatus.Pending or GuestStatus.Invited).Sum(g => g.People)</strong></div>
+        <div><small>Recusaram</small><strong class="expense">@declined</strong></div>
+    </div>
+
+    @if (Overview.Guests.Count == 0)
+    {
+        <p class="cs-muted">Ainda não há convidados. Os acompanhantes contam como pessoas extra de cada convidado.</p>
+    }
+    else
+    {
+        <div class="wd-filters">
+            <input class="field" type="search" placeholder="Pesquisar convidado…" aria-label="Pesquisar convidado" @bind="_search" @bind:event="oninput" />
+            <select class="field" aria-label="Filtrar por estado" @bind="_status">
+                <option value="">Todos os estados</option>
+                @foreach (GuestStatus status in Enum.GetValues<GuestStatus>())
+                {
+                    <option value="@((int)status)">@WeddingCatalog.Label(status)</option>
+                }
+            </select>
+        </div>
+
+        <div class="fb-scroll">
+            <table class="fb-table accounts">
+                <thead>
+                    <tr><th>Nome</th><th>Grupo</th><th class="num">Pessoas</th><th>Estado</th><th>Mesa</th><th>Restrições</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (WeddingGuest guest in guests)
+                    {
+                        <tr @key="guest.Id">
+                            <td>@guest.Name</td>
+                            <td>@(guest.Group ?? "—")</td>
+                            <td class="num">@guest.People</td>
+                            <td><span class="cs-badge" style="background:color-mix(in srgb, @WeddingCatalog.Color(guest.Status) 20%, transparent)">@WeddingCatalog.Label(guest.Status)</span></td>
+                            <td>@(guest.Table ?? "—")</td>
+                            <td>@(guest.Diet ?? "—")</td>
+                            <td class="num"><button type="button" class="icon-btn" aria-label="Editar @guest.Name" @onclick="() => OpenEdit(guest)"><Icon Name="IconName.Pencil" Size="15" /></button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (guests.Count == 0)
+        {
+            <p class="cs-muted">Nenhum convidado corresponde ao filtro.</p>
+        }
+
+        <div class="cs-section-title flat">Por grupo <span class="line"></span></div>
+        <div class="cs-mini-stats">
+            @foreach (IGrouping<string, WeddingGuest> group in Overview.Guests.GroupBy(g => g.Group ?? "Sem grupo").OrderBy(g => g.Key))
+            {
+                <div><small>@group.Key</small><strong>@group.Sum(g => g.People)</strong></div>
+            }
+        </div>
+    }
+</section>
+
+@if (_guest is not null)
+{
+    <Modal Title="@(_isNew ? "Novo convidado" : "Editar convidado")" OnClose="() => _guest = null" OnSubmit="SaveAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@WeddingGuest.NameMaxLength" @bind="_guest.Name" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Grupo
+                    <input class="field" maxlength="@WeddingGuest.TextMaxLength" list="wd-groups" placeholder="Ex.: Amigos" @bind="_guest.Group" />
+                    <datalist id="wd-groups">
+                        @foreach (string group in WeddingCatalog.GuestGroups)
+                        {
+                            <option value="@group"></option>
+                        }
+                    </datalist>
+                </label>
+                <label class="cs-field">Acompanhantes
+                    <input class="field" type="number" min="0" max="@WeddingGuest.MaxPlusOnes" @bind="_guest.PlusOnes" />
+                </label>
+            </div>
+            <label class="cs-field">Estado
+                <select class="field" value="@((int)_guest.Status)" @onchange="e => _guest.Status = (GuestStatus)int.Parse(e.Value!.ToString()!)">
+                    @foreach (GuestStatus status in Enum.GetValues<GuestStatus>())
+                    {
+                        <option value="@((int)status)">@WeddingCatalog.Label(status)</option>
+                    }
+                </select>
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Contacto
+                    <input class="field" maxlength="@WeddingGuest.TextMaxLength" placeholder="Telefone ou email" @bind="_guest.Contact" />
+                </label>
+                <label class="cs-field">Mesa
+                    <input class="field" maxlength="@WeddingGuest.TextMaxLength" placeholder="Ex.: Mesa 3" @bind="_guest.Table" />
+                </label>
+            </div>
+            <label class="cs-field">Restrições alimentares
+                <input class="field" maxlength="@WeddingGuest.TextMaxLength" placeholder="Ex.: vegetariano, sem glúten" @bind="_guest.Diet" />
+            </label>
+            <label class="cs-field">Notas
+                <textarea class="field" rows="2" maxlength="@WeddingGuest.NotesMaxLength" @bind="_guest.Notes"></textarea>
+            </label>
+        </ChildContent>
+        <Footer>
+            @if (!_isNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _guest = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_guest.Name)" @onclick="SaveAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private WeddingGuest? _guest;
+    private bool _isNew;
+    private string _search = string.Empty;
+    private string _status = string.Empty;
+
+    private List<WeddingGuest> Filtered() =>
+    [
+        .. Overview.Guests.Where(g =>
+            (_search.Length == 0 || g.Name.Contains(_search, StringComparison.OrdinalIgnoreCase) || (g.Group?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false))
+            && (_status.Length == 0 || (int)g.Status == int.Parse(_status)))
+    ];
+
+    private void OpenNew()
+    {
+        _guest = new WeddingGuest();
+        _isNew = true;
+        BeginEditing();
+    }
+
+    private void OpenEdit(WeddingGuest guest)
+    {
+        _guest = new WeddingGuest
+        {
+            Id = guest.Id,
+            Name = guest.Name,
+            Group = guest.Group,
+            PlusOnes = guest.PlusOnes,
+            Contact = guest.Contact,
+            Table = guest.Table,
+            Diet = guest.Diet,
+            Notes = guest.Notes,
+            Status = guest.Status
+        };
+        _isNew = false;
+        BeginEditing();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_guest is null || string.IsNullOrWhiteSpace(_guest.Name))
+        {
+            return;
+        }
+
+        WeddingGuest guest = _guest;
+        await RunAsync(() => Wedding.SaveGuestAsync(guest), _isNew ? "Convidado adicionado." : "Convidado atualizado.", () => _guest = null);
+    }
+
+    private Task DeleteAsync()
+    {
+        Guid id = _guest!.Id;
+        return RunAsync(() => Wedding.DeleteGuestAsync(id), "Convidado eliminado.", () => _guest = null);
+    }
+}

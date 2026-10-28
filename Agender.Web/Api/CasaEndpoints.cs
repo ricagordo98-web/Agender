@@ -46,6 +46,7 @@ public static class CasaEndpoints
         MapHomeProjects(group.MapGroup("/projects"));
         MapFinance(group.MapGroup("/finance"));
         MapFamilyEvents(group.MapGroup("/events"));
+        MapWedding(group.MapGroup("/wedding"));
     }
 
     private static void MapShopping(RouteGroupBuilder group)
@@ -127,6 +128,57 @@ public static class CasaEndpoints
             await service.DeleteAsync(id, ct);
             return Results.NoContent();
         });
+    }
+
+    private static void MapWedding(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (IWeddingService service, CancellationToken ct) => await service.GetAsync(ct));
+
+        group.MapPut("/settings", async (WeddingSettings settings, IWeddingService service, CancellationToken ct) => await service.SaveSettingsAsync(settings, ct));
+
+        group.MapPost("/guests", async (WeddingGuest guest, IWeddingService service, CancellationToken ct) => await service.SaveGuestAsync(guest, ct));
+
+        group.MapDelete("/guests/{id:guid}", async (Guid id, IWeddingService service, CancellationToken ct) =>
+        {
+            await service.DeleteGuestAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/categories", async (WeddingCategory category, IWeddingService service, CancellationToken ct) => await service.SaveCategoryAsync(category, ct));
+
+        group.MapDelete("/categories/{id:guid}", async (Guid id, IWeddingService service, CancellationToken ct) =>
+        {
+            await service.DeleteCategoryAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/categories/suggested", async (IWeddingService service, CancellationToken ct) => await service.AddSuggestedCategoriesAsync(ct));
+
+        group.MapPost("/payments", async (WeddingPayment payment, IWeddingService service, CancellationToken ct) => await service.SavePaymentAsync(payment, ct));
+
+        group.MapDelete("/payments/{id:guid}", async (Guid id, IWeddingService service, CancellationToken ct) =>
+        {
+            await service.DeletePaymentAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/vendors", async (WeddingVendor vendor, IWeddingService service, CancellationToken ct) => await service.SaveVendorAsync(vendor, ct));
+
+        group.MapDelete("/vendors/{id:guid}", async (Guid id, IWeddingService service, CancellationToken ct) =>
+        {
+            await service.DeleteVendorAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/tasks", async (WeddingTask task, IWeddingService service, CancellationToken ct) => await service.SaveTaskAsync(task, ct));
+
+        group.MapDelete("/tasks/{id:guid}", async (Guid id, IWeddingService service, CancellationToken ct) =>
+        {
+            await service.DeleteTaskAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/tasks/suggested", async (IWeddingService service, CancellationToken ct) => await service.AddSuggestedTasksAsync(ct));
     }
 
     private static void MapFinance(RouteGroupBuilder group)

@@ -1,0 +1,206 @@
+@inherits WeddingTabBase
+
+@{
+    decimal planned = Overview.Categories.Sum(c => c.Planned);
+    decimal cost = Overview.Categories.Sum(c => c.Cost);
+    decimal paid = Overview.Categories.Sum(c => c.Paid);
+}
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>
+        <h2>Orçamento</h2>
+        <span class="cs-badge">Separado das Finanças</span>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" @onclick="OpenNewCategory"><Icon Name="IconName.Plus" Size="16" /> Categoria</button>
+    </header>
+
+    <div class="cs-mini-stats">
+        <div><small>Previsto</small><strong>@CasaCatalog.Money(planned)</strong></div>
+        <div><small>Contratado</small><strong>@CasaCatalog.Money(cost)</strong></div>
+        <div><small>Já pago</small><strong class="income">@CasaCatalog.Money(paid)</strong></div>
+        <div><small>Falta pagar</small><strong class="expense">@CasaCatalog.Money(Math.Max(0, cost - paid))</strong></div>
+    </div>
+    @if (cost > planned && planned > 0)
+    {
+        <p class="cs-muted">O contratado já passa o previsto em @CasaCatalog.Money(cost - planned).</p>
+    }
+
+    @if (Overview.Categories.Count == 0)
+    {
+        <p class="cs-muted">Ainda não há categorias. Podes criá-las uma a uma ou começar pelas habituais (espaço, catering, fotografia…).</p>
+        <div class="cs-actions">
+            <button type="button" class="btn btn-ghost" @onclick="AddSuggestedAsync"><Icon Name="IconName.Plus" Size="16" /> Adicionar categorias habituais</button>
+        </div>
+    }
+</section>
+
+<div class="cs-cards wide">
+    @foreach (WeddingCategory category in Overview.Categories)
+    {
+        <section class="card" @key="category.Id">
+            <header class="cs-card-head">
+                <h2>@category.Name</h2>
+                <span class="spacer"></span>
+                <button type="button" class="icon-btn" aria-label="Editar @category.Name" @onclick="() => OpenEditCategory(category)"><Icon Name="IconName.Pencil" Size="15" /></button>
+            </header>
+            <div class="cs-mini-stats">
+                <div><small>Previsto</small><strong>@CasaCatalog.Money(category.Planned)</strong></div>
+                <div><small>Contratado</small><strong>@CasaCatalog.Money(category.Cost)</strong></div>
+                <div><small>Pago</small><strong class="income">@CasaCatalog.Money(category.Paid)</strong></div>
+            </div>
+            <CasaProgress Thin Value="@(category.Cost <= 0 ? 0 : Math.Min(1, (double)(category.Paid / category.Cost)))" Color="#6FCF97" />
+            <p class="cs-muted">Falta pagar @CasaCatalog.Money(category.Remaining)</p>
+
+            @foreach (WeddingPayment payment in category.Payments)
+            {
+                <div class="cs-row" @key="payment.Id">
+                    <span class="cs-row-main">
+                        <span class="cs-row-title">@CasaCatalog.Money(payment.Amount)@(string.IsNullOrEmpty(payment.PaidBy) ? string.Empty : " · " + payment.PaidBy)</span>
+                        <span class="cs-row-meta">@payment.Date.ToString("d MMM yyyy", CasaCatalog.Culture)@(string.IsNullOrEmpty(payment.Notes) ? string.Empty : " · " + payment.Notes)</span>
+                    </span>
+                    <button type="button" class="icon-btn" aria-label="Editar pagamento" @onclick="() => OpenEditPayment(payment)"><Icon Name="IconName.Pencil" Size="15" /></button>
+                </div>
+            }
+            <div class="cs-actions">
+                <button type="button" class="btn btn-ghost" @onclick="() => OpenNewPayment(category)"><Icon Name="IconName.Plus" Size="16" /> Pagamento</button>
+            </div>
+        </section>
+    }
+</div>
+
+@if (_category is not null)
+{
+    <Modal Title="@(_categoryIsNew ? "Nova categoria" : "Editar categoria")" OnClose="() => _category = null" OnSubmit="SaveCategoryAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@WeddingCategory.NameMaxLength" placeholder="Ex.: Catering" @bind="_category.Name" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Previsto (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_category.Planned" />
+                </label>
+                <label class="cs-field">Contratado (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_category.Cost" />
+                </label>
+            </div>
+        </ChildContent>
+        <Footer>
+            @if (!_categoryIsNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteCategoryAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _category = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_category.Name)" @onclick="SaveCategoryAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@if (_payment is not null)
+{
+    <Modal Title="@(_paymentIsNew ? "Novo pagamento" : "Editar pagamento")" OnClose="() => _payment = null" OnSubmit="SavePaymentAsync">
+        <ChildContent>
+            <div class="cs-two">
+                <label class="cs-field">Valor (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_payment.Amount" @bind:event="oninput" />
+                </label>
+                <label class="cs-field">Data
+                    <input class="field" type="date" @bind="_payment.Date" />
+                </label>
+            </div>
+            <label class="cs-field">Quem pagou
+                <input class="field" maxlength="@WeddingPayment.PaidByMaxLength" list="wd-payers" @bind="_payment.PaidBy" />
+                <datalist id="wd-payers">
+                    @foreach (MemberDto member in Household?.Members ?? [])
+                    {
+                        <option value="@member.DisplayName"></option>
+                    }
+                </datalist>
+            </label>
+            <label class="cs-field">Notas
+                <input class="field" maxlength="@WeddingPayment.NotesMaxLength" placeholder="Ex.: sinal, 2.ª prestação" @bind="_payment.Notes" />
+            </label>
+        </ChildContent>
+        <Footer>
+            @if (!_paymentIsNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeletePaymentAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _payment = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@(_payment.Amount <= 0)" @onclick="SavePaymentAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private WeddingCategory? _category;
+    private WeddingPayment? _payment;
+    private bool _categoryIsNew;
+    private bool _paymentIsNew;
+
+    private void OpenNewCategory()
+    {
+        _category = new WeddingCategory();
+        _categoryIsNew = true;
+        BeginEditing();
+    }
+
+    private void OpenEditCategory(WeddingCategory category)
+    {
+        _category = new WeddingCategory { Id = category.Id, Name = category.Name, Planned = category.Planned, Cost = category.Cost };
+        _categoryIsNew = false;
+        BeginEditing();
+    }
+
+    private void OpenNewPayment(WeddingCategory category)
+    {
+        _payment = new WeddingPayment { CategoryId = category.Id, PaidBy = MemberName(Household?.MyUserId) is { Length: > 1 } name ? name : null };
+        _paymentIsNew = true;
+        BeginEditing();
+    }
+
+    private void OpenEditPayment(WeddingPayment payment)
+    {
+        _payment = new WeddingPayment { Id = payment.Id, CategoryId = payment.CategoryId, Amount = payment.Amount, Date = payment.Date, PaidBy = payment.PaidBy, Notes = payment.Notes };
+        _paymentIsNew = false;
+        BeginEditing();
+    }
+
+    private async Task SaveCategoryAsync()
+    {
+        if (_category is null || string.IsNullOrWhiteSpace(_category.Name))
+        {
+            return;
+        }
+
+        WeddingCategory category = _category;
+        await RunAsync(() => Wedding.SaveCategoryAsync(category), _categoryIsNew ? "Categoria adicionada." : "Categoria atualizada.", () => _category = null);
+    }
+
+    private Task DeleteCategoryAsync()
+    {
+        Guid id = _category!.Id;
+        return RunAsync(() => Wedding.DeleteCategoryAsync(id), "Categoria eliminada.", () => _category = null);
+    }
+
+    private async Task SavePaymentAsync()
+    {
+        if (_payment is null || _payment.Amount <= 0)
+        {
+            return;
+        }
+
+        WeddingPayment payment = _payment;
+        await RunAsync(() => Wedding.SavePaymentAsync(payment), _paymentIsNew ? "Pagamento registado." : "Pagamento atualizado.", () => _payment = null);
+    }
+
+    private Task DeletePaymentAsync()
+    {
+        Guid id = _payment!.Id;
+        return RunAsync(() => Wedding.DeletePaymentAsync(id), "Pagamento eliminado.", () => _payment = null);
+    }
+
+    private Task AddSuggestedAsync() => RunAsync(() => Wedding.AddSuggestedCategoriesAsync(), "Categorias adicionadas.", () => { });
+}

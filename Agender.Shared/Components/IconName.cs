@@ -46,5 +46,6 @@ public enum IconName
     ArrowDown,
     Flag,
     Hammer,
-    Users
+    Users,
+    Heart
 }

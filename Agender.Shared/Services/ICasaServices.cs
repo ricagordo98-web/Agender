@@ -62,6 +62,37 @@ public interface IHomeProjectService
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
+public interface IWeddingService
+{
+    Task<WeddingOverview> GetAsync(CancellationToken cancellationToken = default);
+
+    Task<WeddingSettings> SaveSettingsAsync(WeddingSettings settings, CancellationToken cancellationToken = default);
+
+    Task<WeddingGuest> SaveGuestAsync(WeddingGuest guest, CancellationToken cancellationToken = default);
+
+    Task DeleteGuestAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<WeddingCategory> SaveCategoryAsync(WeddingCategory category, CancellationToken cancellationToken = default);
+
+    Task DeleteCategoryAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<WeddingPayment> SavePaymentAsync(WeddingPayment payment, CancellationToken cancellationToken = default);
+
+    Task DeletePaymentAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<WeddingVendor> SaveVendorAsync(WeddingVendor vendor, CancellationToken cancellationToken = default);
+
+    Task DeleteVendorAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<WeddingTask> SaveTaskAsync(WeddingTask task, CancellationToken cancellationToken = default);
+
+    Task DeleteTaskAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<int> AddSuggestedCategoriesAsync(CancellationToken cancellationToken = default);
+
+    Task<int> AddSuggestedTasksAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IFinanceService
 {
     Task<FinanceSummary> GetSummaryAsync(int year, int month, string? owner = null, CancellationToken cancellationToken = default);

@@ -1,0 +1,144 @@
+@inherits WeddingTabBase
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Gift" Size="16" /></span>
+        <h2>Fornecedores</h2>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" @onclick="OpenNew"><Icon Name="IconName.Plus" Size="16" /> Fornecedor</button>
+    </header>
+
+    @if (Overview.Vendors.Count == 0)
+    {
+        <p class="cs-muted">Guarda aqui os contactos e orçamentos de quem vai trabalhar no casamento (espaço, catering, fotografia, música…) e em que ponto está cada um.</p>
+    }
+    else
+    {
+        <div class="fb-scroll">
+            <table class="fb-table accounts">
+                <thead>
+                    <tr><th>Nome</th><th>Tipo</th><th>Contacto</th><th class="num">Orçamento</th><th>Estado</th><th>Categoria</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (WeddingVendor vendor in Overview.Vendors)
+                    {
+                        <tr @key="vendor.Id">
+                            <td>@vendor.Name</td>
+                            <td>@(vendor.Kind ?? "—")</td>
+                            <td>@(vendor.Contact ?? "—")</td>
+                            <td class="num">@(vendor.Quote is decimal quote ? CasaCatalog.Money(quote) : "—")</td>
+                            <td><span class="cs-badge" style="background:color-mix(in srgb, @WeddingCatalog.Color(vendor.Status) 22%, transparent)">@WeddingCatalog.Label(vendor.Status)</span></td>
+                            <td>@(Overview.Categories.FirstOrDefault(c => c.Id == vendor.CategoryId)?.Name ?? "—")</td>
+                            <td class="num"><button type="button" class="icon-btn" aria-label="Editar @vendor.Name" @onclick="() => OpenEdit(vendor)"><Icon Name="IconName.Pencil" Size="15" /></button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@if (_vendor is not null)
+{
+    <Modal Title="@(_isNew ? "Novo fornecedor" : "Editar fornecedor")" OnClose="() => _vendor = null" OnSubmit="SaveAsync">
+        <ChildContent>
+            <label class="cs-field">Nome
+                <input class="field" maxlength="@WeddingVendor.NameMaxLength" @bind="_vendor.Name" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Tipo
+                    <input class="field" maxlength="@WeddingVendor.TextMaxLength" list="wd-kinds" placeholder="Ex.: Fotografia" @bind="_vendor.Kind" />
+                    <datalist id="wd-kinds">
+                        @foreach (string kind in WeddingCatalog.VendorKinds)
+                        {
+                            <option value="@kind"></option>
+                        }
+                    </datalist>
+                </label>
+                <label class="cs-field">Estado
+                    <select class="field" value="@((int)_vendor.Status)" @onchange="e => _vendor.Status = (VendorStatus)int.Parse(e.Value!.ToString()!)">
+                        @foreach (VendorStatus status in Enum.GetValues<VendorStatus>())
+                        {
+                            <option value="@((int)status)">@WeddingCatalog.Label(status)</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            <div class="cs-two">
+                <label class="cs-field">Contacto
+                    <input class="field" maxlength="@WeddingVendor.TextMaxLength" placeholder="Telefone ou email" @bind="_vendor.Contact" />
+                </label>
+                <label class="cs-field">Orçamento (€)
+                    <input class="field" type="number" step="0.01" min="0" @bind="_vendor.Quote" />
+                </label>
+            </div>
+            <label class="cs-field">Categoria do orçamento
+                <select class="field" value="@(_vendor.CategoryId?.ToString() ?? string.Empty)" @onchange="e => _vendor.CategoryId = Guid.TryParse(e.Value?.ToString(), out Guid id) ? id : null">
+                    <option value="">Sem categoria</option>
+                    @foreach (WeddingCategory category in Overview.Categories)
+                    {
+                        <option value="@category.Id">@category.Name</option>
+                    }
+                </select>
+            </label>
+            <label class="cs-field">Notas
+                <textarea class="field" rows="2" maxlength="@WeddingVendor.NotesMaxLength" @bind="_vendor.Notes"></textarea>
+            </label>
+        </ChildContent>
+        <Footer>
+            @if (!_isNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _vendor = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_vendor.Name)" @onclick="SaveAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private WeddingVendor? _vendor;
+    private bool _isNew;
+
+    private void OpenNew()
+    {
+        _vendor = new WeddingVendor();
+        _isNew = true;
+        BeginEditing();
+    }
+
+    private void OpenEdit(WeddingVendor vendor)
+    {
+        _vendor = new WeddingVendor
+        {
+            Id = vendor.Id,
+            Name = vendor.Name,
+            Kind = vendor.Kind,
+            Contact = vendor.Contact,
+            Quote = vendor.Quote,
+            Status = vendor.Status,
+            CategoryId = vendor.CategoryId,
+            Notes = vendor.Notes
+        };
+        _isNew = false;
+        BeginEditing();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_vendor is null || string.IsNullOrWhiteSpace(_vendor.Name))
+        {
+            return;
+        }
+
+        WeddingVendor vendor = _vendor;
+        await RunAsync(() => Wedding.SaveVendorAsync(vendor), _isNew ? "Fornecedor adicionado." : "Fornecedor atualizado.", () => _vendor = null);
+    }
+
+    private Task DeleteAsync()
+    {
+        Guid id = _vendor!.Id;
+        return RunAsync(() => Wedding.DeleteVendorAsync(id), "Fornecedor eliminado.", () => _vendor = null);
+    }
+}

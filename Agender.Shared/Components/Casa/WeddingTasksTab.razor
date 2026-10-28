@@ -1,0 +1,132 @@
+@inherits WeddingTabBase
+
+@{
+    int done = Overview.Tasks.Count(t => t.Done);
+    DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+}
+
+<section class="card">
+    <header class="cs-card-head">
+        <span class="cs-icon"><Icon Name="IconName.Check" Size="16" /></span>
+        <h2>Tarefas</h2>
+        <span class="cs-badge">@done de @Overview.Tasks.Count feitas</span>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-primary" @onclick="OpenNew"><Icon Name="IconName.Plus" Size="16" /> Tarefa</button>
+    </header>
+
+    @if (Overview.Tasks.Count > 0)
+    {
+        <CasaProgress Thin Value="@((double)done / Overview.Tasks.Count)" Color="#6FCF97" />
+    }
+
+    @if (Overview.Tasks.Count == 0)
+    {
+        <p class="cs-muted">Ainda não há tarefas. Podes começar pela lista habitual por antecedência (12, 9, 6, 3 e 1 mês antes), que podes editar ou apagar@(Overview.Settings.Date is null ? ". Sem data marcada ficam sem prazo; ao marcares a data, os prazos não se recalculam sozinhos." : " e que já vem com prazos calculados a partir da data do casamento.")</p>
+        <div class="cs-actions">
+            <button type="button" class="btn btn-ghost" @onclick="AddSuggestedAsync"><Icon Name="IconName.Plus" Size="16" /> Adicionar tarefas habituais</button>
+        </div>
+    }
+
+    @foreach (WeddingTask task in Overview.Tasks)
+    {
+        <div class="cs-row" @key="task.Id">
+            <input type="checkbox" class="wd-check" aria-label="Feita: @task.Title" checked="@task.Done" @onchange="e => ToggleAsync(task, (bool)e.Value!)" />
+            <span class="cs-row-main">
+                <span class="cs-row-title @(task.Done ? "wd-done" : string.Empty)">@task.Title</span>
+                <span class="cs-row-meta">
+                    @if (task.DueDate is DateOnly due)
+                    {
+                        <span class="@(!task.Done && due < today ? "wd-late" : string.Empty)">até @due.ToString("d MMM yyyy", CasaCatalog.Culture)</span>
+                    }
+                    else
+                    {
+                        <span>sem prazo</span>
+                    }
+                    @if (task.AssigneeUserId is not null)
+                    {
+                        <span> · @MemberName(task.AssigneeUserId)</span>
+                    }
+                </span>
+            </span>
+            <button type="button" class="icon-btn" aria-label="Editar @task.Title" @onclick="() => OpenEdit(task)"><Icon Name="IconName.Pencil" Size="15" /></button>
+        </div>
+    }
+</section>
+
+@if (_task is not null)
+{
+    <Modal Title="@(_isNew ? "Nova tarefa" : "Editar tarefa")" OnClose="() => _task = null" OnSubmit="SaveAsync">
+        <ChildContent>
+            <label class="cs-field">Tarefa
+                <input class="field" maxlength="@WeddingTask.TitleMaxLength" placeholder="Ex.: Provar o menu" @bind="_task.Title" @bind:event="oninput" />
+            </label>
+            <div class="cs-two">
+                <label class="cs-field">Prazo
+                    <input class="field" type="date" @bind="_task.DueDate" />
+                </label>
+                <label class="cs-field">Responsável
+                    <select class="field" value="@(_task.AssigneeUserId ?? string.Empty)" @onchange="e => _task.AssigneeUserId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value!.ToString()">
+                        <option value="">Ninguém</option>
+                        @foreach (MemberDto member in Household?.Members ?? [])
+                        {
+                            <option value="@member.UserId">@member.DisplayName</option>
+                        }
+                    </select>
+                </label>
+            </div>
+        </ChildContent>
+        <Footer>
+            @if (!_isNew)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+            }
+            <span class="spacer"></span>
+            <button type="button" class="btn btn-ghost" @onclick="() => _task = null">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_task.Title)" @onclick="SaveAsync">Guardar</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private WeddingTask? _task;
+    private bool _isNew;
+
+    private void OpenNew()
+    {
+        _task = new WeddingTask();
+        _isNew = true;
+        BeginEditing();
+    }
+
+    private void OpenEdit(WeddingTask task)
+    {
+        _task = new WeddingTask { Id = task.Id, Title = task.Title, DueDate = task.DueDate, AssigneeUserId = task.AssigneeUserId, Done = task.Done };
+        _isNew = false;
+        BeginEditing();
+    }
+
+    private Task ToggleAsync(WeddingTask task, bool done)
+    {
+        WeddingTask updated = new() { Id = task.Id, Title = task.Title, DueDate = task.DueDate, AssigneeUserId = task.AssigneeUserId, Done = done };
+        return RunAsync(() => Wedding.SaveTaskAsync(updated), done ? "Tarefa concluída." : "Tarefa reaberta.", () => { });
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_task is null || string.IsNullOrWhiteSpace(_task.Title))
+        {
+            return;
+        }
+
+        WeddingTask task = _task;
+        await RunAsync(() => Wedding.SaveTaskAsync(task), _isNew ? "Tarefa adicionada." : "Tarefa atualizada.", () => _task = null);
+    }
+
+    private Task DeleteAsync()
+    {
+        Guid id = _task!.Id;
+        return RunAsync(() => Wedding.DeleteTaskAsync(id), "Tarefa eliminada.", () => _task = null);
+    }
+
+    private Task AddSuggestedAsync() => RunAsync(() => Wedding.AddSuggestedTasksAsync(), "Tarefas adicionadas.", () => { });
+}

@@ -76,6 +76,18 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<HomeTask> HomeTasks => Set<HomeTask>();
 
+    public DbSet<WeddingSettings> WeddingDetails => Set<WeddingSettings>();
+
+    public DbSet<WeddingGuest> WeddingGuests => Set<WeddingGuest>();
+
+    public DbSet<WeddingCategory> WeddingCategories => Set<WeddingCategory>();
+
+    public DbSet<WeddingPayment> WeddingPayments => Set<WeddingPayment>();
+
+    public DbSet<WeddingVendor> WeddingVendors => Set<WeddingVendor>();
+
+    public DbSet<WeddingTask> WeddingTasks => Set<WeddingTask>();
+
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
 
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
@@ -299,6 +311,64 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
         {
             entity.HasKey(t => t.Id);
             entity.Property(t => t.Title).HasMaxLength(HomeProject.TitleMaxLength);
+        });
+
+        modelBuilder.Entity<WeddingSettings>(entity =>
+        {
+            entity.HasKey(w => w.Id);
+            entity.Property(w => w.Venue).HasMaxLength(WeddingSettings.VenueMaxLength);
+            entity.HasIndex(w => w.HouseholdId).IsUnique();
+        });
+
+        modelBuilder.Entity<WeddingGuest>(entity =>
+        {
+            entity.HasKey(g => g.Id);
+            entity.Property(g => g.Name).HasMaxLength(WeddingGuest.NameMaxLength);
+            entity.Property(g => g.Group).HasMaxLength(WeddingGuest.TextMaxLength);
+            entity.Property(g => g.Contact).HasMaxLength(WeddingGuest.TextMaxLength);
+            entity.Property(g => g.Table).HasMaxLength(WeddingGuest.TextMaxLength);
+            entity.Property(g => g.Diet).HasMaxLength(WeddingGuest.TextMaxLength);
+            entity.Property(g => g.Notes).HasMaxLength(WeddingGuest.NotesMaxLength);
+            entity.Property(g => g.Status).HasConversion<string>().HasMaxLength(20);
+            entity.Ignore(g => g.People);
+            entity.HasIndex(g => g.HouseholdId);
+        });
+
+        modelBuilder.Entity<WeddingCategory>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Name).HasMaxLength(WeddingCategory.NameMaxLength);
+            entity.Ignore(c => c.Paid);
+            entity.Ignore(c => c.Remaining);
+            entity.HasIndex(c => c.HouseholdId);
+            entity.HasMany(c => c.Payments).WithOne().HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WeddingPayment>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.PaidBy).HasMaxLength(WeddingPayment.PaidByMaxLength);
+            entity.Property(p => p.Notes).HasMaxLength(WeddingPayment.NotesMaxLength);
+            entity.HasIndex(p => p.HouseholdId);
+        });
+
+        modelBuilder.Entity<WeddingVendor>(entity =>
+        {
+            entity.HasKey(v => v.Id);
+            entity.Property(v => v.Name).HasMaxLength(WeddingVendor.NameMaxLength);
+            entity.Property(v => v.Kind).HasMaxLength(WeddingVendor.TextMaxLength);
+            entity.Property(v => v.Contact).HasMaxLength(WeddingVendor.TextMaxLength);
+            entity.Property(v => v.Notes).HasMaxLength(WeddingVendor.NotesMaxLength);
+            entity.Property(v => v.Status).HasConversion<string>().HasMaxLength(20);
+            entity.HasIndex(v => v.HouseholdId);
+        });
+
+        modelBuilder.Entity<WeddingTask>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Title).HasMaxLength(WeddingTask.TitleMaxLength);
+            entity.Property(t => t.AssigneeUserId).HasMaxLength(450);
+            entity.HasIndex(t => t.HouseholdId);
         });
 
         modelBuilder.Entity<FinanceTransaction>(entity =>
