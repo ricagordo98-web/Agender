@@ -25,7 +25,7 @@ try {
         $env:Agender__DatabasePath = Join-Path $dataDir 'agender.db'
         $env:Agender__EnableTunnel = 'true'
 
-        $serverProcess = Start-Process $serverExe -WorkingDirectory (Split-Path $serverExe) -WindowStyle Hidden -PassThru
+        $serverProcess = Start-Process $serverExe -WorkingDirectory (Split-Path $serverExe) -WindowStyle Normal -PassThru
 
         for ($i = 0; $i -lt 60 -and -not (Test-Server); $i++) {
             Start-Sleep -Milliseconds 500

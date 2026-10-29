@@ -36,12 +36,13 @@ Invoke-Step 'Copiar a app' { robocopy $appSource.DirectoryName (Join-Path $Outpu
 
 Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.ps1') $Output -Force
 Copy-Item (Join-Path $PSScriptRoot 'Servidor-Partilhado.ps1') $Output -Force
+Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.bat') $Output -Force
 
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Agender.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
-$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $Output 'Iniciar-Agender.ps1')`""
+$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Output 'Iniciar-Agender.ps1')`""
 $shortcut.WorkingDirectory = $Output
 $shortcut.IconLocation = Join-Path $Output 'App-Windows\Agender.exe'
 $shortcut.Save()
