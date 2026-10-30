@@ -1,5 +1,8 @@
+using System.Net;
 using System.Security.Claims;
+using Agender.Infrastructure.Data;
 using Agender.Infrastructure.Identity;
+using Microsoft.AspNetCore.Http.Features;
 using Agender.Shared.Contracts;
 using Agender.Shared.Domain;
 using Agender.Shared.Google;
@@ -11,6 +14,8 @@ public static class ApiEndpoints
 {
     private const int MaxRangeDays = 400;
     private const int DefaultSearchPageSize = 20;
+
+    private static readonly string[] ProxyHeaders = ["X-Original-For", "X-Forwarded-For", "Tailscale-Funnel-Request", "CF-Connecting-IP"];
 
     private static readonly string[] AllowedAuthPaths = ["/api/auth/login", "/api/auth/refresh"];
 
@@ -56,10 +61,33 @@ public static class ApiEndpoints
             return Results.NoContent();
         }).AddEndpointFilter<ValidationFilter<UserSettingsDto>>();
 
+        api.MapPost("/database/import", async (HttpContext context, DatabaseImporter importer, CancellationToken ct) =>
+        {
+            if (!IsDirectLocalRequest(context))
+            {
+                return Results.NotFound();
+            }
+
+            if (context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } sizeLimit)
+            {
+                sizeLimit.MaxRequestBodySize = DatabaseImporter.MaxBytes;
+            }
+
+            using MemoryStream buffer = new();
+            await context.Request.Body.CopyToAsync(buffer, ct);
+            await importer.ImportAsync(buffer.ToArray(), ct);
+
+            return Results.NoContent();
+        }).DisableAntiforgery();
+
         api.MapGet("/tags", async (ITagService service, CancellationToken ct) => await service.GetAllAsync(ct));
 
         return app;
     }
+
+    private static bool IsDirectLocalRequest(HttpContext context) =>
+        (context.Connection.RemoteIpAddress is null || IPAddress.IsLoopback(context.Connection.RemoteIpAddress))
+        && !ProxyHeaders.Any(context.Request.Headers.ContainsKey);
 
     private static void MapEntries(RouteGroupBuilder group)
     {

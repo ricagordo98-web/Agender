@@ -28,8 +28,8 @@ public abstract class ApiClientBase(IHttpClientFactory httpClientFactory, AuthSe
             await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken)
             ?? throw new PersistenceException("The server returned an empty response."), cancellationToken, timeout);
 
-    protected Task SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken) =>
-        ExecuteAsync<object?>(method, path, body, _ => Task.FromResult<object?>(null), cancellationToken, null);
+    protected Task SendAsync(HttpMethod method, string path, object? body, CancellationToken cancellationToken, TimeSpan? timeout = null) =>
+        ExecuteAsync<object?>(method, path, body, _ => Task.FromResult<object?>(null), cancellationToken, timeout);
 
     private async Task<T> ExecuteAsync<T>(HttpMethod method, string path, object? body, Func<HttpResponseMessage, Task<T>> read, CancellationToken cancellationToken, TimeSpan? timeout)
     {

@@ -82,6 +82,8 @@ The **Casa** section brings household management to Agender (it replaces the sta
 
 Changes made by another member show up in real time (with a periodic refresh as a fallback). The API lives under `/api/casa` and, like the rest of the API, is not reachable through the public tunnel.
 
+**Loading a database (desktop app).** Settings > Dados replaces the whole local database with a `.db` file copied from another computer (copy `%LOCALAPPDATA%\Agendergender.db` while the server is stopped). The server validates the file (SQLite, intact, Agender schema, not newer than the app), saves a backup next to the database (`agender.backup-before-load-<date>.db`), replaces the data, applies pending migrations and signs you out. It is only offered in the desktop app and the endpoint (`POST /api/database/import`) rejects anything that comes through the Funnel or another proxy. Google Calendar keys are encrypted per machine, so reconnect Google on the new computer.
+
 ### Agendas of the household members
 
 When the household has two or more members, the agenda page shows a strip with each member, plus **Casa** (a shared household agenda). Click a person to see and edit their agendas (tasks, projects, entries, notes, agendas); the strip says whose agenda you are editing and the timer and Google Calendar are hidden, because they are personal. Leaving the agenda page returns you to your own agenda.

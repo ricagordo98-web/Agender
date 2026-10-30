@@ -5,6 +5,7 @@ using Agender.Infrastructure.Identity;
 using Agender.Infrastructure.Sharing;
 using Agender.Shared;
 using Agender.Shared.Abstractions;
+using Agender.Shared.Services;
 using Agender.Web.Api;
 using Agender.Web.Auth;
 using Agender.Web.Components;
@@ -32,6 +33,7 @@ if (builder.Configuration.GetValue<bool>($"{AgenderOptions.SectionName}:DemoGoog
 {
     builder.Services.AddSingleton<IGoogleCalendarApi, DemoGoogleCalendarApi>();
 }
+builder.Services.AddSingleton<IDatabaseImportService, UnavailableDatabaseImportService>();
 builder.Services.AddScoped<IClock, BrowserClock>();
 builder.Services.AddScoped<IAuthNavigation, WebAuthNavigation>();
 builder.Services.AddScoped<IShareLinkBuilder, WebShareLinkBuilder>();

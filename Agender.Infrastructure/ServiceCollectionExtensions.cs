@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddDbContextFactory<AgenderDbContext>(options => options.UseSqlite($"Data Source={databasePath}").AddInterceptors(new WriteTrackingInterceptor()));
+        services.AddSingleton(provider => new DatabaseImporter(databasePath, provider.GetRequiredService<IDbContextFactory<AgenderDbContext>>()));
         services.AddScoped<ICurrentUser, TCurrentUser>();
         services.AddScoped<IUserDbContextFactory, UserDbContextFactory>();
         services.AddScoped<IAgendaDbContextFactory, AgendaDbContextFactory>();

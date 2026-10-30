@@ -5,6 +5,8 @@
 @inject GoogleCalendarState GoogleCalendar
 @inject UserSettingsState SettingsState
 @inject AgendaStore Store
+@inject IDatabaseImportService DatabaseImport
+@inject IToastService Toasts
 
 <PageTitle>Definições · Agender</PageTitle>
 
@@ -17,7 +19,7 @@
 
     <div class="settings-shell">
         <nav class="settings-nav" aria-label="Categorias das definições">
-            @foreach (Category category in Categories)
+            @foreach (Category category in Categories.Where(c => c.Id != DataId || DatabaseImport.IsAvailable))
             {
                 <button type="button" class="nav-tab @(category.Id == _active ? "active" : string.Empty)" aria-current="@(category.Id == _active ? "page" : null)"
                         @onclick="() => _active = category.Id">
@@ -156,6 +158,28 @@
                     </form>
                 }
             }
+            else if (_active == DataId)
+            {
+                <header class="panel-head">
+                    <h2>Dados</h2>
+                    <p>Carrega uma base de dados do Agender copiada de outro computador.</p>
+                </header>
+                <p class="hint">
+                    Isto <strong>substitui todos os dados deste computador</strong> (contas, agenda, casa, finanças e casamento) pelos do ficheiro.
+                    Antes disso é guardada uma cópia de segurança na pasta de dados. No fim, a sessão termina: entra com a conta que vem no ficheiro.
+                </p>
+                <div class="account-actions">
+                    <InputFile OnChange="OnDatabaseSelected" accept=".db" aria-label="Ficheiro da base de dados" />
+                </div>
+                @if (_database is not null)
+                {
+                    <p class="hint">Ficheiro escolhido: <strong>@_databaseName</strong> (@(_database.Length / 1024) KB)</p>
+                    <div class="account-actions">
+                        <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="ImportDatabaseAsync">Substituir os dados</button>
+                        <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="ClearDatabase">Cancelar</button>
+                    </div>
+                }
+            }
             else if (_active == AccountId)
             {
                 <header class="panel-head">
@@ -193,6 +217,7 @@
     private const string TasksId = "tarefas";
     private const string TimerId = "cronometro";
     private const string IntegrationsId = "integracoes";
+    private const string DataId = "dados";
     private const string AccountId = "conta";
 
     private record Category(string Id, string Label, IconName Icon);
@@ -204,6 +229,7 @@
         new(TasksId, "Tarefas e registos", IconName.Tasks),
         new(TimerId, "Cronómetro", IconName.Clock),
         new(IntegrationsId, "Google Calendar", IconName.Share),
+        new(DataId, "Dados", IconName.Download),
         new(AccountId, "Conta", IconName.Lock)
     ];
 
@@ -230,6 +256,8 @@
     private string _calendarId = string.Empty;
     private string _writeCalendarId = string.Empty;
     private bool _busy;
+    private byte[]? _database;
+    private string _databaseName = string.Empty;
     private bool _saved;
     private CancellationTokenSource? _savedTimer;
 
@@ -288,6 +316,54 @@
             _json = string.Empty;
             _calendarId = string.Empty;
             _writeCalendarId = string.Empty;
+        }
+    }
+
+    private async Task OnDatabaseSelected(InputFileChangeEventArgs args)
+    {
+        ClearDatabase();
+
+        try
+        {
+            using MemoryStream buffer = new();
+            await using Stream stream = args.File.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+            await stream.CopyToAsync(buffer);
+            _database = buffer.ToArray();
+            _databaseName = args.File.Name;
+        }
+        catch (IOException)
+        {
+            Toasts.Show("O ficheiro é demasiado grande (máximo 100 MB).", ToastKind.Error);
+        }
+    }
+
+    private void ClearDatabase()
+    {
+        _database = null;
+        _databaseName = string.Empty;
+    }
+
+    private async Task ImportDatabaseAsync()
+    {
+        _busy = true;
+
+        try
+        {
+            await DatabaseImport.ImportAsync(_database!);
+            Toasts.Show("Dados carregados. Entra novamente.", ToastKind.Success);
+            await Auth.LogoutAsync();
+        }
+        catch (ArgumentException ex)
+        {
+            Toasts.Show(ex.Message, ToastKind.Error);
+        }
+        catch (Exception ex) when (ex is PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível carregar o ficheiro.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
         }
     }
 

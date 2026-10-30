@@ -50,6 +50,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IShoppingService, ApiShoppingService>();
         builder.Services.AddScoped<IHomeProjectService, ApiHomeProjectService>();
         builder.Services.AddScoped<IWeddingService, ApiWeddingService>();
+        builder.Services.AddScoped<IDatabaseImportService, ApiDatabaseImportService>();
         builder.Services.AddScoped<IFinanceService, ApiFinanceService>();
         builder.Services.AddScoped<IFinanceImportService, ApiFinanceImportService>();
         builder.Services.AddScoped<IFamilyEventService, ApiFamilyEventService>();
