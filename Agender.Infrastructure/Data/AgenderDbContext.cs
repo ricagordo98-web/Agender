@@ -2,6 +2,7 @@ using Agender.Infrastructure.Google;
 using Agender.Infrastructure.Identity;
 using Agender.Infrastructure.Realtime;
 using Agender.Infrastructure.Sharing;
+using Agender.Infrastructure.Trader;
 using Agender.Shared.Domain;
 using Agender.Shared.Services;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -99,6 +100,10 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
     public DbSet<SavingsSnapshot> SavingsSnapshots => Set<SavingsSnapshot>();
 
     public DbSet<FamilyEvent> FamilyEvents => Set<FamilyEvent>();
+
+    public DbSet<TraderTrade> TraderTrades => Set<TraderTrade>();
+
+    public DbSet<TraderKey> TraderKeys => Set<TraderKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -208,6 +213,31 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
         });
 
         ConfigureHousehold(modelBuilder);
+
+        modelBuilder.Entity<TraderTrade>(entity =>
+        {
+            ConfigureOwnership(entity);
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Symbol).HasMaxLength(TraderTrade.ShortTextMaxLength);
+            entity.Property(t => t.Name).HasMaxLength(TraderTrade.ShortTextMaxLength);
+            entity.Property(t => t.Currency).HasMaxLength(TraderTrade.CurrencyMaxLength);
+            entity.Property(t => t.Platform).HasMaxLength(TraderTrade.ShortTextMaxLength);
+            entity.Property(t => t.Notes).HasMaxLength(TraderTrade.TextMaxLength);
+            entity.Property(t => t.Setup).HasMaxLength(TraderTrade.ShortTextMaxLength);
+            entity.Property(t => t.Tags).HasMaxLength(TraderTrade.ShortTextMaxLength);
+            entity.Property(t => t.Emotion).HasMaxLength(TraderTrade.ShortTextMaxLength);
+            entity.HasIndex(UserIdProperty, nameof(TraderTrade.ExternalId)).IsUnique();
+            entity.HasIndex(UserIdProperty, nameof(TraderTrade.ExitDate));
+        });
+
+        modelBuilder.Entity<TraderKey>(entity =>
+        {
+            entity.HasKey(k => k.Id);
+            entity.Property(k => k.UserId).IsRequired().HasMaxLength(450);
+            entity.Property(k => k.KeyHash).IsRequired().HasMaxLength(TraderKey.HashLength);
+            entity.HasIndex(k => k.KeyHash).IsUnique();
+            entity.HasIndex(k => k.UserId).IsUnique();
+        });
 
         modelBuilder.Entity<DayNote>(entity =>
         {

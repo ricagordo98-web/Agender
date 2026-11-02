@@ -12,6 +12,7 @@ using Agender.Web.Components;
 using Agender.Web.Realtime;
 using Agender.Web.Tunnel;
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 
@@ -68,7 +69,8 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Events.OnRedirectToAccessDenied = context => RedirectOrChallenge(context.HttpContext, () => context.Response.Redirect(context.RedirectUri), StatusCodes.Status403Forbidden);
 });
 
-builder.Services.AddAuthentication(options => options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme);
+builder.Services.AddAuthentication(options => options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme)
+    .AddScheme<AuthenticationSchemeOptions, TraderKeyAuthenticationHandler>(TraderKeyAuthenticationHandler.Scheme, null);
 builder.Services.AddAuthorization();
 builder.Services.AddValidatorsFromAssemblyContaining<TimeEntryDtoValidator>();
 builder.Services.AddSignalR();

@@ -1,0 +1,309 @@
+@page "/trades"
+@attribute [Authorize]
+@using System.Globalization
+@using Agender.Shared.Reports
+@inject AgendaStore Store
+@inject ITraderTradeService TradeService
+@inject IToastService Toasts
+
+<PageTitle>Trades · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Trades" Subtitle="As trades que fazes no Trader, por dia, semana e mês. Os ganhos e perdas contam no dia em que a trade fechou.">
+        <div class="month-nav">
+            <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => ShiftMonthAsync(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+            <strong class="month-label">@MonthLabel</strong>
+            <button type="button" class="icon-btn" aria-label="Mês seguinte" @onclick="() => ShiftMonthAsync(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+            <button type="button" class="btn btn-ghost" @onclick="GoToTodayAsync">Hoje</button>
+        </div>
+    </PageHeader>
+
+    @if (_loading && _trades.Count == 0)
+    {
+        <div class="card trades-skeleton" aria-busy="true"></div>
+    }
+    else if (_trades.Count == 0)
+    {
+        <EmptyState Symbol="IconName.Wallet" Title="Ainda não há trades"
+                    Description="Liga o Trader em Definições → Trader. As trades aparecem aqui assim que forem criadas ou fechadas." />
+    }
+    else
+    {
+        <section class="summary" aria-label="Resumo do mês">
+            <div class="card stat">
+                <span class="stat-label">Resultado do mês</span>
+                <strong class="stat-value @Tone(_month.NetPnl)">@Money(_month.NetPnl)</strong>
+            </div>
+            <div class="card stat">
+                <span class="stat-label">Esta semana</span>
+                <strong class="stat-value @Tone(_thisWeek.NetPnl)">@Money(_thisWeek.NetPnl)</strong>
+            </div>
+            <div class="card stat">
+                <span class="stat-label">Trades fechadas</span>
+                <strong class="stat-value">@_month.Closed</strong>
+                <span class="stat-sub">@_month.Wins ganhos · @_month.Losses perdas</span>
+            </div>
+            <div class="card stat">
+                <span class="stat-label">Taxa de acerto</span>
+                <strong class="stat-value">@(_month.Closed == 0 ? "—" : _month.WinRate.ToString("0%", Pt))</strong>
+            </div>
+            <div class="card stat">
+                <span class="stat-label">Investido</span>
+                <strong class="stat-value">@Money(_month.Invested, signed: false)</strong>
+                <span class="stat-sub">nas trades fechadas</span>
+            </div>
+        </section>
+
+        <section class="card calendar" aria-label="Calendário do mês">
+            <div class="cal-grid">
+                @foreach (string weekday in Weekdays)
+                {
+                    <div class="cal-head">@weekday</div>
+                }
+                <div class="cal-head cal-week-head">Semana</div>
+
+                @foreach (IReadOnlyList<DateOnly> week in Weeks)
+                {
+                    @foreach (DateOnly day in week)
+                    {
+                        _days.TryGetValue(day, out TraderPeriodStats? stats);
+                        int open = OpenOn(day);
+                        bool inMonth = day.Month == _month0.Month;
+                        <button type="button" class="cal-day @(inMonth ? string.Empty : "outside") @(day == Store.Today ? "today" : string.Empty) @(day == _selected ? "selected" : string.Empty) @(stats is null ? string.Empty : Tone(stats.NetPnl))"
+                                aria-label="@DayLabel(day, stats, open)" aria-pressed="@(day == _selected ? "true" : "false")" @onclick="() => Select(day)">
+                            <span class="cal-num">@day.Day</span>
+                            @if (stats is not null)
+                            {
+                                <span class="cal-pnl">@Money(stats.NetPnl)</span>
+                                <span class="cal-count">@stats.Closed @(stats.Closed == 1 ? "trade" : "trades")</span>
+                            }
+                            @if (open > 0)
+                            {
+                                <span class="cal-open">@open @(open == 1 ? "aberta" : "abertas")</span>
+                            }
+                        </button>
+                    }
+
+                    TraderPeriodStats weekStats = TraderStats.Summarize(_trades.Where(t => t.ExitDate is { } d && d >= week[0] && d <= week[6]));
+                    <div class="cal-week @(weekStats.Closed == 0 ? string.Empty : Tone(weekStats.NetPnl))">
+                        @if (weekStats.Closed > 0)
+                        {
+                            <strong>@Money(weekStats.NetPnl)</strong>
+                            <span>@weekStats.Closed @(weekStats.Closed == 1 ? "trade" : "trades")</span>
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        @if (_selected is { } selected)
+        {
+            <section class="card day-detail" aria-label="Detalhe do dia">
+                <header class="detail-head">
+                    <h2>@selected.ToString("dddd, d 'de' MMMM", Pt)</h2>
+                    @if (_days.TryGetValue(selected, out TraderPeriodStats? dayStats))
+                    {
+                        <span class="detail-total @Tone(dayStats.NetPnl)">@Money(dayStats.NetPnl) · investido @Money(dayStats.Invested, signed: false)</span>
+                    }
+                </header>
+
+                @if (DayTrades(selected).Count == 0)
+                {
+                    <p class="hint">Sem trades neste dia.</p>
+                }
+                else
+                {
+                    <ul class="trade-list">
+                        @foreach (TraderTradeDto trade in DayTrades(selected))
+                        {
+                            <li class="trade @(trade.IsClosed ? Tone(trade.NetPnl ?? 0) : "open")">
+                                <div class="trade-top">
+                                    <strong>@trade.Symbol</strong>
+                                    <span class="trade-name">@trade.Name</span>
+                                    <span class="chip @(trade.IsBuy ? "buy" : "sell")">@(trade.IsBuy ? "Compra" : "Venda")</span>
+                                    @if (!trade.IsClosed)
+                                    {
+                                        <span class="chip open-chip">Aberta</span>
+                                    }
+                                    <span class="trade-result @(trade.IsClosed ? Tone(trade.NetPnl ?? 0) : string.Empty)">
+                                        @(trade.NetPnl is { } pnl ? Money(pnl) : "em curso")
+                                    </span>
+                                </div>
+                                <dl class="trade-facts">
+                                    <div><dt>Entrada</dt><dd>@Price(trade.EntryPrice) · @trade.EntryTime.ToLocalTime().ToString("dd/MM HH:mm", Pt)</dd></div>
+                                    <div><dt>Saída</dt><dd>@(trade.ExitPrice is { } exit ? Price(exit) : "—")@(trade.ExitTime is { } exitTime ? " · " + exitTime.ToLocalTime().ToString("dd/MM HH:mm", Pt) : string.Empty)</dd></div>
+                                    <div><dt>Quantidade</dt><dd>@Price(trade.Quantity)</dd></div>
+                                    <div><dt>Investido</dt><dd>@Money(trade.Invested, trade.Currency, signed: false)</dd></div>
+                                    <div><dt>Stop loss</dt><dd>@(trade.StopLoss is { } sl ? Price(sl) : "—")</dd></div>
+                                    <div><dt>Take profit</dt><dd>@(trade.TakeProfit is { } tp ? Price(tp) : "—")</dd></div>
+                                    <div><dt>Risco</dt><dd>@(trade.RiskAmount is { } risk ? Money(risk, trade.Currency, signed: false) : "—")</dd></div>
+                                    <div><dt>Resultado em R</dt><dd>@(trade.RMultiple is { } r ? r.ToString("+0.00;-0.00;0.00", Pt) + " R" : "—")</dd></div>
+                                    <div><dt>Comissões</dt><dd>@Money(trade.Fees, trade.Currency, signed: false)</dd></div>
+                                    <div><dt>Plataforma</dt><dd>@(string.IsNullOrWhiteSpace(trade.Platform) ? "—" : trade.Platform)</dd></div>
+                                </dl>
+                                @if (!string.IsNullOrWhiteSpace(trade.Setup) || !string.IsNullOrWhiteSpace(trade.Emotion) || !string.IsNullOrWhiteSpace(trade.Tags))
+                                {
+                                    <p class="trade-meta">@string.Join(" · ", new[] { trade.Setup, trade.Emotion, trade.Tags }.Where(x => !string.IsNullOrWhiteSpace(x)))</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(trade.Notes))
+                                {
+                                    <p class="trade-notes">@trade.Notes</p>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        }
+
+        <div class="period-tables">
+            <section class="card" aria-label="Por semana">
+                <h2>Por semana</h2>
+                <table class="period-table">
+                    <thead><tr><th>Semana</th><th>Trades</th><th>Acerto</th><th class="num">Resultado</th></tr></thead>
+                    <tbody>
+                        @foreach ((DateOnly start, TraderPeriodStats stats) in _weeks.Take(12))
+                        {
+                            <tr>
+                                <td>@start.ToString("d MMM", Pt) – @start.AddDays(6).ToString("d MMM", Pt)</td>
+                                <td>@stats.Closed</td>
+                                <td>@stats.WinRate.ToString("0%", Pt)</td>
+                                <td class="num @Tone(stats.NetPnl)">@Money(stats.NetPnl)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="card" aria-label="Por mês">
+                <h2>Por mês</h2>
+                <table class="period-table">
+                    <thead><tr><th>Mês</th><th>Trades</th><th>Acerto</th><th>Investido</th><th class="num">Resultado</th></tr></thead>
+                    <tbody>
+                        @foreach ((DateOnly start, TraderPeriodStats stats) in _months.Take(12))
+                        {
+                            <tr>
+                                <td>@start.ToString("MMMM yyyy", Pt)</td>
+                                <td>@stats.Closed</td>
+                                <td>@stats.WinRate.ToString("0%", Pt)</td>
+                                <td>@Money(stats.Invested, signed: false)</td>
+                                <td class="num @Tone(stats.NetPnl)">@Money(stats.NetPnl)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo Pt = CultureInfo.GetCultureInfo("pt-PT");
+    private static readonly string[] Weekdays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+
+    private IReadOnlyList<TraderTradeDto> _trades = [];
+    private IReadOnlyDictionary<DateOnly, TraderPeriodStats> _days = new Dictionary<DateOnly, TraderPeriodStats>();
+    private IReadOnlyList<(DateOnly Start, TraderPeriodStats Stats)> _weeks = [];
+    private IReadOnlyList<(DateOnly Start, TraderPeriodStats Stats)> _months = [];
+    private TraderPeriodStats _month = TraderPeriodStats.Empty;
+    private TraderPeriodStats _thisWeek = TraderPeriodStats.Empty;
+    private DateOnly _month0;
+    private DateOnly? _selected;
+    private bool _loading = true;
+    private string _currency = "EUR";
+
+    private string MonthLabel => _month0.ToString("MMMM yyyy", Pt);
+
+    private IEnumerable<IReadOnlyList<DateOnly>> Weeks
+    {
+        get
+        {
+            DateOnly start = TraderStats.WeekStart(_month0);
+            DateOnly end = _month0.AddMonths(1).AddDays(-1);
+
+            for (DateOnly weekStart = start; weekStart <= end; weekStart = weekStart.AddDays(7))
+            {
+                yield return Enumerable.Range(0, 7).Select(weekStart.AddDays).ToList();
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _month0 = new DateOnly(Store.Today.Year, Store.Today.Month, 1);
+        _selected = Store.Today;
+        await LoadAsync();
+    }
+
+    private Task ShiftMonthAsync(int months)
+    {
+        _month0 = _month0.AddMonths(months);
+        _selected = null;
+        return LoadAsync();
+    }
+
+    private Task GoToTodayAsync()
+    {
+        _month0 = new DateOnly(Store.Today.Year, Store.Today.Month, 1);
+        _selected = Store.Today;
+        return LoadAsync();
+    }
+
+    private void Select(DateOnly day) => _selected = _selected == day ? null : day;
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            DateOnly from = _month0.AddMonths(-11);
+            DateOnly to = _month0.AddMonths(1).AddDays(6);
+            _trades = await TradeService.GetRangeAsync(from, to);
+            Recalculate();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível carregar as trades.", ToastKind.Error);
+        }
+
+        _loading = false;
+    }
+
+    private void Recalculate()
+    {
+        DateOnly monthEnd = _month0.AddMonths(1).AddDays(-1);
+        DateOnly weekStart = TraderStats.WeekStart(Store.Today);
+
+        _currency = _trades.Select(t => t.Currency).FirstOrDefault(c => c.Length > 0) ?? "EUR";
+        _days = TraderStats.ByDay(_trades);
+        _weeks = TraderStats.ByWeek(_trades);
+        _months = TraderStats.ByMonth(_trades);
+        _month = TraderStats.Summarize(_trades.Where(t => t.ExitDate is { } d && d >= _month0 && d <= monthEnd));
+        _thisWeek = TraderStats.Summarize(_trades.Where(t => t.ExitDate is { } d && d >= weekStart && d <= weekStart.AddDays(6)));
+    }
+
+    private int OpenOn(DateOnly day) => _trades.Count(t => !t.IsClosed && t.EntryDate == day);
+
+    private List<TraderTradeDto> DayTrades(DateOnly day) =>
+        [.. _trades.Where(t => t.IsClosed ? t.ExitDate == day : t.EntryDate == day).OrderBy(t => t.ExitTime ?? t.EntryTime)];
+
+    private static string Tone(double value) => value > 0 ? "win" : value < 0 ? "loss" : "flat";
+
+    private string Money(double value, string? currency = null, bool signed = true)
+    {
+        string code = currency ?? _currency;
+        string symbol = code is "EUR" or "€" ? "€" : code;
+        string number = signed ? value.ToString("+#,##0.00;-#,##0.00;0.00", Pt) : value.ToString("#,##0.00", Pt);
+        return $"{number} {symbol}".Trim();
+    }
+
+    private static string Price(double value) => value.ToString("#,##0.#####", Pt);
+
+    private string DayLabel(DateOnly day, TraderPeriodStats? stats, int open) =>
+        $"{day.ToString("d 'de' MMMM", Pt)}: " + (stats is null ? "sem trades fechadas" : $"{stats.Closed} trades, {Money(stats.NetPnl)}") + (open > 0 ? $", {open} abertas" : string.Empty);
+}

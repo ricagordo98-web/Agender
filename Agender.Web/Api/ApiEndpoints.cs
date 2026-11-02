@@ -2,6 +2,9 @@ using System.Net;
 using System.Security.Claims;
 using Agender.Infrastructure.Data;
 using Agender.Infrastructure.Identity;
+using Agender.Infrastructure.Trader;
+using Agender.Web.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Agender.Shared.Contracts;
 using Agender.Shared.Domain;
@@ -52,6 +55,11 @@ public static class ApiEndpoints
         MapSharing(api.MapGroup("/sharing"));
         MapAgendas(api.MapGroup("/agendas"));
         api.MapGroup("/casa").MapCasa();
+        MapTrader(api.MapGroup("/trader"));
+
+        app.MapGroup("/api/integrations/trader")
+            .RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = TraderKeyAuthenticationHandler.Scheme })
+            .MapPut("/trades", async (TraderSyncRequest request, ITraderIngestService service, CancellationToken ct) => await service.SyncAsync(request, ct));
 
         api.MapGet("/settings", async (IUserSettingsService service, CancellationToken ct) => (await service.GetAsync(ct)).ToDto());
 
@@ -261,6 +269,25 @@ public static class ApiEndpoints
         group.MapDelete("/{id:guid}", async (Guid id, IAgendaService service, CancellationToken ct) =>
         {
             await service.DeleteAsync(id, ct);
+            return Results.NoContent();
+        });
+    }
+
+    private static void MapTrader(RouteGroupBuilder group)
+    {
+        group.MapGet("/trades", async (DateOnly from, DateOnly to, ITraderTradeService service, CancellationToken ct) =>
+        {
+            EnsureValidRange(from, to);
+            return await service.GetRangeAsync(from, to, ct);
+        });
+
+        group.MapGet("/integration", async (ITraderIntegrationService service, CancellationToken ct) => await service.GetStatusAsync(ct));
+
+        group.MapPost("/integration/key", async (ITraderIntegrationService service, CancellationToken ct) => await service.CreateKeyAsync(ct));
+
+        group.MapDelete("/integration/key", async (ITraderIntegrationService service, CancellationToken ct) =>
+        {
+            await service.RevokeKeyAsync(ct);
             return Results.NoContent();
         });
     }

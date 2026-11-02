@@ -5,6 +5,7 @@ using Agender.Infrastructure.Realtime;
 using Agender.Shared.Abstractions;
 using Agender.Infrastructure.Sharing;
 using Agender.Infrastructure.Services;
+using Agender.Infrastructure.Trader;
 using Agender.Shared.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +51,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<IFinanceImportService, FinanceImportService>();
         services.AddScoped<IFamilyEventService, FamilyEventService>();
+        services.AddScoped<ITraderTradeService, TraderTradeService>();
+        services.AddScoped<ITraderIntegrationService, TraderIntegrationService>();
+        services.AddScoped<ITraderIngestService, TraderIngestService>();
 
         services.AddDataProtection();
         services.TryAddSingleton(TimeProvider.System);

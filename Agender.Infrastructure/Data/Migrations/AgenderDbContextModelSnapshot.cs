@@ -197,6 +197,39 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.ToTable("ShareLinks");
                 });
 
+            modelBuilder.Entity("Agender.Infrastructure.Trader.TraderKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastSyncAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KeyHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("TraderKeys");
+                });
+
             modelBuilder.Entity("Agender.Shared.Domain.ActiveTimer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1056,6 +1089,126 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.HasIndex("UserId", "Date");
 
                     b.ToTable("TimeEntries");
+                });
+
+            modelBuilder.Entity("Agender.Shared.Domain.TraderTrade", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Emotion")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("EntryDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("EntryPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("EntryTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("ExitDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("ExitPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime?>("ExitTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ExternalId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("Fees")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Invested")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("IsBuy")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("NetPnl")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Quantity")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("RMultiple")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("RiskAmount")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Setup")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("StopLoss")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("TakeProfit")
+                        .HasColumnType("REAL");
+
+                    b.Property<Guid?>("TimeEntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ExitDate");
+
+                    b.HasIndex("UserId", "ExternalId")
+                        .IsUnique();
+
+                    b.ToTable("TraderTrades");
                 });
 
             modelBuilder.Entity("Agender.Shared.Domain.UserSettings", b =>

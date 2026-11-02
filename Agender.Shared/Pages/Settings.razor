@@ -158,6 +158,14 @@
                     </form>
                 }
             }
+            else if (_active == TraderId)
+            {
+                <header class="panel-head">
+                    <h2>Trader</h2>
+                    <p>Recebe aqui as trades da aplicação Trader e vê-as na secção Trades.</p>
+                </header>
+                <TraderIntegrationPanel />
+            }
             else if (_active == DataId)
             {
                 <header class="panel-head">
@@ -217,6 +225,7 @@
     private const string TasksId = "tarefas";
     private const string TimerId = "cronometro";
     private const string IntegrationsId = "integracoes";
+    private const string TraderId = "trader";
     private const string DataId = "dados";
     private const string AccountId = "conta";
 
@@ -229,6 +238,7 @@
         new(TasksId, "Tarefas e registos", IconName.Tasks),
         new(TimerId, "Cronómetro", IconName.Clock),
         new(IntegrationsId, "Google Calendar", IconName.Share),
+        new(TraderId, "Trader", IconName.Wallet),
         new(DataId, "Dados", IconName.Download),
         new(AccountId, "Conta", IconName.Lock)
     ];

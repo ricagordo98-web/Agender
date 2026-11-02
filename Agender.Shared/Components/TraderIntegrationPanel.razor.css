@@ -1,0 +1,5 @@
+.hint { margin: 4px 0 12px; color: var(--text-muted); font-size: 13px; }
+.hint.notice { color: var(--danger); }
+.key-box { display: flex; gap: 8px; margin: 12px 0 4px; }
+.key-box .field { flex: 1; min-width: 0; font-family: ui-monospace, Consolas, monospace; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }

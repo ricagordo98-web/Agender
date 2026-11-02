@@ -1,0 +1,97 @@
+.page { --win: #16a34a; --loss: var(--danger); }
+
+.month-nav { display: flex; align-items: center; gap: 6px; }
+.month-label { min-width: 130px; text-align: center; text-transform: capitalize; font-size: 15px; }
+
+.win { color: var(--win); }
+.loss { color: var(--loss); }
+.flat { color: var(--text-muted); }
+
+.trades-skeleton { height: 320px; opacity: 0.5; }
+
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat { display: grid; gap: 2px; padding: 14px 16px; }
+.stat-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.stat-value { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 12px; color: var(--text-muted); }
+
+.calendar { padding: 12px; margin-bottom: 16px; overflow-x: auto; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(84px, 1fr)) minmax(96px, 1.1fr); gap: 6px; min-width: 700px; }
+.cal-head { font-size: 12px; font-weight: 700; color: var(--text-muted); text-align: center; padding: 2px 0 4px; }
+
+.cal-day {
+    display: grid;
+    align-content: start;
+    gap: 2px;
+    min-height: 82px;
+    padding: 6px 8px;
+    text-align: left;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.cal-day:hover { background: var(--surface-hover); }
+.cal-day.outside { opacity: 0.45; }
+.cal-day.today .cal-num { color: var(--accent); font-weight: 800; }
+.cal-day.selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.cal-day.win { background: color-mix(in srgb, var(--win) 12%, var(--surface)); }
+.cal-day.loss { background: color-mix(in srgb, var(--loss) 12%, var(--surface)); }
+
+.cal-num { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.cal-pnl { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cal-day.win .cal-pnl { color: var(--win); }
+.cal-day.loss .cal-pnl { color: var(--loss); }
+.cal-count { font-size: 11.5px; color: var(--text-muted); }
+.cal-open { font-size: 11.5px; color: var(--accent); font-weight: 600; }
+
+.cal-week {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 2px;
+    padding: 6px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.cal-week span { font-size: 11.5px; color: var(--text-muted); }
+
+.day-detail { padding: 16px; margin-bottom: 16px; }
+.detail-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.detail-head h2, .period-tables h2 { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; text-transform: capitalize; }
+.detail-total { font-size: 13px; font-weight: 700; }
+.hint { margin: 4px 0 12px; color: var(--text-muted); font-size: 13px; }
+
+.trade-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.trade { padding: 12px; border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius-sm); }
+.trade.win { border-left-color: var(--win); }
+.trade.loss { border-left-color: var(--loss); }
+.trade.open { border-left-color: var(--accent); }
+.trade-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.trade-name { color: var(--text-muted); font-size: 13px; }
+.trade-result { margin-left: auto; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+.chip { padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; border: 1px solid var(--border-strong); }
+.chip.buy { color: var(--win); border-color: color-mix(in srgb, var(--win) 40%, transparent); }
+.chip.sell { color: var(--loss); border-color: color-mix(in srgb, var(--loss) 40%, transparent); }
+.chip.open-chip { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+.trade-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; margin: 10px 0 0; }
+.trade-facts div { display: grid; }
+.trade-facts dt { font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+.trade-facts dd { margin: 0; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.trade-meta { margin: 10px 0 0; font-size: 12.5px; color: var(--text-muted); }
+.trade-notes { margin: 6px 0 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.period-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.period-tables .card { padding: 16px; }
+.period-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.period-table th { text-align: left; font-size: 12px; color: var(--text-muted); font-weight: 600; padding: 4px 6px; }
+.period-table td { padding: 6px; border-top: 1px solid var(--border); text-transform: capitalize; }
+.period-table .num, .period-table th.num { text-align: right; font-weight: 700; }
