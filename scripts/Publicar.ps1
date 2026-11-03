@@ -38,13 +38,17 @@ Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.ps1') $Output -Force
 Copy-Item (Join-Path $PSScriptRoot 'Servidor-Partilhado.ps1') $Output -Force
 Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.bat') $Output -Force
 
+$launcherPath = Join-Path $Output 'Agender-Iniciar.exe'
+$iconPath = Join-Path $Output 'App-Windows\appicon.ico'
+$csc = Join-Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'csc.exe'
+Invoke-Step 'Executável de arranque' { & $csc /nologo /target:winexe /out:$launcherPath /win32icon:$iconPath /reference:System.Windows.Forms.dll (Join-Path $PSScriptRoot 'IniciarAgender.cs') }
+
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Agender.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
-$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $Output 'Iniciar-Agender.ps1')`""
+$shortcut.TargetPath = $launcherPath
 $shortcut.WorkingDirectory = $Output
-$shortcut.IconLocation = Join-Path $Output 'App-Windows\Agender.exe'
+$shortcut.IconLocation = $launcherPath
 $shortcut.Save()
 
 Write-Host "`nConcluído. Atalho criado: $shortcutPath" -ForegroundColor Green
