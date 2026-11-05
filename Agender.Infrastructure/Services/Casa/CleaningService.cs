@@ -8,6 +8,8 @@ namespace Agender.Infrastructure.Services;
 
 public class CleaningService(IUserDbContextFactory contextFactory, TimeProvider time) : ICleaningService
 {
+    private const int MaxHistoryDays = 400;
+
     public async Task<CleaningOverview> GetAsync(CancellationToken cancellationToken = default)
     {
         await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
@@ -138,6 +140,27 @@ public class CleaningService(IUserDbContextFactory contextFactory, TimeProvider 
 
         await RequireChoreAsync(context, choreId, householdId, cancellationToken);
         await context.CleaningCompletions.Where(c => c.ChoreId == choreId && c.HouseholdId == householdId && c.Date == today).ExecuteDeleteAsync(cancellationToken);
+    }
+
+    public async Task<List<CleaningHistoryEntry>> GetHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default)
+    {
+        if (to < from || to.DayNumber - from.DayNumber > MaxHistoryDays)
+        {
+            throw new ArgumentException("The history range is invalid.");
+        }
+
+        await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
+        Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
+
+        List<CleaningCompletion> completions = await context.CleaningCompletions.AsNoTracking()
+            .Where(c => c.HouseholdId == householdId && c.Date >= from && c.Date <= to)
+            .OrderBy(c => c.Date).ToListAsync(cancellationToken);
+
+        List<string> userIds = [.. completions.Select(c => c.UserId).Distinct()];
+        Dictionary<string, string> names = await context.Users.AsNoTracking().Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.DisplayName, cancellationToken);
+
+        return [.. completions.Select(c => new CleaningHistoryEntry { ChoreId = c.ChoreId, Date = c.Date, DoneBy = names.GetValueOrDefault(c.UserId) })];
     }
 
     internal static async Task<List<CleaningChoreStatus>> BuildStatusesAsync(AgenderDbContext context, Guid householdId, DateOnly today, CancellationToken cancellationToken)

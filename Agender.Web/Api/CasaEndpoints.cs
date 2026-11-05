@@ -135,6 +135,8 @@ public static class CasaEndpoints
     {
         group.MapGet("/", async (ICleaningService service, CancellationToken ct) => await service.GetAsync(ct));
 
+        group.MapGet("/history", async (DateOnly from, DateOnly to, ICleaningService service, CancellationToken ct) => await service.GetHistoryAsync(from, to, ct));
+
         group.MapPost("/rooms", async (CleaningRoom room, ICleaningService service, CancellationToken ct) => await service.SaveRoomAsync(room, ct));
 
         group.MapDelete("/rooms/{id:guid}", async (Guid id, ICleaningService service, CancellationToken ct) =>

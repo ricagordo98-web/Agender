@@ -55,7 +55,7 @@
         </section>
 
         <div class="fb-tabs">
-            <SegmentedControl Label="Vista das limpezas" Options="ViewOptions" Value="(int)_view" ValueChanged="v => _view = (CleaningView)v" />
+            <SegmentedControl Label="Vista das limpezas" Options="ViewOptions" Value="(int)_view" ValueChanged="ChangeViewAsync" />
         </div>
 
         @if (_view == CleaningView.Today)
@@ -132,6 +132,112 @@
                         </div>
                     }
                 </details>
+            }
+        }
+        else if (_view == CleaningView.History)
+        {
+            List<DateOnly> days = [.. Enumerable.Range(0, HistoryDays).Select(i => _historyEnd.AddDays(i - HistoryDays + 1))];
+
+            <section class="card cl-history">
+                <header class="cs-card-head">
+                    <span class="cs-icon"><Icon Name="IconName.Calendar" Size="16" /></span>
+                    <h2>@days[0].ToString("d MMM", CasaCatalog.Culture) – @days[^1].ToString("d MMM yyyy", CasaCatalog.Culture)</h2>
+                    <span class="spacer"></span>
+                    <button type="button" class="icon-btn" aria-label="Semanas anteriores" @onclick="() => ShiftHistoryAsync(-HistoryDays)"><Icon Name="IconName.ChevronLeft" Size="16" /></button>
+                    <button type="button" class="icon-btn" aria-label="Semanas seguintes" disabled="@(_historyEnd >= _overview.Today)" @onclick="() => ShiftHistoryAsync(HistoryDays)"><Icon Name="IconName.ChevronRight" Size="16" /></button>
+                </header>
+
+                @if (_overview.Chores.Count == 0)
+                {
+                    <p class="cs-muted">Ainda não há tarefas para mostrar.</p>
+                }
+                else
+                {
+                    <div class="cl-grid-wrap">
+                        <table class="cl-grid">
+                            <thead>
+                                <tr>
+                                    <th class="cl-grid-name"></th>
+                                    @foreach (DateOnly day in days)
+                                    {
+                                        <th class="@DayClass(day)" title="@day.ToString("dddd, d MMM", CasaCatalog.Culture)">
+                                            <small>@day.ToString("ddd", CasaCatalog.Culture)[0]</small>@day.Day
+                                        </th>
+                                    }
+                                    <th class="cl-grid-total">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (CleaningRoom room in _overview.Rooms)
+                                {
+                                    List<CleaningChoreStatus> chores = [.. _overview.Chores.Where(c => c.Chore.RoomId == room.Id).OrderBy(c => c.Chore.Title)];
+
+                                    @if (chores.Count > 0)
+                                    {
+                                        <tr class="cl-grid-room">
+                                            <th colspan="@(HistoryDays + 2)"><span class="cl-emoji small" style="--cl-color:@room.Color">@room.Emoji</span> @room.Name</th>
+                                        </tr>
+                                    }
+                                    @foreach (CleaningChoreStatus status in chores)
+                                    {
+                                        List<CleaningHistoryEntry> done = [.. _history.Where(h => h.ChoreId == status.Chore.Id)];
+
+                                        <tr style="--cl-color:@room.Color" @key="status.Chore.Id">
+                                            <th class="cl-grid-name" scope="row">
+                                                <span>@status.Chore.Title</span>
+                                                <small>@CleaningCatalog.Frequency(status.Chore)</small>
+                                            </th>
+                                            @foreach (DateOnly day in days)
+                                            {
+                                                CleaningHistoryEntry? entry = done.FirstOrDefault(h => h.Date == day);
+
+                                                <td class="@DayClass(day)">
+                                                    @if (entry is not null)
+                                                    {
+                                                        <span class="cl-dot on" title="@($"{day.ToString("d MMM", CasaCatalog.Culture)}{(entry.DoneBy is null ? string.Empty : $" · {entry.DoneBy}")}")"></span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="cl-dot"></span>
+                                                    }
+                                                </td>
+                                            }
+                                            <td class="cl-grid-total">@done.Count</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+
+            @if (_history.Count > 0)
+            {
+                <section class="card cl-history">
+                    <header class="cs-card-head">
+                        <span class="cs-icon"><Icon Name="IconName.Check" Size="16" /></span>
+                        <h2>Registo</h2>
+                        <span class="cs-badge">@_history.Count</span>
+                    </header>
+                    @foreach (CleaningHistoryEntry entry in _history.OrderByDescending(h => h.Date))
+                    {
+                        CleaningChoreStatus? status = _overview.Chores.FirstOrDefault(c => c.Chore.Id == entry.ChoreId);
+                        CleaningRoom? room = _overview.Rooms.FirstOrDefault(r => r.Id == status?.Chore.RoomId);
+
+                        @if (status is not null)
+                        {
+                            <div class="cs-row">
+                                <span class="cl-emoji small" style="--cl-color:@room?.Color">@room?.Emoji</span>
+                                <span class="cs-row-main">
+                                    <span class="cs-row-title">@status.Chore.Title</span>
+                                    <span class="cs-row-meta">@room?.Name@(entry.DoneBy is null ? string.Empty : $" · {entry.DoneBy}")</span>
+                                </span>
+                                <span class="cl-next">@CasaCatalog.Capitalize(entry.Date.ToString("ddd, d MMM", CasaCatalog.Culture))</span>
+                            </div>
+                        }
+                    }
+                </section>
             }
         }
         else
@@ -268,7 +374,9 @@
 </div>
 
 @code {
-    private enum CleaningView { Today, Setup }
+    private enum CleaningView { Today, History, Setup }
+
+    private const int HistoryDays = 28;
 
     private record FrequencyPreset(CleaningUnit Unit, string Label);
 
@@ -276,9 +384,11 @@
         [new(CleaningUnit.Day, "Todos os dias"), new(CleaningUnit.Week, "1x por semana"), new(CleaningUnit.Month, "1x por mês")];
 
     private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
-        [new((int)CleaningView.Today, "Hoje"), new((int)CleaningView.Setup, "Divisões e tarefas")];
+        [new((int)CleaningView.Today, "Hoje"), new((int)CleaningView.History, "Histórico"), new((int)CleaningView.Setup, "Divisões e tarefas")];
 
     private CleaningOverview _overview = new();
+    private List<CleaningHistoryEntry> _history = [];
+    private DateOnly _historyEnd;
     private CleaningView _view = CleaningView.Today;
     private CleaningRoom? _room;
     private CleaningChore? _chore;
@@ -292,6 +402,16 @@
     {
         _overview = await Cleaning.GetAsync(cancellationToken);
 
+        if (_historyEnd == default)
+        {
+            _historyEnd = _overview.Today;
+        }
+
+        if (_view == CleaningView.History)
+        {
+            _history = await Cleaning.GetHistoryAsync(_historyEnd.AddDays(1 - HistoryDays), _historyEnd, cancellationToken);
+        }
+
         if (!_loadedOnce && _overview.Chores.Count == 0)
         {
             _view = CleaningView.Setup;
@@ -299,6 +419,26 @@
 
         _loadedOnce = true;
     }
+
+    private async Task ChangeViewAsync(int value)
+    {
+        _view = (CleaningView)value;
+
+        if (_view == CleaningView.History)
+        {
+            await RefreshAsync(silent: false);
+        }
+    }
+
+    private async Task ShiftHistoryAsync(int days)
+    {
+        DateOnly end = _historyEnd.AddDays(days);
+        _historyEnd = end > _overview.Today ? _overview.Today : end;
+        await RefreshAsync(silent: false);
+    }
+
+    private string DayClass(DateOnly day) =>
+        day == _overview.Today ? "today" : day.DayOfWeek == DayOfWeek.Monday ? "week-start" : string.Empty;
 
     private static string Tone(int pending, int late) => late > 0 ? "late" : pending > 0 ? "pending" : "clear";
 

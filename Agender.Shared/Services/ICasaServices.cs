@@ -77,6 +77,8 @@ public interface ICleaningService
     Task CompleteAsync(Guid choreId, CancellationToken cancellationToken = default);
 
     Task UndoAsync(Guid choreId, CancellationToken cancellationToken = default);
+
+    Task<List<CleaningHistoryEntry>> GetHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 }
 
 public interface IWeddingService

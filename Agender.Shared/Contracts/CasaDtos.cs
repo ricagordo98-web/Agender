@@ -107,6 +107,15 @@ public class CasaDashboard
     public int CleaningChores { get; set; }
 }
 
+public class CleaningHistoryEntry
+{
+    public Guid ChoreId { get; set; }
+
+    public DateOnly Date { get; set; }
+
+    public string? DoneBy { get; set; }
+}
+
 public class CleaningOverview
 {
     public DateOnly Today { get; set; }

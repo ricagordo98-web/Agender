@@ -30,4 +30,7 @@ public sealed class ApiCleaningService(IHttpClientFactory httpClientFactory, Aut
 
     public Task UndoAsync(Guid choreId, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Delete, $"{Root}/chores/{choreId}/done", null, cancellationToken);
+
+    public Task<List<CleaningHistoryEntry>> GetHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default) =>
+        GetAsync<List<CleaningHistoryEntry>>($"{Root}/history?from={Date(from)}&to={Date(to)}", cancellationToken);
 }
