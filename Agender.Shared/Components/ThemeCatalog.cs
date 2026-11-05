@@ -14,6 +14,12 @@ public static class ThemeCatalog
         new("ocean", "Oceano", "#0d1d29", "#0ea5e9"),
         new("forest", "Floresta", "#fbfdf9", "#16a34a"),
         new("sunset", "Pôr do sol", "#1d1118", "#f97316"),
-        new("rose", "Rosa", "#fffafc", "#ec4899")
+        new("rose", "Rosa", "#fffafc", "#ec4899"),
+        new("lavender", "Lavanda", "#fdfbff", "#a78bfa"),
+        new("peach", "Pêssego", "#fffbf8", "#fb7185"),
+        new("cottoncandy", "Algodão-doce", "linear-gradient(135deg, #fde8f4 0%, #e9e3fd 50%, #e0edff 100%)", "#f472b6"),
+        new("mauve", "Rosa velho", "#fdf9fa", "#b5728a"),
+        new("rosegold", "Rosa dourado", "#fffaf7", "#c28173"),
+        new("berry", "Amora", "#1c0f1e", "#e879f9")
     ];
 }

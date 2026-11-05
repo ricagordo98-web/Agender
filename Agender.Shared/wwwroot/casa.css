@@ -649,7 +649,7 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .fb-table td.now { background: color-mix(in srgb, #EA9999 14%, transparent); }
 .fb-table.accounts td:first-child { font-weight: 700; }
 .fb-table.accounts tr.total td:first-child { text-align: left; }
-:root[data-theme="dark"] .fb-table tr.total td, :root[data-theme="ocean"] .fb-table tr.total td, :root[data-theme="sunset"] .fb-table tr.total td { color: #cfe2f3; }
+:root[data-theme="dark"] .fb-table tr.total td, :root[data-theme="ocean"] .fb-table tr.total td, :root[data-theme="sunset"] .fb-table tr.total td, :root[data-theme="berry"] .fb-table tr.total td { color: #cfe2f3; }
 
 .fb-cell { padding: 3px 10px; border: 1px dashed var(--border-strong); border-radius: 8px; background: transparent; color: inherit; font: inherit; }
 .fb-cell:hover { border-color: var(--accent); background: var(--accent-soft); }
