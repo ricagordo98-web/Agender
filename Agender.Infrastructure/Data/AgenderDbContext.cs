@@ -89,6 +89,12 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<WeddingTask> WeddingTasks => Set<WeddingTask>();
 
+    public DbSet<CleaningRoom> CleaningRooms => Set<CleaningRoom>();
+
+    public DbSet<CleaningChore> CleaningChores => Set<CleaningChore>();
+
+    public DbSet<CleaningCompletion> CleaningCompletions => Set<CleaningCompletion>();
+
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
 
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
@@ -399,6 +405,33 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.Property(t => t.Title).HasMaxLength(WeddingTask.TitleMaxLength);
             entity.Property(t => t.AssigneeUserId).HasMaxLength(450);
             entity.HasIndex(t => t.HouseholdId);
+        });
+
+        modelBuilder.Entity<CleaningRoom>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Name).HasMaxLength(CleaningRoom.NameMaxLength);
+            entity.Property(r => r.Emoji).HasMaxLength(16);
+            entity.Property(r => r.Color).HasMaxLength(9);
+            entity.HasIndex(r => r.HouseholdId);
+        });
+
+        modelBuilder.Entity<CleaningChore>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Title).HasMaxLength(CleaningChore.TitleMaxLength);
+            entity.Property(c => c.Unit).HasConversion<string>().HasMaxLength(10);
+            entity.HasIndex(c => c.HouseholdId);
+            entity.HasOne<CleaningRoom>().WithMany().HasForeignKey(c => c.RoomId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CleaningCompletion>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.UserId).HasMaxLength(450);
+            entity.HasIndex(c => new { c.ChoreId, c.Date });
+            entity.HasIndex(c => c.HouseholdId);
+            entity.HasOne<CleaningChore>().WithMany().HasForeignKey(c => c.ChoreId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<FinanceTransaction>(entity =>

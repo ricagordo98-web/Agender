@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IShoppingService, ShoppingService>();
         services.AddScoped<IHomeProjectService, HomeProjectService>();
         services.AddScoped<IWeddingService, WeddingService>();
+        services.AddScoped<ICleaningService, CleaningService>();
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<IFinanceImportService, FinanceImportService>();
         services.AddScoped<IFamilyEventService, FamilyEventService>();

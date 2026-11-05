@@ -47,6 +47,7 @@ public static class CasaEndpoints
         MapFinance(group.MapGroup("/finance"));
         MapFamilyEvents(group.MapGroup("/events"));
         MapWedding(group.MapGroup("/wedding"));
+        MapCleaning(group.MapGroup("/cleaning"));
     }
 
     private static void MapShopping(RouteGroupBuilder group)
@@ -126,6 +127,39 @@ public static class CasaEndpoints
         group.MapDelete("/{id:guid}", async (Guid id, IHomeProjectService service, CancellationToken ct) =>
         {
             await service.DeleteAsync(id, ct);
+            return Results.NoContent();
+        });
+    }
+
+    private static void MapCleaning(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (ICleaningService service, CancellationToken ct) => await service.GetAsync(ct));
+
+        group.MapPost("/rooms", async (CleaningRoom room, ICleaningService service, CancellationToken ct) => await service.SaveRoomAsync(room, ct));
+
+        group.MapDelete("/rooms/{id:guid}", async (Guid id, ICleaningService service, CancellationToken ct) =>
+        {
+            await service.DeleteRoomAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/chores", async (CleaningChore chore, ICleaningService service, CancellationToken ct) => await service.SaveChoreAsync(chore, ct));
+
+        group.MapDelete("/chores/{id:guid}", async (Guid id, ICleaningService service, CancellationToken ct) =>
+        {
+            await service.DeleteChoreAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/chores/{id:guid}/done", async (Guid id, ICleaningService service, CancellationToken ct) =>
+        {
+            await service.CompleteAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapDelete("/chores/{id:guid}/done", async (Guid id, ICleaningService service, CancellationToken ct) =>
+        {
+            await service.UndoAsync(id, ct);
             return Results.NoContent();
         });
     }

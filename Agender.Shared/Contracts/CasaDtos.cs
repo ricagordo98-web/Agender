@@ -97,6 +97,23 @@ public class CasaDashboard
     public List<SavingsGoal> Goals { get; set; } = [];
 
     public DateOnly? WeddingDate { get; set; }
+
+    public int CleaningDue { get; set; }
+
+    public int CleaningLate { get; set; }
+
+    public int CleaningDoneToday { get; set; }
+
+    public int CleaningChores { get; set; }
+}
+
+public class CleaningOverview
+{
+    public DateOnly Today { get; set; }
+
+    public List<CleaningRoom> Rooms { get; set; } = [];
+
+    public List<CleaningChoreStatus> Chores { get; set; } = [];
 }
 
 public class WeddingOverview

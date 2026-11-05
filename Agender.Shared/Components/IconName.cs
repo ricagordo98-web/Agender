@@ -47,5 +47,6 @@ public enum IconName
     Flag,
     Hammer,
     Users,
-    Heart
+    Heart,
+    Sparkles
 }

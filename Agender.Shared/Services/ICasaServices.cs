@@ -62,6 +62,23 @@ public interface IHomeProjectService
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
+public interface ICleaningService
+{
+    Task<CleaningOverview> GetAsync(CancellationToken cancellationToken = default);
+
+    Task<CleaningRoom> SaveRoomAsync(CleaningRoom room, CancellationToken cancellationToken = default);
+
+    Task DeleteRoomAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<CleaningChore> SaveChoreAsync(CleaningChore chore, CancellationToken cancellationToken = default);
+
+    Task DeleteChoreAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task CompleteAsync(Guid choreId, CancellationToken cancellationToken = default);
+
+    Task UndoAsync(Guid choreId, CancellationToken cancellationToken = default);
+}
+
 public interface IWeddingService
 {
     Task<WeddingOverview> GetAsync(CancellationToken cancellationToken = default);

@@ -1,0 +1,414 @@
+@page "/casa/limpezas"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject ICleaningService Cleaning
+
+<PageTitle>Limpezas · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Limpezas" Subtitle="As tarefas de cada divisão, com a periodicidade que escolherem. Todos os dias aparece só o que falta fazer." />
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        List<CleaningChoreStatus> today = [.. _overview.Chores.Where(c => c.IsDue || c.DoneToday)];
+        int pending = today.Count(c => !c.DoneToday);
+        int late = today.Count(c => c.IsLate);
+
+        <section class="card cl-hero @Tone(pending, late)">
+            <div class="cl-ring" style="--cl-progress:@(today.Count == 0 ? 100 : today.Count(c => c.DoneToday) * 100 / today.Count)">
+                <span>@today.Count(c => c.DoneToday)<small>/@today.Count</small></span>
+            </div>
+            <div class="cl-hero-main">
+                <small>@CasaCatalog.Capitalize(_overview.Today.ToString("dddd, d 'de' MMMM", CasaCatalog.Culture))</small>
+                @if (_overview.Chores.Count == 0)
+                {
+                    <strong>Ainda não há limpezas configuradas</strong>
+                    <span class="cs-muted">Cria as divisões e as tarefas de cada uma em «Divisões e tarefas».</span>
+                }
+                else if (pending > 0)
+                {
+                    <strong>@(pending == 1 ? "Falta 1 tarefa hoje" : $"Faltam {pending} tarefas hoje")</strong>
+                    @if (late > 0)
+                    {
+                        <span class="cl-late-note"><Icon Name="IconName.Flag" Size="14" /> @(late == 1 ? "1 está em atraso" : $"{late} estão em atraso")</span>
+                    }
+                    else
+                    {
+                        <span class="cs-muted">Marca cada uma quando estiver feita.</span>
+                    }
+                }
+                else
+                {
+                    <strong>Tudo em dia ✨</strong>
+                    <span class="cs-muted">Não há mais nada para hoje.</span>
+                }
+            </div>
+        </section>
+
+        <div class="fb-tabs">
+            <SegmentedControl Label="Vista das limpezas" Options="ViewOptions" Value="(int)_view" ValueChanged="v => _view = (CleaningView)v" />
+        </div>
+
+        @if (_view == CleaningView.Today)
+        {
+            @if (today.Count == 0 && _overview.Chores.Count > 0)
+            {
+                <p class="cs-muted">Hoje não há limpezas marcadas. 🌿</p>
+            }
+
+            <div class="cl-rooms">
+                @foreach (CleaningRoom room in _overview.Rooms)
+                {
+                    List<CleaningChoreStatus> chores = [.. today.Where(c => c.Chore.RoomId == room.Id).OrderBy(c => c.DoneToday).ThenByDescending(c => c.IsLate).ThenBy(c => c.Chore.Title)];
+
+                    @if (chores.Count > 0)
+                    {
+                        <section class="card cl-room" style="--cl-color:@room.Color" @key="room.Id">
+                            <header class="cl-room-head">
+                                <span class="cl-emoji">@room.Emoji</span>
+                                <h2>@room.Name</h2>
+                                <span class="cs-badge">@chores.Count(c => c.DoneToday)/@chores.Count</span>
+                            </header>
+                            @foreach (CleaningChoreStatus status in chores)
+                            {
+                                <div class="cl-item @(status.DoneToday ? "done" : string.Empty)" @key="status.Chore.Id">
+                                    <button type="button" class="cl-check" role="checkbox" aria-checked="@(status.DoneToday ? "true" : "false")"
+                                            aria-label="Feita: @status.Chore.Title" @onclick="() => ToggleAsync(status)">
+                                        <Icon Name="IconName.Check" Size="16" />
+                                    </button>
+                                    <span class="cs-row-main">
+                                        <span class="cs-row-title">@status.Chore.Title</span>
+                                        <span class="cs-row-meta">
+                                            @CleaningCatalog.Frequency(status.Chore)
+                                            @if (status.DoneToday && status.LastDoneBy is not null)
+                                            {
+                                                <span> · feito por @status.LastDoneBy</span>
+                                            }
+                                        </span>
+                                    </span>
+                                    @if (status.IsLate)
+                                    {
+                                        <span class="cl-late">em atraso desde @status.Due.ToString("d MMM", CasaCatalog.Culture)</span>
+                                    }
+                                </div>
+                            }
+                        </section>
+                    }
+                }
+            </div>
+
+            List<CleaningChoreStatus> upcoming = [.. _overview.Chores.Where(c => !c.IsDue && !c.DoneToday).OrderBy(c => c.Due).ThenBy(c => c.Chore.Title)];
+
+            @if (upcoming.Count > 0)
+            {
+                <details class="card cl-upcoming">
+                    <summary>Em dia <span class="cs-badge">@upcoming.Count</span></summary>
+                    @foreach (CleaningChoreStatus status in upcoming)
+                    {
+                        CleaningRoom? room = _overview.Rooms.FirstOrDefault(r => r.Id == status.Chore.RoomId);
+
+                        <div class="cs-row" @key="status.Chore.Id">
+                            <span class="cl-emoji small">@room?.Emoji</span>
+                            <span class="cs-row-main">
+                                <span class="cs-row-title">@status.Chore.Title</span>
+                                <span class="cs-row-meta">
+                                    @room?.Name · @CleaningCatalog.Frequency(status.Chore)
+                                    @if (status.LastDone is DateOnly lastDone)
+                                    {
+                                        <span> · feito a @lastDone.ToString("d MMM", CasaCatalog.Culture)@(status.LastDoneBy is null ? string.Empty : $" por {status.LastDoneBy}")</span>
+                                    }
+                                </span>
+                            </span>
+                            <span class="cl-next">volta @status.Due.ToString("ddd, d MMM", CasaCatalog.Culture)</span>
+                        </div>
+                    }
+                </details>
+            }
+        }
+        else
+        {
+            <div class="cs-actions">
+                <button type="button" class="btn btn-primary" @onclick="OpenNewRoom"><Icon Name="IconName.Plus" Size="16" /> Divisão</button>
+            </div>
+
+            @if (_overview.Rooms.Count == 0)
+            {
+                <p class="cs-muted">Começa por criar uma divisão (por exemplo, a sala). Depois acrescenta as tarefas de limpeza de cada uma e a frequência com que se fazem.</p>
+            }
+
+            <div class="cl-rooms">
+                @foreach (CleaningRoom room in _overview.Rooms)
+                {
+                    List<CleaningChoreStatus> chores = [.. _overview.Chores.Where(c => c.Chore.RoomId == room.Id).OrderBy(c => c.Chore.Title)];
+
+                    <section class="card cl-room" style="--cl-color:@room.Color" @key="room.Id">
+                        <header class="cl-room-head">
+                            <span class="cl-emoji">@room.Emoji</span>
+                            <h2>@room.Name</h2>
+                            <span class="spacer"></span>
+                            <button type="button" class="icon-btn" aria-label="Editar @room.Name" @onclick="() => OpenEditRoom(room)"><Icon Name="IconName.Pencil" Size="15" /></button>
+                        </header>
+                        @if (chores.Count == 0)
+                        {
+                            <p class="cs-muted">Sem tarefas ainda.</p>
+                        }
+                        @foreach (CleaningChoreStatus status in chores)
+                        {
+                            <div class="cs-row" @key="status.Chore.Id">
+                                <span class="cs-row-main">
+                                    <span class="cs-row-title">@status.Chore.Title</span>
+                                </span>
+                                <span class="cl-freq">@CleaningCatalog.Frequency(status.Chore)</span>
+                                <button type="button" class="icon-btn" aria-label="Editar @status.Chore.Title" @onclick="() => OpenEditChore(status.Chore)"><Icon Name="IconName.Pencil" Size="15" /></button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-ghost cl-add" @onclick="() => OpenNewChore(room.Id)"><Icon Name="IconName.Plus" Size="16" /> Tarefa</button>
+                    </section>
+                }
+            </div>
+        }
+
+        @if (_room is not null)
+        {
+            <Modal Title="@(_isNew ? "Nova divisão" : "Editar divisão")" OnClose="CloseModals" OnSubmit="SaveRoomAsync">
+                <ChildContent>
+                    <label class="cs-field">Nome
+                        <input class="field" list="cl-room-names" maxlength="@CleaningRoom.NameMaxLength" placeholder="Ex.: Sala" @bind="_room.Name" @bind:event="oninput" />
+                    </label>
+                    <datalist id="cl-room-names">
+                        @foreach (string name in CasaCatalog.Rooms)
+                        {
+                            <option value="@name"></option>
+                        }
+                    </datalist>
+                    <EmojiColorPicker Emojis="CleaningCatalog.RoomEmojis" @bind-Emoji="_room.Emoji" @bind-Color="_room.Color" />
+                    @if (!_isNew)
+                    {
+                        int count = _overview.Chores.Count(c => c.Chore.RoomId == _room.Id);
+
+                        @if (count > 0)
+                        {
+                            <p class="cs-muted">Eliminar a divisão elimina também @(count == 1 ? "a tarefa" : $"as {count} tarefas") que tem.</p>
+                        }
+                    }
+                </ChildContent>
+                <Footer>
+                    @if (!_isNew)
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="DeleteRoomAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+                    }
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-ghost" @onclick="CloseModals">Cancelar</button>
+                    <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_room.Name)" @onclick="SaveRoomAsync">Guardar</button>
+                </Footer>
+            </Modal>
+        }
+
+        @if (_chore is not null)
+        {
+            <Modal Title="@(_isNew ? "Nova tarefa" : "Editar tarefa")" OnClose="CloseModals" OnSubmit="SaveChoreAsync">
+                <ChildContent>
+                    <label class="cs-field">Tarefa
+                        <input class="field" maxlength="@CleaningChore.TitleMaxLength" placeholder="Ex.: Aspirar" @bind="_chore.Title" @bind:event="oninput" />
+                    </label>
+                    <label class="cs-field">Divisão
+                        <select class="field" value="@_chore.RoomId" @onchange="e => _chore.RoomId = Guid.Parse(e.Value!.ToString()!)">
+                            @foreach (CleaningRoom room in _overview.Rooms)
+                            {
+                                <option value="@room.Id">@room.Emoji @room.Name</option>
+                            }
+                        </select>
+                    </label>
+                    <div class="cs-field">
+                        <span>Frequência</span>
+                        <div class="cs-chips">
+                            @foreach (FrequencyPreset preset in Presets)
+                            {
+                                <button type="button" class="cs-chip @(!_custom && _chore.Every == 1 && _chore.Unit == preset.Unit ? "on" : string.Empty)" @onclick="() => PickPreset(preset.Unit)">@preset.Label</button>
+                            }
+                            <button type="button" class="cs-chip @(_custom ? "on" : string.Empty)" @onclick="() => _custom = true">Personalizado</button>
+                        </div>
+                    </div>
+                    @if (_custom)
+                    {
+                        <div class="cl-custom">
+                            <span>A cada</span>
+                            <input class="field" type="number" min="1" max="@CleaningChore.MaxEvery" aria-label="Quantidade" @bind="_chore.Every" @bind:event="oninput" />
+                            <select aria-label="Unidade" class="field" value="@_chore.Unit" @onchange="e => _chore.Unit = Enum.Parse<CleaningUnit>(e.Value!.ToString()!)">
+                                @foreach (CleaningUnit unit in Enum.GetValues<CleaningUnit>())
+                                {
+                                    <option value="@unit">@CleaningCatalog.UnitLabel(unit, _chore.Every)</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <p class="cs-hint">@Explain(_chore)</p>
+                </ChildContent>
+                <Footer>
+                    @if (!_isNew)
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="DeleteChoreAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+                    }
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-ghost" @onclick="CloseModals">Cancelar</button>
+                    <button type="button" class="btn btn-primary" disabled="@(string.IsNullOrWhiteSpace(_chore.Title) || _chore.Every < 1 || _chore.Every > CleaningChore.MaxEvery)" @onclick="SaveChoreAsync">Guardar</button>
+                </Footer>
+            </Modal>
+        }
+    }
+</div>
+
+@code {
+    private enum CleaningView { Today, Setup }
+
+    private record FrequencyPreset(CleaningUnit Unit, string Label);
+
+    private static readonly FrequencyPreset[] Presets =
+        [new(CleaningUnit.Day, "Todos os dias"), new(CleaningUnit.Week, "1x por semana"), new(CleaningUnit.Month, "1x por mês")];
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
+        [new((int)CleaningView.Today, "Hoje"), new((int)CleaningView.Setup, "Divisões e tarefas")];
+
+    private CleaningOverview _overview = new();
+    private CleaningView _view = CleaningView.Today;
+    private CleaningRoom? _room;
+    private CleaningChore? _chore;
+    private bool _isNew;
+    private bool _custom;
+    private bool _loadedOnce;
+
+    protected override bool IsEditing => _room is not null || _chore is not null;
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _overview = await Cleaning.GetAsync(cancellationToken);
+
+        if (!_loadedOnce && _overview.Chores.Count == 0)
+        {
+            _view = CleaningView.Setup;
+        }
+
+        _loadedOnce = true;
+    }
+
+    private static string Tone(int pending, int late) => late > 0 ? "late" : pending > 0 ? "pending" : "clear";
+
+    private static string Explain(CleaningChore chore) => chore.Unit switch
+    {
+        CleaningUnit.Week => chore.Every == 1
+            ? "Aparece na lista à segunda-feira e fica até a marcarem como feita. Depois só volta na semana seguinte."
+            : $"Aparece na lista à segunda-feira e, depois de feita, volta {chore.Every} semanas mais tarde.",
+        CleaningUnit.Month => chore.Every == 1
+            ? "Aparece na lista no dia 1 e fica até a marcarem como feita. Depois só volta no mês seguinte."
+            : $"Aparece na lista no dia 1 e, depois de feita, volta {chore.Every} meses mais tarde.",
+        _ => chore.Every == 1
+            ? "Aparece na lista todos os dias até a marcarem como feita."
+            : $"Depois de feita, volta a aparecer {chore.Every} dias mais tarde."
+    };
+
+    private Task ToggleAsync(CleaningChoreStatus status) => status.DoneToday
+        ? RunAsync(() => Cleaning.UndoAsync(status.Chore.Id), "Tarefa reaberta.")
+        : RunAsync(() => Cleaning.CompleteAsync(status.Chore.Id), "Feito! ✨");
+
+    private void OpenNewRoom()
+    {
+        _room = new CleaningRoom();
+        _isNew = true;
+    }
+
+    private void OpenEditRoom(CleaningRoom room)
+    {
+        _room = new CleaningRoom { Id = room.Id, Name = room.Name, Emoji = room.Emoji, Color = room.Color };
+        _isNew = false;
+    }
+
+    private void OpenNewChore(Guid roomId)
+    {
+        _chore = new CleaningChore { RoomId = roomId };
+        _custom = false;
+        _isNew = true;
+    }
+
+    private void OpenEditChore(CleaningChore chore)
+    {
+        _chore = new CleaningChore { Id = chore.Id, RoomId = chore.RoomId, Title = chore.Title, Every = chore.Every, Unit = chore.Unit };
+        _custom = chore.Every != 1;
+        _isNew = false;
+    }
+
+    private void PickPreset(CleaningUnit unit)
+    {
+        _chore!.Every = 1;
+        _chore.Unit = unit;
+        _custom = false;
+    }
+
+    private void CloseModals()
+    {
+        _room = null;
+        _chore = null;
+    }
+
+    private async Task SaveRoomAsync()
+    {
+        if (_room is null || string.IsNullOrWhiteSpace(_room.Name))
+        {
+            return;
+        }
+
+        CleaningRoom room = _room;
+
+        if (await RunAsync(() => Cleaning.SaveRoomAsync(room), _isNew ? "Divisão criada." : "Divisão atualizada.", reload: false))
+        {
+            CloseModals();
+            await RefreshAsync();
+        }
+    }
+
+    private async Task DeleteRoomAsync()
+    {
+        Guid id = _room!.Id;
+
+        if (await RunAsync(() => Cleaning.DeleteRoomAsync(id), "Divisão eliminada.", reload: false))
+        {
+            CloseModals();
+            await RefreshAsync();
+        }
+    }
+
+    private async Task SaveChoreAsync()
+    {
+        if (_chore is null || string.IsNullOrWhiteSpace(_chore.Title) || _chore.Every < 1 || _chore.Every > CleaningChore.MaxEvery)
+        {
+            return;
+        }
+
+        CleaningChore chore = _chore;
+
+        if (await RunAsync(() => Cleaning.SaveChoreAsync(chore), _isNew ? "Tarefa criada." : "Tarefa atualizada.", reload: false))
+        {
+            CloseModals();
+            await RefreshAsync();
+        }
+    }
+
+    private async Task DeleteChoreAsync()
+    {
+        Guid id = _chore!.Id;
+
+        if (await RunAsync(() => Cleaning.DeleteChoreAsync(id), "Tarefa eliminada.", reload: false))
+        {
+            CloseModals();
+            await RefreshAsync();
+        }
+    }
+}

@@ -182,6 +182,9 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         await context.WeddingCategories.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.WeddingVendors.Where(v => v.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.WeddingTasks.Where(t => t.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.CleaningCompletions.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.CleaningChores.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.CleaningRooms.Where(r => r.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.HouseholdInvites.Where(i => i.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.Households.Where(h => h.Id == householdId).ExecuteDeleteAsync(cancellationToken);
         await PurgeHouseholdAgendaAsync(context, householdId, cancellationToken);
@@ -215,6 +218,12 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         dashboard.Birthdays = [.. EventExpander.Expand(events.Where(e => e.Kind == FamilyEventKind.Birthday), today, today.AddDays(DashboardBirthdayDays)).OrderBy(o => o.Start).Take(4)];
         dashboard.Goals = await context.SavingsGoals.AsNoTracking().Where(g => g.HouseholdId == householdId).OrderBy(g => g.CreatedAt).ToListAsync(cancellationToken);
         dashboard.WeddingDate = await context.WeddingDetails.AsNoTracking().Where(w => w.HouseholdId == householdId).Select(w => w.Date).FirstOrDefaultAsync(cancellationToken);
+
+        List<CleaningChoreStatus> cleaning = await CleaningService.BuildStatusesAsync(context, householdId, DateOnly.FromDateTime(today), cancellationToken);
+        dashboard.CleaningChores = cleaning.Count;
+        dashboard.CleaningDue = cleaning.Count(c => c.IsDue);
+        dashboard.CleaningLate = cleaning.Count(c => c.IsLate);
+        dashboard.CleaningDoneToday = cleaning.Count(c => c.DoneToday);
 
         return dashboard;
     }

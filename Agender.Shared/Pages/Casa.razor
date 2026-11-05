@@ -52,6 +52,35 @@
                 <span class="cs-link">Abrir <Icon Name="IconName.ChevronRight" Size="14" /></span>
             </a>
 
+            <a class="card cl-hero cl-banner cs-wide @(_dashboard.CleaningLate > 0 ? "late" : _dashboard.CleaningDue > 0 ? "pending" : "clear")" href="casa/limpezas">
+                @{
+                    int cleaningToday = _dashboard.CleaningDue + _dashboard.CleaningDoneToday;
+                }
+                <div class="cl-ring" style="--cl-progress:@(cleaningToday == 0 ? 100 : _dashboard.CleaningDoneToday * 100 / cleaningToday)">
+                    <span>@_dashboard.CleaningDoneToday<small>/@cleaningToday</small></span>
+                </div>
+                <span class="cl-hero-main">
+                    <small>Limpezas de hoje</small>
+                    @if (_dashboard.CleaningChores == 0)
+                    {
+                        <strong>Ainda sem limpezas configuradas</strong>
+                    }
+                    else if (_dashboard.CleaningDue > 0)
+                    {
+                        <strong>@(_dashboard.CleaningDue == 1 ? "Falta 1 tarefa" : $"Faltam {_dashboard.CleaningDue} tarefas")</strong>
+                        @if (_dashboard.CleaningLate > 0)
+                        {
+                            <span class="cl-late-note"><Icon Name="IconName.Flag" Size="14" /> @(_dashboard.CleaningLate == 1 ? "1 em atraso" : $"{_dashboard.CleaningLate} em atraso")</span>
+                        }
+                    }
+                    else
+                    {
+                        <strong>Tudo em dia ✨</strong>
+                    }
+                </span>
+                <span class="cs-link">Abrir <Icon Name="IconName.ChevronRight" Size="14" /></span>
+            </a>
+
             <a class="card cs-feature" href="casa/financas">
                 <header class="cs-card-head">
                     <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>
