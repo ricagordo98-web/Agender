@@ -105,6 +105,12 @@ public class CasaDashboard
     public int CleaningDoneToday { get; set; }
 
     public int CleaningChores { get; set; }
+
+    public string? LunchToday { get; set; }
+
+    public string? DinnerToday { get; set; }
+
+    public int MealsPlannedNextWeek { get; set; }
 }
 
 public class CleaningHistoryEntry

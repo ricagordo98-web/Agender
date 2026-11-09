@@ -166,6 +166,14 @@
                 </header>
                 <TraderIntegrationPanel />
             }
+            else if (_active == MealsId)
+            {
+                <header class="panel-head">
+                    <h2>Refeições</h2>
+                    <p>Fontes de receitas, despensa e envio da lista de compras para o WhatsApp. Partilhado com toda a casa.</p>
+                </header>
+                <MealSettingsPanel />
+            }
             else if (_active == DataId)
             {
                 <header class="panel-head">
@@ -227,6 +235,7 @@
     private const string IntegrationsId = "integracoes";
     private const string TraderId = "trader";
     private const string DataId = "dados";
+    private const string MealsId = "refeicoes";
     private const string AccountId = "conta";
 
     private record Category(string Id, string Label, IconName Icon);
@@ -239,6 +248,7 @@
         new(TimerId, "Cronómetro", IconName.Clock),
         new(IntegrationsId, "Google Calendar", IconName.Share),
         new(TraderId, "Trader", IconName.Wallet),
+        new(MealsId, "Refeições", IconName.Utensils),
         new(DataId, "Dados", IconName.Download),
         new(AccountId, "Conta", IconName.Lock)
     ];

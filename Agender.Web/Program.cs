@@ -9,6 +9,7 @@ using Agender.Shared.Services;
 using Agender.Web.Api;
 using Agender.Web.Auth;
 using Agender.Web.Components;
+using Agender.Web.Meals;
 using Agender.Web.Realtime;
 using Agender.Web.Tunnel;
 using FluentValidation;
@@ -75,6 +76,8 @@ builder.Services.AddAuthorization();
 builder.Services.AddValidatorsFromAssemblyContaining<TimeEntryDtoValidator>();
 builder.Services.AddSignalR();
 builder.Services.AddHostedService<ChangeForwarder>();
+builder.Services.AddHostedService<RecipeCatalogWorker>();
+builder.Services.AddHostedService<MealMessageWorker>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 

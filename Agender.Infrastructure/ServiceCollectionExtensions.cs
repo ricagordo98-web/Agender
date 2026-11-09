@@ -7,6 +7,7 @@ using Agender.Infrastructure.Sharing;
 using Agender.Infrastructure.Services;
 using Agender.Infrastructure.Trader;
 using Agender.Shared.Services;
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -49,6 +50,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IHomeProjectService, HomeProjectService>();
         services.AddScoped<IWeddingService, WeddingService>();
         services.AddScoped<ICleaningService, CleaningService>();
+        services.AddScoped<IMealService, MealService>();
+        services.AddScoped<IMealSettingsService, MealSettingsService>();
+        services.AddSingleton<RecipeCatalogSync>();
+        services.AddSingleton<MealMessageDispatcher>();
+        services.AddHttpClient<RecipeScraper>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(20);
+                client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36");
+                client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("pt-PT,pt;q=0.9");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AutomaticDecompression = DecompressionMethods.All });
+        services.AddHttpClient<WhatsAppSender>(client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddScoped<IFinanceService, FinanceService>();
         services.AddScoped<IFinanceImportService, FinanceImportService>();
         services.AddScoped<IFamilyEventService, FamilyEventService>();

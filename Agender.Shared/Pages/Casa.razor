@@ -81,6 +81,23 @@
                 <span class="cs-link">Abrir <Icon Name="IconName.ChevronRight" Size="14" /></span>
             </a>
 
+            <a class="card ml-banner cs-wide" href="casa/refeicoes">
+                <span class="ml-banner-icon" aria-hidden="true">🍽️</span>
+                <span class="cl-hero-main">
+                    <small>Refeições de hoje</small>
+                    @if (_dashboard.LunchToday is null && _dashboard.DinnerToday is null)
+                    {
+                        <strong>Nada planeado para hoje</strong>
+                    }
+                    else
+                    {
+                        <strong>☀️ @(_dashboard.LunchToday ?? "—") · 🌙 @(_dashboard.DinnerToday ?? "—")</strong>
+                    }
+                    <span class="cs-muted">Próxima semana: @_dashboard.MealsPlannedNextWeek de 14 refeições planeadas</span>
+                </span>
+                <span class="cs-link">Abrir <Icon Name="IconName.ChevronRight" Size="14" /></span>
+            </a>
+
             <a class="card cs-feature" href="casa/financas">
                 <header class="cs-card-head">
                     <span class="cs-icon"><Icon Name="IconName.Wallet" Size="16" /></span>

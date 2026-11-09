@@ -34,21 +34,19 @@ if ($null -eq $appSource) {
 
 Invoke-Step 'Copiar a app' { robocopy $appSource.DirectoryName (Join-Path $Output 'App-Windows') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null; $global:LASTEXITCODE = [int]($LASTEXITCODE -ge 8) }
 
-Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.ps1') $Output -Force
-Copy-Item (Join-Path $PSScriptRoot 'Servidor-Partilhado.ps1') $Output -Force
 Copy-Item (Join-Path $PSScriptRoot 'Iniciar-Agender.bat') $Output -Force
 
-$launcherPath = Join-Path $Output 'Agender-Iniciar.exe'
-$iconPath = Join-Path $Output 'App-Windows\appicon.ico'
-$csc = Join-Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) 'csc.exe'
-Invoke-Step 'Executável de arranque' { & $csc /nologo /target:winexe /out:$launcherPath /win32icon:$iconPath /reference:System.Windows.Forms.dll (Join-Path $PSScriptRoot 'IniciarAgender.cs') }
+foreach ($stale in 'Iniciar-Agender.ps1', 'Servidor-Partilhado.ps1', 'Agender-Iniciar.exe', 'Agender.exe', 'Agender.lnk', 'Agender-Android.apk') {
+    Remove-Item (Join-Path $Output $stale) -Force -ErrorAction SilentlyContinue
+}
 
+$launcherPath = Join-Path $Output 'Iniciar-Agender.bat'
 $shortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Agender.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $launcherPath
 $shortcut.WorkingDirectory = $Output
-$shortcut.IconLocation = $launcherPath
+$shortcut.IconLocation = Join-Path $Output 'App-Windows\appicon.ico'
 $shortcut.Save()
 
 Write-Host "`nConcluído. Atalho criado: $shortcutPath" -ForegroundColor Green

@@ -94,11 +94,11 @@
                                                 <span> · feito por @status.LastDoneBy</span>
                                             }
                                         </span>
+                                        @if (status.IsLate)
+                                        {
+                                            <span class="cl-late">em atraso desde @status.Due.ToString("d MMM", CasaCatalog.Culture)</span>
+                                        }
                                     </span>
-                                    @if (status.IsLate)
-                                    {
-                                        <span class="cl-late">em atraso desde @status.Due.ToString("d MMM", CasaCatalog.Culture)</span>
-                                    }
                                 </div>
                             }
                         </section>

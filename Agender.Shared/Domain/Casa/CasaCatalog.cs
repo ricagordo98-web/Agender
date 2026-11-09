@@ -72,7 +72,7 @@ public static class CasaCatalog
     private static readonly (string Category, string[] Keys)[] GuessMap =
     [
         ("Frutas e Legumes", ["maçã", "maca", "banana", "laranja", "pera", "alface", "tomate", "cebola", "alho", "batata", "cenoura", "fruta", "legume", "limão", "limao", "uva", "morango", "courgette", "brócolo", "brocolo", "espinafre", "pepino", "pimento", "abacate", "kiwi", "melão", "melancia", "salsa", "coentro"]),
-        ("Talho e Peixaria", ["frango", "carne", "porco", "vaca", "peru", "bife", "picada", "salsicha", "fiambre", "presunto", "chouriço", "bacalhau", "peixe", "salmão", "salmao", "pescada", "atum fresco", "camarão", "dourada", "robalo", "polvo", "lula"]),
+        ("Talho e Peixaria", ["frango", "carne", "porco", "vaca", "peru", "bife", "picada", "salsicha", "fiambre", "presunto", "chouriço", "bacalhau", "peixe", "salmão", "salmao", "pescada", "atum fresco", "camarão", "dourada", "robalo", "polvo", "lula", "pato", "borrego", "cabrito", "entrecosto", "lombo", "toucinho", "bacon", "coelho", "costeleta", "alheira", "morcela"]),
         ("Laticínios e Ovos", ["leite", "iogurte", "queijo", "manteiga", "natas", "ovo", "ovos", "requeijão", "kefir"]),
         ("Padaria", ["pão", "pao", "broa", "croissant", "tosta", "bolo", "baguete", "papo"]),
         ("Congelados", ["congelad", "gelado", "ervilha", "pizza"]),

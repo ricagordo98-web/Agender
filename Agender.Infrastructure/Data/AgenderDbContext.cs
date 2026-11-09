@@ -95,6 +95,18 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<CleaningCompletion> CleaningCompletions => Set<CleaningCompletion>();
 
+    public DbSet<Recipe> Recipes => Set<Recipe>();
+
+    public DbSet<MealPlanEntry> MealPlanEntries => Set<MealPlanEntry>();
+
+    public DbSet<RecipeSource> RecipeSources => Set<RecipeSource>();
+
+    public DbSet<CatalogRecipe> CatalogRecipes => Set<CatalogRecipe>();
+
+    public DbSet<MealSettings> MealPreferences => Set<MealSettings>();
+
+    public DbSet<MealWeek> MealWeeks => Set<MealWeek>();
+
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
 
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
@@ -432,6 +444,73 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.HasIndex(c => new { c.ChoreId, c.Date });
             entity.HasIndex(c => c.HouseholdId);
             entity.HasOne<CleaningChore>().WithMany().HasForeignKey(c => c.ChoreId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Recipe>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Title).HasMaxLength(Recipe.TitleMaxLength);
+            entity.Property(r => r.ImageUrl).HasMaxLength(Recipe.UrlMaxLength);
+            entity.Property(r => r.SourceUrl).HasMaxLength(Recipe.UrlMaxLength);
+            entity.Property(r => r.SourceName).HasMaxLength(Recipe.SourceMaxLength);
+            entity.Property(r => r.Category).HasMaxLength(Recipe.CategoryMaxLength);
+            entity.Property(r => r.Ingredients).HasMaxLength(Recipe.IngredientsMaxLength);
+            entity.Property(r => r.Instructions).HasMaxLength(Recipe.InstructionsMaxLength);
+            entity.HasIndex(r => r.HouseholdId);
+        });
+
+        modelBuilder.Entity<MealPlanEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Slot).HasConversion<string>().HasMaxLength(10);
+            entity.Property(e => e.Title).HasMaxLength(MealPlanEntry.TitleMaxLength);
+            entity.HasIndex(e => new { e.HouseholdId, e.Date, e.Slot }).IsUnique();
+            entity.HasOne<Recipe>().WithMany().HasForeignKey(e => e.RecipeId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RecipeSource>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Name).HasMaxLength(RecipeSource.NameMaxLength);
+            entity.Property(s => s.SitemapUrl).HasMaxLength(RecipeSource.UrlMaxLength);
+            entity.Property(s => s.UrlFilter).HasMaxLength(RecipeSource.FilterMaxLength);
+            entity.Property(s => s.LastError).HasMaxLength(MealWeek.ErrorMaxLength);
+            entity.Ignore(s => s.RecipeCount);
+            entity.Ignore(s => s.PendingCount);
+            entity.HasIndex(s => s.HouseholdId);
+        });
+
+        modelBuilder.Entity<CatalogRecipe>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Url).HasMaxLength(Recipe.UrlMaxLength);
+            entity.Property(c => c.Title).HasMaxLength(Recipe.TitleMaxLength);
+            entity.Property(c => c.ImageUrl).HasMaxLength(Recipe.UrlMaxLength);
+            entity.Property(c => c.Category).HasMaxLength(Recipe.CategoryMaxLength);
+            entity.Property(c => c.Ingredients).HasMaxLength(Recipe.IngredientsMaxLength);
+            entity.Property(c => c.Instructions).HasMaxLength(Recipe.InstructionsMaxLength);
+            entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(12);
+            entity.Ignore(c => c.SourceName);
+            entity.HasIndex(c => new { c.SourceId, c.Url }).IsUnique();
+            entity.HasIndex(c => new { c.HouseholdId, c.Status });
+            entity.HasOne<RecipeSource>().WithMany().HasForeignKey(c => c.SourceId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MealSettings>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Pantry).HasMaxLength(MealSettings.PantryMaxLength);
+            entity.Property(s => s.WhatsAppApiUrl).HasMaxLength(MealSettings.UrlMaxLength);
+            entity.Property(s => s.WhatsAppInstance).HasMaxLength(MealSettings.TextMaxLength);
+            entity.Property(s => s.WhatsAppDestination).HasMaxLength(MealSettings.TextMaxLength);
+            entity.HasIndex(s => s.HouseholdId).IsUnique();
+        });
+
+        modelBuilder.Entity<MealWeek>(entity =>
+        {
+            entity.HasKey(w => w.Id);
+            entity.Property(w => w.LastError).HasMaxLength(MealWeek.ErrorMaxLength);
+            entity.HasIndex(w => new { w.HouseholdId, w.WeekStart }).IsUnique();
         });
 
         modelBuilder.Entity<FinanceTransaction>(entity =>

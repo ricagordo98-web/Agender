@@ -81,6 +81,52 @@ public interface ICleaningService
     Task<List<CleaningHistoryEntry>> GetHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 }
 
+public interface IMealService
+{
+    Task<MealWeekOverview> GetWeekAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
+
+    Task<MealPlanEntry> SaveEntryAsync(MealPlanEntry entry, CancellationToken cancellationToken = default);
+
+    Task DeleteEntryAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<List<Recipe>> GetRecipesAsync(CancellationToken cancellationToken = default);
+
+    Task<Recipe> SaveRecipeAsync(Recipe recipe, CancellationToken cancellationToken = default);
+
+    Task DeleteRecipeAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<Recipe> ImportRecipeAsync(string url, CancellationToken cancellationToken = default);
+
+    Task<CatalogPage> SearchCatalogAsync(string? query, string? category, int skip, CancellationToken cancellationToken = default);
+
+    Task<Recipe> AdoptCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default);
+
+    Task<List<MealIngredientLine>> GetShoppingPreviewAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
+
+    Task<ShoppingList> CreateShoppingListAsync(DateOnly weekStart, List<MealIngredientLine> lines, CancellationToken cancellationToken = default);
+
+    Task<string> GetShareTextAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
+
+    Task SendWhatsAppAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
+}
+
+public interface IMealSettingsService
+{
+    Task<MealSettingsDto> GetAsync(CancellationToken cancellationToken = default);
+
+    Task<MealSettingsDto> SaveAsync(MealSettingsDto settings, CancellationToken cancellationToken = default);
+
+    Task<RecipeSource> SaveSourceAsync(RecipeSource source, CancellationToken cancellationToken = default);
+
+    Task DeleteSourceAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<int> AddSuggestedSourcesAsync(CancellationToken cancellationToken = default);
+
+    Task RefreshSourcesAsync(CancellationToken cancellationToken = default);
+
+    Task SendTestAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IWeddingService
 {
     Task<WeddingOverview> GetAsync(CancellationToken cancellationToken = default);

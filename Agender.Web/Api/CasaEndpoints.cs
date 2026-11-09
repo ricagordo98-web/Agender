@@ -48,6 +48,83 @@ public static class CasaEndpoints
         MapFamilyEvents(group.MapGroup("/events"));
         MapWedding(group.MapGroup("/wedding"));
         MapCleaning(group.MapGroup("/cleaning"));
+        MapMeals(group.MapGroup("/meals"));
+        MapMealSettings(group.MapGroup("/meal-settings"));
+    }
+
+    private static void MapMeals(RouteGroupBuilder group)
+    {
+        group.MapGet("/week", async (DateOnly start, IMealService service, CancellationToken ct) => await service.GetWeekAsync(start, ct));
+
+        group.MapPost("/entries", async (MealPlanEntry entry, IMealService service, CancellationToken ct) => await service.SaveEntryAsync(entry, ct));
+
+        group.MapDelete("/entries/{id:guid}", async (Guid id, IMealService service, CancellationToken ct) =>
+        {
+            await service.DeleteEntryAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapGet("/recipes", async (IMealService service, CancellationToken ct) => await service.GetRecipesAsync(ct));
+
+        group.MapPost("/recipes", async (Recipe recipe, IMealService service, CancellationToken ct) => await service.SaveRecipeAsync(recipe, ct));
+
+        group.MapDelete("/recipes/{id:guid}", async (Guid id, IMealService service, CancellationToken ct) =>
+        {
+            await service.DeleteRecipeAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/recipes/import", async (ImportRecipeRequest request, IMealService service, CancellationToken ct) =>
+            await service.ImportRecipeAsync(request.Url, ct));
+
+        group.MapGet("/catalog", async (string? q, string? category, int? skip, IMealService service, CancellationToken ct) =>
+            await service.SearchCatalogAsync(q, category, skip ?? 0, ct));
+
+        group.MapPost("/catalog/{id:guid}/adopt", async (Guid id, IMealService service, CancellationToken ct) =>
+            await service.AdoptCatalogRecipeAsync(id, ct));
+
+        group.MapGet("/shopping", async (DateOnly start, IMealService service, CancellationToken ct) => await service.GetShoppingPreviewAsync(start, ct));
+
+        group.MapPost("/shopping", async (MealShoppingRequest request, IMealService service, CancellationToken ct) =>
+            await service.CreateShoppingListAsync(request.WeekStart, request.Lines, ct));
+
+        group.MapGet("/share", async (DateOnly start, IMealService service, CancellationToken ct) =>
+            new MealShareText(await service.GetShareTextAsync(start, ct)));
+
+        group.MapPost("/send", async (DateOnly start, IMealService service, CancellationToken ct) =>
+        {
+            await service.SendWhatsAppAsync(start, ct);
+            return Results.NoContent();
+        });
+    }
+
+    private static void MapMealSettings(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (IMealSettingsService service, CancellationToken ct) => await service.GetAsync(ct));
+
+        group.MapPut("/", async (MealSettingsDto settings, IMealSettingsService service, CancellationToken ct) => await service.SaveAsync(settings, ct));
+
+        group.MapPost("/sources", async (RecipeSource source, IMealSettingsService service, CancellationToken ct) => await service.SaveSourceAsync(source, ct));
+
+        group.MapDelete("/sources/{id:guid}", async (Guid id, IMealSettingsService service, CancellationToken ct) =>
+        {
+            await service.DeleteSourceAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/sources/suggested", async (IMealSettingsService service, CancellationToken ct) => await service.AddSuggestedSourcesAsync(ct));
+
+        group.MapPost("/sources/refresh", async (IMealSettingsService service, CancellationToken ct) =>
+        {
+            await service.RefreshSourcesAsync(ct);
+            return Results.NoContent();
+        });
+
+        group.MapPost("/test", async (IMealSettingsService service, CancellationToken ct) =>
+        {
+            await service.SendTestAsync(ct);
+            return Results.NoContent();
+        });
     }
 
     private static void MapShopping(RouteGroupBuilder group)

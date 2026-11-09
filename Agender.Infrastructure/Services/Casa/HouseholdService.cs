@@ -182,6 +182,12 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         await context.WeddingCategories.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.WeddingVendors.Where(v => v.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.WeddingTasks.Where(t => t.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.MealPlanEntries.Where(e => e.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.MealWeeks.Where(w => w.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.MealPreferences.Where(s => s.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.Recipes.Where(r => r.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.CatalogRecipes.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.RecipeSources.Where(s => s.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.CleaningCompletions.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.CleaningChores.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.CleaningRooms.Where(r => r.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
@@ -224,6 +230,19 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         dashboard.CleaningDue = cleaning.Count(c => c.IsDue);
         dashboard.CleaningLate = cleaning.Count(c => c.IsLate);
         dashboard.CleaningDoneToday = cleaning.Count(c => c.DoneToday);
+
+        DateOnly todayDate = DateOnly.FromDateTime(today);
+        (List<MealPlanEntry> meals, Dictionary<Guid, Recipe> recipes) = await MealMessages.LoadWeekAsync(context, householdId, MealCatalog.WeekStartOf(todayDate), cancellationToken);
+        string? MealTitle(MealSlot slot) => meals.FirstOrDefault(m => m.Date == todayDate && m.Slot == slot) is { } meal
+            ? meal.RecipeId is Guid id && recipes.TryGetValue(id, out Recipe? recipe) ? recipe.Title : meal.Title
+            : null;
+
+        dashboard.LunchToday = MealTitle(MealSlot.Lunch);
+        dashboard.DinnerToday = MealTitle(MealSlot.Dinner);
+
+        DateOnly nextWeek = MealCatalog.WeekStartOf(todayDate).AddDays(7);
+        DateOnly nextWeekEnd = nextWeek.AddDays(6);
+        dashboard.MealsPlannedNextWeek = await context.MealPlanEntries.CountAsync(e => e.HouseholdId == householdId && e.Date >= nextWeek && e.Date <= nextWeekEnd, cancellationToken);
 
         return dashboard;
     }

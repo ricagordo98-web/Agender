@@ -1,0 +1,319 @@
+@inject IMealSettingsService MealConfig
+@inject IToastService Toasts
+
+@if (!_loaded)
+{
+    <p class="hint">A carregar…</p>
+}
+else if (_form is null)
+{
+    <p class="hint">@(_error ?? "Não foi possível carregar as definições das refeições.")</p>
+}
+else
+{
+    <section class="ms-section">
+        <h3>Fontes de receitas</h3>
+        <p class="hint">
+            O Agender lê o <em>sitemap</em> de cada site, encontra as páginas de receitas e vai buscando a foto, os ingredientes e o tempo aos poucos, em segundo plano.
+            As receitas aparecem em Casa → Refeições → Receitas → Catálogo. Também podes importar qualquer receita colando o link.
+        </p>
+
+        @if (_form.Sources.Count == 0)
+        {
+            <p class="hint">Ainda não há fontes configuradas.</p>
+        }
+
+        @foreach (RecipeSource source in _form.Sources)
+        {
+            <div class="ms-source @(source.IsEnabled ? string.Empty : "off")" @key="source.Id">
+                <div class="ms-source-main">
+                    <strong>@source.Name</strong>
+                    <span class="ms-url">@source.SitemapUrl@(string.IsNullOrEmpty(source.UrlFilter) ? string.Empty : $" · só «{source.UrlFilter}»")</span>
+                    <span class="ms-status">@Status(source)</span>
+                    @if (source.LastError is not null)
+                    {
+                        <span class="ms-error">@source.LastError</span>
+                    }
+                </div>
+                <ToggleSwitch Label="@($"Usar {source.Name}")" Value="source.IsEnabled" ValueChanged="value => ToggleSourceAsync(source, value)" />
+                <button type="button" class="icon-btn" aria-label="Editar @source.Name" @onclick="() => EditSource(source)"><Icon Name="IconName.Pencil" Size="15" /></button>
+            </div>
+        }
+
+        <div class="account-actions">
+            <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="NewSource"><Icon Name="IconName.Plus" Size="16" /> Fonte</button>
+            @if (MealCatalog.SuggestedSources.Any(s => _form.Sources.All(x => x.SitemapUrl != s.SitemapUrl)))
+            {
+                <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="AddSuggestedAsync">Adicionar Continente e Pingo Doce</button>
+            }
+            @if (_form.Sources.Count > 0)
+            {
+                <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="RefreshAsync"><Icon Name="IconName.Refresh" Size="15" /> Atualizar agora</button>
+            }
+        </div>
+    </section>
+
+    <section class="ms-section">
+        <h3>Em casa</h3>
+        <SettingRow Title="Pessoas por refeição" Description="O número de doses por omissão ao planear. As quantidades da lista de compras ajustam-se a isto.">
+            <input class="field ms-number" type="number" min="1" max="@MealSettings.MaxPeople" aria-label="Pessoas por refeição" @bind="_form.People" />
+        </SettingRow>
+        <SettingRow Title="Despensa" Description="O que têm sempre em casa, um por linha. Estes ingredientes aparecem desmarcados ao criar a lista de compras." Stacked="true">
+            <textarea class="field" rows="6" maxlength="@MealSettings.PantryMaxLength" aria-label="Despensa" @bind="_form.Pantry"></textarea>
+        </SettingRow>
+    </section>
+
+    <section class="ms-section">
+        <h3>WhatsApp</h3>
+        <p class="hint">
+            O envio usa a <strong>Evolution API</strong>, um serviço que corre neste computador (por exemplo em Docker) e se liga ao teu WhatsApp por QR code.
+            Funciona para números e para grupos. Atenção: não é uma integração oficial do WhatsApp, por isso existe o risco de o número ser bloqueado.
+            A mensagem só sai se o servidor do Agender estiver ligado; se estiver desligado à hora marcada, é enviada assim que voltar a ligar (até ao início dessa semana).
+        </p>
+        <SettingRow Title="Envio automático" Description="Envia a ementa e a lista de compras da semana seguinte no dia e hora escolhidos.">
+            <ToggleSwitch Label="Envio automático" Value="_form.WhatsAppEnabled" ValueChanged="value => _form.WhatsAppEnabled = value" />
+        </SettingRow>
+        <div class="ms-grid">
+            <label class="cs-field">Endereço da Evolution API
+                <input class="field" placeholder="http://localhost:8080" maxlength="@MealSettings.UrlMaxLength" @bind="_form.WhatsAppApiUrl" />
+            </label>
+            <label class="cs-field">Instância
+                <input class="field" placeholder="Ex.: agender" maxlength="@MealSettings.TextMaxLength" @bind="_form.WhatsAppInstance" />
+            </label>
+            <label class="cs-field">Chave da API
+                <input class="field" type="password" autocomplete="off" placeholder="@(_form.HasWhatsAppApiKey ? "•••••• (guardada — escreve para trocar)" : "A chave definida na Evolution API")" @bind="_apiKey" />
+            </label>
+            <label class="cs-field">Destino
+                <input class="field" placeholder="351912345678 ou 1203…@@g.us" maxlength="@MealSettings.TextMaxLength" @bind="_form.WhatsAppDestination" />
+            </label>
+            <label class="cs-field">Dia
+                <select class="field" value="@_form.SendDay" @onchange="e => _form.SendDay = Enum.Parse<DayOfWeek>(e.Value!.ToString()!)">
+                    @foreach (DayOfWeek day in Days)
+                    {
+                        <option value="@day">@CasaCatalog.Capitalize(CasaCatalog.Culture.DateTimeFormat.GetDayName(day))</option>
+                    }
+                </select>
+            </label>
+            <label class="cs-field">Hora
+                <input class="field" type="time" @bind="_form.SendTime" />
+            </label>
+        </div>
+        <p class="hint">Para um número usa o indicativo sem «+» (351…). Para um grupo usa o ID do grupo que a Evolution API mostra (termina em <code>@@g.us</code>).</p>
+        @if (_form.WhatsAppEnabled)
+        {
+            DateTime next = MealCatalog.NextScheduled(DateTime.Now, _form.SendDay, _form.SendTime);
+            <p class="hint ms-next">
+                Próximo envio: <strong>@next.ToString("dddd, d 'de' MMMM 'às' HH:mm", CasaCatalog.Culture)</strong>,
+                com a semana de @MealCatalog.WeekLabel(MealCatalog.TargetWeek(DateOnly.FromDateTime(next))).
+            </p>
+        }
+    </section>
+
+    <div class="account-actions ms-save">
+        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="SaveAsync"><Icon Name="IconName.Check" Size="16" /> Guardar</button>
+        <button type="button" class="btn btn-ghost" disabled="@(_busy || !_form.HasWhatsAppApiKey)" @onclick="SendTestAsync">Enviar mensagem de teste</button>
+    </div>
+
+    @if (_source is not null)
+    {
+        <Modal Title="@(_isNewSource ? "Nova fonte de receitas" : "Editar fonte")" OnClose="() => _source = null" OnSubmit="SaveSourceAsync">
+            <ChildContent>
+                <label class="cs-field">Nome
+                    <input class="field" maxlength="@RecipeSource.NameMaxLength" placeholder="Ex.: Continente" @bind="_source.Name" @bind:event="oninput" />
+                </label>
+                <label class="cs-field">Endereço do sitemap
+                    <input class="field" maxlength="@RecipeSource.UrlMaxLength" placeholder="https://site.pt/sitemap.xml" @bind="_source.SitemapUrl" @bind:event="oninput" />
+                </label>
+                <label class="cs-field">Só páginas com (opcional)
+                    <input class="field" maxlength="@RecipeSource.FilterMaxLength" placeholder="/receitas/" @bind="_source.UrlFilter" />
+                </label>
+                <p class="cs-hint">
+                    Quase todos os sites têm um sitemap em <code>/sitemap.xml</code> ou <code>/sitemap_index.xml</code>. O filtro serve para ficar só com as páginas de receitas.
+                    Páginas sem receita são ignoradas automaticamente.
+                </p>
+            </ChildContent>
+            <Footer>
+                @if (!_isNewSource)
+                {
+                    <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="DeleteSourceAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+                }
+                <span class="spacer"></span>
+                <button type="button" class="btn btn-ghost" @onclick="() => _source = null">Cancelar</button>
+                <button type="button" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_source.Name) || string.IsNullOrWhiteSpace(_source.SitemapUrl))" @onclick="SaveSourceAsync">Guardar</button>
+            </Footer>
+        </Modal>
+    }
+}
+
+@code {
+    private static readonly DayOfWeek[] Days =
+        [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
+
+    private MealSettingsDto? _form;
+    private RecipeSource? _source;
+    private string? _apiKey;
+    private string? _error;
+    private bool _isNewSource;
+    private bool _loaded;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _form = await MealConfig.GetAsync();
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+        }
+
+        _loaded = true;
+    }
+
+    private static string Status(RecipeSource source)
+    {
+        if (!source.IsEnabled)
+        {
+            return "Desativada";
+        }
+
+        if (source.LastSyncAt is null)
+        {
+            return "À espera da primeira leitura (começa dentro de um minuto)…";
+        }
+
+        string text = source.RecipeCount == 1 ? "1 receita pronta" : $"{source.RecipeCount} receitas prontas";
+
+        if (source.PendingCount > 0)
+        {
+            text += $" · {source.PendingCount} por carregar";
+        }
+
+        return text + $" · sitemap lido a {source.LastSyncAt.Value.ToLocalTime().ToString("d MMM 'às' HH:mm", CasaCatalog.Culture)}";
+    }
+
+    private void NewSource()
+    {
+        _source = new RecipeSource();
+        _isNewSource = true;
+    }
+
+    private void EditSource(RecipeSource source)
+    {
+        _source = new RecipeSource { Id = source.Id, Name = source.Name, SitemapUrl = source.SitemapUrl, UrlFilter = source.UrlFilter, IsEnabled = source.IsEnabled };
+        _isNewSource = false;
+    }
+
+    private async Task SaveSourceAsync()
+    {
+        if (_source is null || string.IsNullOrWhiteSpace(_source.Name) || string.IsNullOrWhiteSpace(_source.SitemapUrl))
+        {
+            return;
+        }
+
+        RecipeSource source = _source;
+
+        if (await RunAsync(() => MealConfig.SaveSourceAsync(source), _isNewSource ? "Fonte adicionada. A leitura começa dentro de um minuto." : "Fonte atualizada."))
+        {
+            _source = null;
+        }
+    }
+
+    private async Task DeleteSourceAsync()
+    {
+        Guid id = _source!.Id;
+
+        if (await RunAsync(() => MealConfig.DeleteSourceAsync(id), "Fonte eliminada."))
+        {
+            _source = null;
+        }
+    }
+
+    private Task ToggleSourceAsync(RecipeSource source, bool value) =>
+        RunAsync(() => MealConfig.SaveSourceAsync(new RecipeSource { Id = source.Id, Name = source.Name, SitemapUrl = source.SitemapUrl, UrlFilter = source.UrlFilter, IsEnabled = value }),
+            value ? "Fonte ativada." : "Fonte desativada.");
+
+    private async Task AddSuggestedAsync()
+    {
+        int added = 0;
+
+        if (await RunAsync(async () => added = await MealConfig.AddSuggestedSourcesAsync(), null))
+        {
+            Toasts.Show(added == 1 ? "1 fonte adicionada." : $"{added} fontes adicionadas. A leitura começa dentro de um minuto.", ToastKind.Success);
+        }
+    }
+
+    private Task RefreshAsync() =>
+        RunAsync(() => MealConfig.RefreshSourcesAsync(), "As fontes vão ser lidas novamente dentro de um minuto.");
+
+    private async Task SaveAsync()
+    {
+        if (_form is null)
+        {
+            return;
+        }
+
+        MealSettingsDto form = _form;
+        form.WhatsAppApiKey = string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey;
+
+        MealSettingsDto? saved = null;
+
+        if (await RunAsync(async () => saved = await MealConfig.SaveAsync(form), "Definições das refeições guardadas.", reload: false))
+        {
+            _form = saved;
+            _apiKey = null;
+        }
+    }
+
+    private Task SendTestAsync() =>
+        RunAsync(() => MealConfig.SendTestAsync(), "Mensagem de teste enviada. Confirma no WhatsApp.", reload: false);
+
+    private async Task<bool> RunAsync(Func<Task> action, string? success, bool reload = true)
+    {
+        _busy = true;
+
+        try
+        {
+            await action();
+
+            if (success is not null)
+            {
+                Toasts.Show(success, ToastKind.Success);
+            }
+
+            if (reload && _form is not null)
+            {
+                MealSettingsDto fresh = await MealConfig.GetAsync();
+                _form.Sources = fresh.Sources;
+                _form.HasWhatsAppApiKey = fresh.HasWhatsAppApiKey;
+            }
+
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            Toasts.Show(string.IsNullOrWhiteSpace(ex.Message) ? "Confirma os dados e tenta novamente." : ex.Message, ToastKind.Error);
+        }
+        catch (NotFoundException)
+        {
+            Toasts.Show("A fonte já não existe.", ToastKind.Error);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível concluir a operação. Tenta novamente.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        return false;
+    }
+
+    private static bool IsExpected(Exception ex) =>
+        ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException;
+}
