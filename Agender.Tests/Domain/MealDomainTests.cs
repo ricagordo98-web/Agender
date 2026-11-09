@@ -68,6 +68,36 @@ public class MealDomainTests
         IngredientParser.Aggregate([("3 dentes de alho", 0.5m, "A")], []).Should().ContainSingle().Which.Quantity.Should().Be(2);
 
     [Fact]
+    public void Aggregate_SomeInStock_BuysOnlyTheDifference()
+    {
+        MealIngredientLine eggs = IngredientParser.Aggregate([("6 ovos", 1m, "Omelete")], [], [new InventoryItem { Name = "Ovos", Quantity = 2 }]).Single();
+
+        eggs.Quantity.Should().Be(4);
+        eggs.Include.Should().BeTrue();
+        eggs.AtHome.Should().Be("2 un");
+    }
+
+    [Fact]
+    public void Aggregate_EnoughInStock_LeavesItOffTheList()
+    {
+        MealIngredientLine rice = IngredientParser.Aggregate([("400 g de arroz agulha", 1m, "Arroz de pato")], [], [new InventoryItem { Name = "Arroz", Quantity = 2000, Unit = "g" }]).Single();
+
+        rice.IsCovered.Should().BeTrue();
+        rice.Include.Should().BeFalse();
+        rice.AtHome.Should().Be("2 kg");
+    }
+
+    [Fact]
+    public void Aggregate_StockInDifferentUnit_KeepsFullQuantityWithNote()
+    {
+        MealIngredientLine chickpeas = IngredientParser.Aggregate([("200 g de grão", 1m, "Salada")], [], [new InventoryItem { Name = "Grão", Quantity = 1, Unit = "lata" }]).Single();
+
+        chickpeas.Quantity.Should().Be(200);
+        chickpeas.Include.Should().BeTrue();
+        chickpeas.AtHome.Should().Be("1 lata");
+    }
+
+    [Fact]
     public void Aggregate_PantryPrefix_DoesNotMatchDifferentWord()
     {
         List<MealIngredientLine> lines = IngredientParser.Aggregate([("1 molho de salsa", 1m, "A"), ("Pimenta preta q.b.", 1m, "A")], ["Sal", "Pimenta"]);

@@ -4,6 +4,10 @@ set "URL=http://localhost:5018"
 set "ROOT=%~dp0"
 set "STARTED="
 
+set "DOCKER=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
+tasklist /FI "IMAGENAME eq Docker Desktop.exe" | find /I "Docker Desktop.exe" >nul || if exist "%DOCKER%" (echo A abrir o Docker para o WhatsApp... & start "" "%DOCKER%")
+
+
 curl -s -o nul "%URL%/conta/entrar" && goto app
 
 if not exist "%LOCALAPPDATA%\Agender" mkdir "%LOCALAPPDATA%\Agender"

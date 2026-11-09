@@ -62,6 +62,39 @@
 
         @if (_view == MealView.Week)
         {
+            bool hasRecipes = _overview.Entries.Any(e => e.RecipeId is not null);
+
+            <div class="ml-actions">
+                @if (_overview.WhatsAppReady)
+                {
+                    <button type="button" class="btn btn-primary" disabled="@(_busy || _overview.Entries.Count == 0)" title="Cria ou atualiza a lista de compras e envia a ementa, a lista e as receitas para o WhatsApp" @onclick="CompleteWeekAsync">
+                        ✅ @(_overview.SentAt is null ? "Concluir semana e enviar" : "Enviar de novo")
+                    </button>
+                }
+                @if (_overview.ShoppingListId is Guid listId)
+                {
+                    <a class="btn @(_overview.WhatsAppReady ? "btn-ghost" : "btn-primary")" href="@($"casa/compras/{listId}")"><Icon Name="IconName.Cart" Size="16" /> Abrir lista de compras</a>
+                    <button type="button" class="btn btn-ghost" disabled="@(_busy || !hasRecipes)" title="Acrescenta à lista os ingredientes que ainda lá não estão" @onclick="CreateListAsync">Atualizar lista</button>
+                }
+                else
+                {
+                    <button type="button" class="btn @(_overview.WhatsAppReady ? "btn-ghost" : "btn-primary")" disabled="@(_busy || !hasRecipes)" @onclick="CreateListAsync"><Icon Name="IconName.Cart" Size="16" /> Criar lista de compras</button>
+                }
+                @if (_shareText is not null && !_overview.WhatsAppReady)
+                {
+                    <a class="btn btn-ghost" href="@($"https://wa.me/?text={Uri.EscapeDataString(_shareText)}")" target="_blank" rel="noopener noreferrer">
+                        <Icon Name="IconName.Share" Size="16" /> Partilhar no WhatsApp
+                    </a>
+                }
+                @if (_overview.SentAt is DateTime sent)
+                {
+                    <span class="ml-sent"><Icon Name="IconName.Check" Size="13" /> Enviada a @sent.ToLocalTime().ToString("d MMM 'às' HH:mm", CasaCatalog.Culture)</span>
+                }
+            </div>
+            @if (_overview.SendError is not null)
+            {
+                <p class="cs-hint ml-error">@(_overview.SentAt is null ? "O envio falhou: " : "Atenção: ")@_overview.SendError</p>
+            }
             <div class="ml-week">
                 @for (int offset = 0; offset < 7; offset++)
                 {
@@ -245,97 +278,6 @@
                 }
             }
         }
-        else
-        {
-            @if (!_overview.Entries.Any(e => e.RecipeId is not null))
-            {
-                <div class="card ml-empty">
-                    <span class="ml-empty-emoji">🛒</span>
-                    <strong>Ainda não há receitas nesta semana</strong>
-                    <span class="cs-muted">Escolhe refeições na vista «Semana» e os ingredientes aparecem aqui, já somados.</span>
-                </div>
-            }
-            else
-            {
-                @if (_overview.ShoppingListId is Guid listId)
-                {
-                    <a class="card ml-done" href="@($"casa/compras/{listId}")">
-                        <span class="ml-done-icon"><Icon Name="IconName.Check" Size="18" /></span>
-                        <span><strong>A lista de compras desta semana já foi criada</strong><span class="cs-muted">Abre-a para ir riscando no supermercado.</span></span>
-                        <span class="cs-link">Abrir lista <Icon Name="IconName.ChevronRight" Size="14" /></span>
-                    </a>
-                }
-
-                int selected = _lines.Count(l => l.Include);
-
-                <section class="card ml-shop">
-                    <header class="ml-shop-head">
-                        <div>
-                            <h2>Ingredientes da semana</h2>
-                            <span class="cs-muted">@selected de @_lines.Count selecionados · os da despensa começam desmarcados</span>
-                        </div>
-                        <span class="spacer"></span>
-                        <button type="button" class="btn btn-ghost" @onclick="() => SetAll(true)">Todos</button>
-                        <button type="button" class="btn btn-ghost" @onclick="() => SetAll(false)">Nenhum</button>
-                    </header>
-                    @foreach (IGrouping<string, MealIngredientLine> group in _lines.GroupBy(l => l.Category))
-                    {
-                        CasaCatalog.Category category = CasaCatalog.ShoppingCategory(group.Key);
-
-                        <h3 class="ml-shop-cat"><span>@category.Emoji</span> @category.Name</h3>
-                        @foreach (MealIngredientLine line in group)
-                        {
-                            <label class="ml-line @(line.Include ? string.Empty : "off")" @key="line.Key + line.Unit">
-                                <input type="checkbox" checked="@line.Include" @onchange="e => ToggleLine(line, (bool)e.Value!)" />
-                                <span class="ml-line-main">
-                                    <span class="ml-line-name">@line.Name</span>
-                                    <small>@string.Join(", ", line.Recipes)</small>
-                                </span>
-                                @if (line.IsPantry)
-                                {
-                                    <span class="ml-pantry">despensa</span>
-                                }
-                                @if (line.Quantity is decimal quantity)
-                                {
-                                    <span class="cs-qty">@CasaCatalog.Quantity(quantity)@(string.IsNullOrEmpty(line.Unit) ? "×" : " " + line.Unit)</span>
-                                }
-                                else
-                                {
-                                    <span class="cs-qty ml-qb">q.b.</span>
-                                }
-                            </label>
-                        }
-                    }
-                </section>
-
-                <div class="cs-actions">
-                    <button type="button" class="btn btn-primary" disabled="@(_busy || selected == 0)" @onclick="CreateListAsync">
-                        <Icon Name="IconName.Cart" Size="16" /> @(_overview.ShoppingListId is null ? $"Criar lista de compras ({selected})" : $"Criar nova lista ({selected})")
-                    </button>
-                    @if (_shareText is not null)
-                    {
-                        <a class="btn btn-ghost" href="@($"https://wa.me/?text={Uri.EscapeDataString(_shareText)}")" target="_blank" rel="noopener noreferrer">
-                            <Icon Name="IconName.Share" Size="16" /> Partilhar no WhatsApp
-                        </a>
-                    }
-                    @if (_overview.WhatsAppReady)
-                    {
-                        <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="SendNowAsync"><Icon Name="IconName.Mail" Size="16" /> Enviar agora</button>
-                    }
-                </div>
-                @if (_overview.SentAt is DateTime sent)
-                {
-                    <p class="cs-hint"><Icon Name="IconName.Check" Size="13" /> Enviada para o WhatsApp a @sent.ToLocalTime().ToString("d 'de' MMMM 'às' HH:mm", CasaCatalog.Culture).</p>
-                }
-
-                @if (_overview.SendError is not null)
-                {
-                    <p class="cs-hint ml-error">@(_overview.SentAt is null ? "O envio falhou: " : "Atenção: ")@_overview.SendError</p>
-                }
-                <p class="cs-hint">«Partilhar no WhatsApp» abre o WhatsApp com a ementa e a lista já escritas, para escolheres o grupo. O envio automático configura-se em <a href="definicoes">Definições → Refeições</a>.</p>
-            }
-        }
-
         @if (_picker is not null)
         {
             <Modal Title="@($"{MealCatalog.SlotEmoji(_picker.Slot)} {MealCatalog.SlotLabel(_picker.Slot)} · {DayName(_picker.Date)}, {_picker.Date.ToString("d MMM", CasaCatalog.Culture)}")" Class="wide" OnClose="ClosePicker">
@@ -587,7 +529,7 @@
 </div>
 
 @code {
-    private enum MealView { Week, Recipes, Shopping }
+    private enum MealView { Week, Recipes }
 
     private enum RecipeTab { Ours, Catalog }
 
@@ -598,7 +540,7 @@
     private static readonly string[] RecipeCategories = ["Carne", "Peixe", "Vegetariano", "Massas", "Sopas", "Saladas", "Acompanhamentos", "Sobremesas"];
 
     private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
-        [new((int)MealView.Week, "Semana"), new((int)MealView.Recipes, "Receitas"), new((int)MealView.Shopping, "Lista de compras")];
+        [new((int)MealView.Week, "Semana"), new((int)MealView.Recipes, "Receitas")];
 
     private static readonly IReadOnlyList<SegmentedControl.SegmentOption> RecipeTabOptions =
         [new((int)RecipeTab.Ours, "As nossas"), new((int)RecipeTab.Catalog, "Catálogo")];
@@ -649,7 +591,6 @@
 
     private MealWeekOverview _overview = new();
     private List<Recipe> _recipes = [];
-    private List<MealIngredientLine> _lines = [];
     private string? _shareText;
     private DateOnly _weekStart;
     private MealView _view = MealView.Week;
@@ -665,12 +606,11 @@
     private Recipe? _edit;
     private string? _importUrl;
     private bool _isNewRecipe;
-    private bool _linesDirty;
     private bool _busy;
     private bool _loadingPhotos;
     private CancellationTokenSource? _searchDelay;
 
-    protected override bool IsEditing => _picker is not null || _detail is not null || _edit is not null || _importUrl is not null || _linesDirty;
+    protected override bool IsEditing => _picker is not null || _detail is not null || _edit is not null || _importUrl is not null;
 
     protected override async Task LoadAsync(CancellationToken cancellationToken)
     {
@@ -682,11 +622,7 @@
         _overview = await Meals.GetWeekAsync(_weekStart, cancellationToken);
         _recipes = await Meals.GetRecipesAsync(cancellationToken);
 
-        if (_view == MealView.Shopping && !_linesDirty)
-        {
-            _lines = await Meals.GetShoppingPreviewAsync(_weekStart, cancellationToken);
-            _shareText = _overview.Entries.Count > 0 ? await Meals.GetShareTextAsync(_weekStart, cancellationToken) : null;
-        }
+        _shareText = _view == MealView.Week && _overview.Entries.Count > 0 ? await Meals.GetShareTextAsync(_weekStart, cancellationToken) : null;
 
         if (_view == MealView.Recipes && _recipeTab == RecipeTab.Catalog && _catalog is null)
         {
@@ -749,14 +685,12 @@
     private async Task ChangeViewAsync(int value)
     {
         _view = (MealView)value;
-        _linesDirty = false;
         await RefreshAsync(silent: false);
     }
 
     private async Task ShiftWeekAsync(int days)
     {
         _weekStart = _weekStart.AddDays(days);
-        _linesDirty = false;
         await RefreshAsync(silent: false);
     }
 
@@ -1253,32 +1187,33 @@
         }
     }
 
-    private void ToggleLine(MealIngredientLine line, bool include)
-    {
-        line.Include = include;
-        _linesDirty = true;
-    }
-
-    private void SetAll(bool include)
-    {
-        _lines.ForEach(l => l.Include = include);
-        _linesDirty = true;
-    }
-
     private async Task CreateListAsync()
     {
-        List<MealIngredientLine> lines = _lines;
+        bool existed = _overview.ShoppingListId is not null;
+        int added = 0;
 
-        if (await BusyAsync(() => Meals.CreateShoppingListAsync(_weekStart, lines), "Lista de compras criada! 🛒"))
+        if (await BusyAsync(async () => added = await Meals.CreateShoppingListAsync(_weekStart), null))
         {
-            _linesDirty = false;
+            Toasts.Show(existed
+                ? added == 0 ? "A lista já tinha todos os ingredientes." : $"{added} {(added == 1 ? "ingrediente acrescentado" : "ingredientes acrescentados")} à lista."
+                : "Lista de compras criada em Compras. 🛒", ToastKind.Success);
             await RefreshAsync();
         }
     }
 
-    private async Task SendNowAsync()
+    private async Task CompleteWeekAsync()
     {
-        await BusyAsync(() => Meals.SendWhatsAppAsync(_weekStart), "Enviada para o WhatsApp. ✅");
+        bool hasRecipes = _overview.Entries.Any(e => e.RecipeId is not null);
+
+        await BusyAsync(async () =>
+        {
+            if (hasRecipes)
+            {
+                await Meals.CreateShoppingListAsync(_weekStart);
+            }
+
+            await Meals.SendWhatsAppAsync(_weekStart);
+        }, hasRecipes ? "Lista de compras pronta e semana enviada para o WhatsApp. ✅" : "Semana enviada para o WhatsApp. ✅");
         await RefreshAsync();
     }
 

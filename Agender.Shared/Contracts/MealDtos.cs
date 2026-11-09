@@ -59,6 +59,4 @@ public class MealSettingsDto
 
 public record ImportRecipeRequest(string Url);
 
-public record MealShoppingRequest(DateOnly WeekStart, List<MealIngredientLine> Lines);
-
 public record MealShareText(string Text);

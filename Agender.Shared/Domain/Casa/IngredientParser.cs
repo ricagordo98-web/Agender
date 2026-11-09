@@ -22,6 +22,10 @@ public class MealIngredientLine
 
     public bool IsPantry { get; set; }
 
+    public bool IsCovered { get; set; }
+
+    public string? AtHome { get; set; }
+
     public bool Include { get; set; } = true;
 }
 
@@ -152,7 +156,7 @@ public static partial class IngredientParser
         "esmagado", "esmagada", "descascado", "descascada", "pequeno", "pequena", "grande", "medio", "media", "inteiro", "inteira"
     ];
 
-    public static List<MealIngredientLine> Aggregate(IEnumerable<(string Line, decimal Factor, string Recipe)> items, IEnumerable<string> pantry)
+    public static List<MealIngredientLine> Aggregate(IEnumerable<(string Line, decimal Factor, string Recipe)> items, IEnumerable<string> pantry, IEnumerable<InventoryItem>? inventory = null)
     {
         List<string> pantryKeys = [.. pantry.Select(KeyOf).Where(k => k.Length > 0).Distinct()];
         Dictionary<(string Key, string Unit), MealIngredientLine> lines = [];
@@ -203,16 +207,52 @@ public static partial class IngredientParser
         }
 
         List<string> categoryOrder = [.. CasaCatalog.ShoppingCategories.Select(c => c.Name)];
+        List<(string Key, InventoryItem Item)> stock = [.. (inventory ?? []).Where(i => i.Quantity > 0).Select(i => (KeyOf(i.Name), i))];
 
         foreach (MealIngredientLine line in lines.Values)
         {
+            SubtractStock(line, stock);
             Normalize(line);
             line.Category = CasaCatalog.GuessCategory(line.Name);
-            line.IsPantry = pantryKeys.Any(p => line.Key == p || line.Key.StartsWith(p + " ", StringComparison.Ordinal));
-            line.Include = !line.IsPantry;
+            line.IsPantry = pantryKeys.Any(p => SameIngredient(line.Key, p));
+            line.Include = !line.IsPantry && !line.IsCovered;
         }
 
         return [.. lines.Values.OrderBy(l => categoryOrder.IndexOf(l.Category)).ThenBy(l => l.Name, StringComparer.Create(CasaCatalog.Culture, true))];
+    }
+
+    private static bool SameIngredient(string lineKey, string stockKey) =>
+        lineKey == stockKey
+        || lineKey.StartsWith(stockKey + " ", StringComparison.Ordinal)
+        || stockKey.StartsWith(lineKey + " ", StringComparison.Ordinal);
+
+    private static void SubtractStock(MealIngredientLine line, List<(string Key, InventoryItem Item)> stock)
+    {
+        List<InventoryItem> matches = [.. stock.Where(s => SameIngredient(line.Key, s.Key)).Select(s => s.Item)];
+
+        if (matches.Count == 0)
+        {
+            return;
+        }
+
+        line.AtHome = string.Join(", ", matches.Select(i => InventoryCatalog.Format(i.Quantity, i.Unit)));
+
+        if (line.Quantity is not decimal needed)
+        {
+            line.IsCovered = true;
+            return;
+        }
+
+        decimal have = matches.Where(i => i.Unit == line.Unit).Sum(i => i.Quantity);
+
+        if (have >= needed)
+        {
+            line.IsCovered = true;
+        }
+        else if (have > 0)
+        {
+            line.Quantity = needed - have;
+        }
     }
 
     private static void Normalize(MealIngredientLine line)

@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IWeddingService, WeddingService>();
         services.AddScoped<ICleaningService, CleaningService>();
         services.AddScoped<IMealService, MealService>();
+        services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IMealSettingsService, MealSettingsService>();
         services.AddSingleton<RecipeCatalogSync>();
         services.AddSingleton<MealMessageDispatcher>();

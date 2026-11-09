@@ -183,6 +183,7 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         await context.WeddingVendors.Where(v => v.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.WeddingTasks.Where(t => t.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.MealPlanEntries.Where(e => e.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.InventoryItems.Where(i => i.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.MealWeeks.Where(w => w.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.MealPreferences.Where(s => s.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.Recipes.Where(r => r.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);

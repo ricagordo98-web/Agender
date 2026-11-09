@@ -107,6 +107,8 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<MealWeek> MealWeeks => Set<MealWeek>();
 
+    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
 
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
@@ -511,6 +513,15 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.HasKey(w => w.Id);
             entity.Property(w => w.LastError).HasMaxLength(MealWeek.ErrorMaxLength);
             entity.HasIndex(w => new { w.HouseholdId, w.WeekStart }).IsUnique();
+        });
+
+        modelBuilder.Entity<InventoryItem>(entity =>
+        {
+            entity.HasKey(i => i.Id);
+            entity.Property(i => i.Name).HasMaxLength(InventoryItem.NameMaxLength);
+            entity.Property(i => i.Unit).HasMaxLength(InventoryItem.UnitMaxLength);
+            entity.Property(i => i.Category).HasMaxLength(60);
+            entity.HasIndex(i => i.HouseholdId);
         });
 
         modelBuilder.Entity<FinanceTransaction>(entity =>

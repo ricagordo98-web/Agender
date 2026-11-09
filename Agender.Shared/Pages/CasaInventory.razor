@@ -1,0 +1,236 @@
+@page "/casa/inventario"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IInventoryService Inventory
+
+<PageTitle>Inventário · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Inventário" Subtitle="O que têm em casa e quanto. Ao criar a lista de compras das refeições, o que já têm é descontado." />
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        <form class="cs-quick-add" @onsubmit="QuickAddAsync" @onsubmit:preventDefault>
+            <Icon Name="IconName.Plus" Size="18" />
+            <input class="bare" aria-label="Adicionar produto" placeholder="Adicionar produto…  ex.: 2 kg arroz, 6 ovos, 1 lata de grão" maxlength="@InventoryItem.NameMaxLength"
+                   value="@_newText" @oninput="e => _newText = e.Value?.ToString() ?? string.Empty" />
+            <button type="submit" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_newText))">Adicionar</button>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(_newText))
+        {
+            InventoryItem preview = Parse(_newText);
+            CasaCatalog.Category guessed = CasaCatalog.ShoppingCategory(CasaCatalog.GuessCategory(preview.Name));
+
+            <p class="cs-hint">→ @InventoryCatalog.Format(preview.Quantity, preview.Unit) <strong>@preview.Name</strong> em @guessed.Emoji @guessed.Name. Se já existir, soma à quantidade.</p>
+        }
+
+        @if (_items.Count == 0)
+        {
+            <div class="card ml-empty">
+                <span class="ml-empty-emoji">🧺</span>
+                <strong>O inventário está vazio</strong>
+                <span class="cs-muted">Acrescentem o que têm na despensa e no frigorífico. Os básicos que há sempre (sal, azeite…) ficam em <a href="definicoes">Definições → Refeições</a>.</span>
+            </div>
+        }
+        else
+        {
+            <div class="iv-toolbar">
+                <input class="field ml-search" type="search" placeholder="Procurar no inventário…" aria-label="Procurar no inventário" @bind="_query" @bind:event="oninput" />
+                <span class="cs-muted">@_items.Count @(_items.Count == 1 ? "produto" : "produtos")</span>
+            </div>
+
+            List<InventoryItem> shown = [.. _items.Where(Matches)];
+            List<string> order = [.. CasaCatalog.ShoppingCategories.Select(c => c.Name)];
+
+            <div class="iv-groups">
+                @foreach (IGrouping<string, InventoryItem> group in shown.GroupBy(i => i.Category).OrderBy(g => order.IndexOf(g.Key)))
+                {
+                    CasaCatalog.Category category = CasaCatalog.ShoppingCategory(group.Key);
+
+                    <section class="card iv-group" style="--iv-color:@category.Color" @key="group.Key">
+                        <header class="iv-group-head"><span class="cl-emoji small">@category.Emoji</span> <h2>@category.Name</h2> <span class="cs-muted">@group.Count()</span></header>
+                        @foreach (InventoryItem item in group)
+                        {
+                            <div class="iv-row" @key="item.Id">
+                                <span class="iv-name">@item.Name</span>
+                                <span class="iv-qty">
+                                    <button type="button" class="icon-btn" aria-label="Menos @item.Name" disabled="@_busy" @onclick="() => StepAsync(item, -1)">−</button>
+                                    <strong>@InventoryCatalog.Format(item.Quantity, item.Unit)</strong>
+                                    <button type="button" class="icon-btn" aria-label="Mais @item.Name" disabled="@_busy" @onclick="() => StepAsync(item, 1)"><Icon Name="IconName.Plus" Size="14" /></button>
+                                </span>
+                                <button type="button" class="icon-btn" aria-label="Editar @item.Name" @onclick="() => OpenEdit(item)"><Icon Name="IconName.Pencil" Size="15" /></button>
+                            </div>
+                        }
+                    </section>
+                }
+            </div>
+        }
+
+        @if (_edit is not null)
+        {
+            <Modal Title="Editar produto" OnClose="() => _edit = null" OnSubmit="SaveEditAsync">
+                <ChildContent>
+                    <label class="cs-field">Nome
+                        <input class="field" maxlength="@InventoryItem.NameMaxLength" @bind="_edit.Name" @bind:event="oninput" />
+                    </label>
+                    <div class="iv-edit-row">
+                        <label class="cs-field">Quantidade
+                            <input class="field" type="number" min="0" step="any" @bind="_editQuantity" />
+                        </label>
+                        <label class="cs-field">Unidade
+                            <select class="field" @bind="_editUnit">
+                                @foreach (InventoryCatalog.UnitOption unit in InventoryCatalog.Units)
+                                {
+                                    <option value="@unit.Label">@unit.Label</option>
+                                }
+                            </select>
+                        </label>
+                    </div>
+                    <label class="cs-field">Secção
+                        <select class="field" @bind="_edit.Category">
+                            @foreach (CasaCatalog.Category category in CasaCatalog.ShoppingCategories)
+                            {
+                                <option value="@category.Name">@category.Emoji @category.Name</option>
+                            }
+                        </select>
+                    </label>
+                </ChildContent>
+                <Footer>
+                    <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="DeleteEditAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-ghost" @onclick="() => _edit = null">Cancelar</button>
+                    <button type="button" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_edit.Name) || _editQuantity <= 0)" @onclick="SaveEditAsync">Guardar</button>
+                </Footer>
+            </Modal>
+        }
+    }
+</div>
+
+@code {
+    private List<InventoryItem> _items = [];
+    private string _newText = string.Empty;
+    private string _query = string.Empty;
+    private InventoryItem? _edit;
+    private decimal _editQuantity;
+    private string _editUnit = InventoryCatalog.Units[0].Label;
+    private bool _busy;
+
+    protected override bool IsEditing => _edit is not null;
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken) =>
+        _items = await Inventory.GetAsync(cancellationToken);
+
+    private bool Matches(InventoryItem item) =>
+        string.IsNullOrWhiteSpace(_query)
+        || CasaCatalog.Culture.CompareInfo.IndexOf(item.Name, _query.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+
+    private static InventoryItem Parse(string text)
+    {
+        ParsedIngredient parsed = IngredientParser.Parse(text);
+        bool supported = InventoryCatalog.Units.Any(u => u.BaseUnit == parsed.Unit);
+
+        return new InventoryItem
+        {
+            Name = parsed.Name,
+            Quantity = parsed.Quantity is > 0 ? parsed.Quantity.Value : 1,
+            Unit = supported ? parsed.Unit : null
+        };
+    }
+
+    private async Task QuickAddAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newText))
+        {
+            return;
+        }
+
+        InventoryItem item = Parse(_newText);
+        _busy = true;
+
+        if (await RunAsync(() => Inventory.AddAsync(item, Cancellation), $"{item.Name} no inventário."))
+        {
+            _newText = string.Empty;
+        }
+
+        _busy = false;
+    }
+
+    private async Task StepAsync(InventoryItem item, int direction)
+    {
+        decimal quantity = item.Quantity + direction * InventoryCatalog.Step(item.Unit);
+        _busy = true;
+
+        if (quantity <= 0)
+        {
+            await RunAsync(() => Inventory.DeleteAsync(item.Id, Cancellation), $"Acabou: {item.Name}. Saiu do inventário.");
+        }
+        else
+        {
+            InventoryItem changed = Copy(item);
+            changed.Quantity = quantity;
+            await RunAsync(() => Inventory.UpdateAsync(changed, Cancellation));
+        }
+
+        _busy = false;
+    }
+
+    private void OpenEdit(InventoryItem item)
+    {
+        _edit = Copy(item);
+        _editUnit = InventoryCatalog.DisplayUnit(item.Unit, item.Quantity);
+        _editQuantity = InventoryCatalog.DisplayQuantity(item.Unit, item.Quantity);
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_edit is null || string.IsNullOrWhiteSpace(_edit.Name) || _editQuantity <= 0)
+        {
+            return;
+        }
+
+        InventoryCatalog.UnitOption unit = InventoryCatalog.UnitOf(_editUnit);
+        InventoryItem item = _edit;
+        item.Unit = unit.BaseUnit;
+        item.Quantity = _editQuantity * unit.Factor;
+        _busy = true;
+
+        if (await RunAsync(() => Inventory.UpdateAsync(item, Cancellation), "Produto atualizado."))
+        {
+            _edit = null;
+        }
+
+        _busy = false;
+    }
+
+    private async Task DeleteEditAsync()
+    {
+        Guid id = _edit!.Id;
+        _busy = true;
+
+        if (await RunAsync(() => Inventory.DeleteAsync(id, Cancellation), "Produto eliminado."))
+        {
+            _edit = null;
+        }
+
+        _busy = false;
+    }
+
+    private static InventoryItem Copy(InventoryItem item) => new()
+    {
+        Id = item.Id,
+        Name = item.Name,
+        Quantity = item.Quantity,
+        Unit = item.Unit,
+        Category = item.Category
+    };
+}

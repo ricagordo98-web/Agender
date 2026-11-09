@@ -71,7 +71,9 @@ internal static class MealMessages
             items.AddRange(recipe.IngredientLines.Select(line => (line, factor, recipe.Title)));
         }
 
-        return IngredientParser.Aggregate(items, Recipe.SplitLines(pantry));
+        List<InventoryItem> inventory = await context.InventoryItems.AsNoTracking().Where(i => i.HouseholdId == householdId).ToListAsync(cancellationToken);
+
+        return IngredientParser.Aggregate(items, Recipe.SplitLines(pantry), inventory);
     }
 
     public static async Task<string> BuildAsync(AgenderDbContext context, Guid householdId, DateOnly weekStart, CancellationToken cancellationToken)

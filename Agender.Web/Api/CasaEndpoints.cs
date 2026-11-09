@@ -49,6 +49,7 @@ public static class CasaEndpoints
         MapWedding(group.MapGroup("/wedding"));
         MapCleaning(group.MapGroup("/cleaning"));
         MapMeals(group.MapGroup("/meals"));
+        MapInventory(group.MapGroup("/inventory"));
         MapMealSettings(group.MapGroup("/meal-settings"));
     }
 
@@ -89,10 +90,8 @@ public static class CasaEndpoints
         group.MapPost("/catalog/{id:guid}/adopt", async (Guid id, IMealService service, CancellationToken ct) =>
             await service.AdoptCatalogRecipeAsync(id, ct));
 
-        group.MapGet("/shopping", async (DateOnly start, IMealService service, CancellationToken ct) => await service.GetShoppingPreviewAsync(start, ct));
-
-        group.MapPost("/shopping", async (MealShoppingRequest request, IMealService service, CancellationToken ct) =>
-            await service.CreateShoppingListAsync(request.WeekStart, request.Lines, ct));
+        group.MapPost("/shopping", async (DateOnly start, IMealService service, CancellationToken ct) =>
+            await service.CreateShoppingListAsync(start, ct));
 
         group.MapGet("/share", async (DateOnly start, IMealService service, CancellationToken ct) =>
             new MealShareText(await service.GetShareTextAsync(start, ct)));
@@ -100,6 +99,25 @@ public static class CasaEndpoints
         group.MapPost("/send", async (DateOnly start, IMealService service, CancellationToken ct) =>
         {
             await service.SendWhatsAppAsync(start, ct);
+            return Results.NoContent();
+        });
+    }
+
+    private static void MapInventory(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (IInventoryService service, CancellationToken ct) => await service.GetAsync(ct));
+
+        group.MapPost("/", async (InventoryItem item, IInventoryService service, CancellationToken ct) => await service.AddAsync(item, ct));
+
+        group.MapPut("/{id:guid}", async (Guid id, InventoryItem item, IInventoryService service, CancellationToken ct) =>
+        {
+            EnsureSameId(id, item.Id);
+            return await service.UpdateAsync(item, ct);
+        });
+
+        group.MapDelete("/{id:guid}", async (Guid id, IInventoryService service, CancellationToken ct) =>
+        {
+            await service.DeleteAsync(id, ct);
             return Results.NoContent();
         });
     }

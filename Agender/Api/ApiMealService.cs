@@ -45,11 +45,8 @@ public sealed class ApiMealService(IHttpClientFactory httpClientFactory, AuthSes
     public Task<Recipe> AdoptCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default) =>
         SendAsync<Recipe>(HttpMethod.Post, $"{Root}/catalog/{catalogId}/adopt", null, cancellationToken, RemoteTimeout);
 
-    public Task<List<MealIngredientLine>> GetShoppingPreviewAsync(DateOnly weekStart, CancellationToken cancellationToken = default) =>
-        GetAsync<List<MealIngredientLine>>($"{Root}/shopping?start={Date(weekStart)}", cancellationToken);
-
-    public Task<ShoppingList> CreateShoppingListAsync(DateOnly weekStart, List<MealIngredientLine> lines, CancellationToken cancellationToken = default) =>
-        SendAsync<ShoppingList>(HttpMethod.Post, $"{Root}/shopping", new MealShoppingRequest(weekStart, lines), cancellationToken);
+    public Task<int> CreateShoppingListAsync(DateOnly weekStart, CancellationToken cancellationToken = default) =>
+        SendAsync<int>(HttpMethod.Post, $"{Root}/shopping?start={Date(weekStart)}", null, cancellationToken);
 
     public async Task<string> GetShareTextAsync(DateOnly weekStart, CancellationToken cancellationToken = default) =>
         (await GetAsync<MealShareText>($"{Root}/share?start={Date(weekStart)}", cancellationToken)).Text;

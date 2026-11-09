@@ -81,6 +81,17 @@ public interface ICleaningService
     Task<List<CleaningHistoryEntry>> GetHistoryAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
 }
 
+public interface IInventoryService
+{
+    Task<List<InventoryItem>> GetAsync(CancellationToken cancellationToken = default);
+
+    Task<InventoryItem> AddAsync(InventoryItem item, CancellationToken cancellationToken = default);
+
+    Task<InventoryItem> UpdateAsync(InventoryItem item, CancellationToken cancellationToken = default);
+
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+}
+
 public interface IMealService
 {
     Task<MealWeekOverview> GetWeekAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
@@ -105,9 +116,7 @@ public interface IMealService
 
     Task<Recipe> AdoptCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default);
 
-    Task<List<MealIngredientLine>> GetShoppingPreviewAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
-
-    Task<ShoppingList> CreateShoppingListAsync(DateOnly weekStart, List<MealIngredientLine> lines, CancellationToken cancellationToken = default);
+    Task<int> CreateShoppingListAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
 
     Task<string> GetShareTextAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
 

@@ -41,7 +41,7 @@ public class MealService(
             ShoppingListId = listId,
             SentAt = week?.SentAt,
             SendError = week?.LastError,
-            WhatsAppReady = settings?.WhatsAppEnabled == true && MealMessages.IsReady(settings)
+            WhatsAppReady = MealMessages.IsReady(settings)
         };
     }
 
@@ -338,53 +338,19 @@ public class MealService(
         return recipe;
     }
 
-    public async Task<List<MealIngredientLine>> GetShoppingPreviewAsync(DateOnly weekStart, CancellationToken cancellationToken = default)
-    {
-        await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
-        Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
-
-        return await MealMessages.PreviewAsync(context, householdId, MealCatalog.WeekStartOf(weekStart), cancellationToken);
-    }
-
-    public async Task<ShoppingList> CreateShoppingListAsync(DateOnly weekStart, List<MealIngredientLine> lines, CancellationToken cancellationToken = default)
+    public async Task<int> CreateShoppingListAsync(DateOnly weekStart, CancellationToken cancellationToken = default)
     {
         await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
         Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
         (string displayName, _) = await HouseholdAccess.GetCurrentUserAsync(context, cancellationToken);
         weekStart = MealCatalog.WeekStartOf(weekStart);
 
-        List<MealIngredientLine> selected = [.. lines.Where(l => l.Include && !string.IsNullOrWhiteSpace(l.Name)).Take(MaxShoppingLines)];
+        List<MealIngredientLine> lines = [.. (await MealMessages.PreviewAsync(context, householdId, weekStart, cancellationToken))
+            .Where(l => l.Include && !string.IsNullOrWhiteSpace(l.Name)).Take(MaxShoppingLines)];
 
-        if (selected.Count == 0)
+        if (lines.Count == 0)
         {
-            throw new ArgumentException("Escolhe pelo menos um ingrediente.");
-        }
-
-        ShoppingList list = new()
-        {
-            HouseholdId = householdId,
-            Name = $"Refeições {MealCatalog.ShortWeekLabel(weekStart)}",
-            Emoji = "🍽️",
-            Color = CasaCatalog.ListColors[1]
-        };
-
-        context.ShoppingLists.Add(list);
-
-        foreach (MealIngredientLine line in selected)
-        {
-            string name = Truncate(line.Name.Trim(), ShoppingItem.NameMaxLength);
-            string? recipes = line.Recipes.Count == 0 ? null : Truncate("Para: " + string.Join(", ", line.Recipes), ShoppingItem.NoteMaxLength);
-
-            context.ShoppingItems.Add(new ShoppingItem
-            {
-                ListId = list.Id,
-                Name = name,
-                Quantity = line.Quantity is > 0 and <= 100_000m ? Math.Round(line.Quantity.Value, 2) : 1,
-                Unit = line.Quantity is null || line.Unit is not { Length: <= 10 } ? null : line.Unit,
-                Category = CasaCatalog.ShoppingCategories.Any(c => c.Name == line.Category) ? line.Category : CasaCatalog.GuessCategory(name),
-                Note = recipes,
-                AddedBy = displayName
-            });
+            throw new ArgumentException("Ainda não há receitas com ingredientes nesta semana.");
         }
 
         MealWeek? week = await context.MealWeeks.FirstOrDefaultAsync(w => w.HouseholdId == householdId && w.WeekStart == weekStart, cancellationToken);
@@ -395,13 +361,49 @@ public class MealService(
             context.MealWeeks.Add(week);
         }
 
+        ShoppingList? list = week.ShoppingListId is Guid listId
+            ? await context.ShoppingLists.FirstOrDefaultAsync(l => l.Id == listId && l.HouseholdId == householdId, cancellationToken)
+            : null;
+
+        if (list is null)
+        {
+            list = new ShoppingList
+            {
+                HouseholdId = householdId,
+                Name = $"Refeições {MealCatalog.ShortWeekLabel(weekStart)}",
+                Emoji = "🍽️",
+                Color = CasaCatalog.ListColors[1]
+            };
+            context.ShoppingLists.Add(list);
+        }
+        else
+        {
+            HashSet<string> present = [.. (await context.ShoppingItems.Where(i => i.ListId == list.Id).Select(i => i.Name).ToListAsync(cancellationToken))
+                .Select(IngredientParser.KeyOf)];
+            lines = [.. lines.Where(l => !present.Contains(IngredientParser.KeyOf(l.Name)))];
+            list.UpdatedAt = DateTime.UtcNow;
+        }
+
+        foreach (MealIngredientLine line in lines)
+        {
+            string name = Truncate(line.Name.Trim(), ShoppingItem.NameMaxLength);
+
+            context.ShoppingItems.Add(new ShoppingItem
+            {
+                ListId = list.Id,
+                Name = name,
+                Quantity = line.Quantity is > 0 and <= 100_000m ? Math.Round(line.Quantity.Value, 2) : 1,
+                Unit = line.Quantity is null || line.Unit is not { Length: <= 10 } ? null : line.Unit,
+                Category = CasaCatalog.ShoppingCategories.Any(c => c.Name == line.Category) ? line.Category : CasaCatalog.GuessCategory(name),
+                Note = Note(line),
+                AddedBy = displayName
+            });
+        }
+
         week.ShoppingListId = list.Id;
         await context.SaveChangesAsync(cancellationToken);
 
-        list.TotalCount = selected.Count;
-        list.PendingCount = selected.Count;
-
-        return list;
+        return lines.Count;
     }
 
     public async Task<string> GetShareTextAsync(DateOnly weekStart, CancellationToken cancellationToken = default)
@@ -477,6 +479,23 @@ public class MealService(
                 ? "Esta página não tem uma receita reconhecível."
                 : "Não foi possível abrir a receita no site. Tenta novamente daqui a pouco.");
         }
+    }
+
+    private static string? Note(MealIngredientLine line)
+    {
+        List<string> parts = [];
+
+        if (line.Recipes.Count > 0)
+        {
+            parts.Add("Para: " + string.Join(", ", line.Recipes));
+        }
+
+        if (line.AtHome is not null)
+        {
+            parts.Add("Em casa: " + line.AtHome);
+        }
+
+        return parts.Count == 0 ? null : Truncate(string.Join(" · ", parts), ShoppingItem.NoteMaxLength);
     }
 
     internal static Recipe FromScraped(ScrapedRecipe scraped, Guid householdId, string url, string sourceName, int people) => new()
