@@ -293,6 +293,21 @@ body.task-dragging .scrim {
     line-height: 1;
 }
 
+.drag-time {
+    position: fixed;
+    z-index: 1001;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--text);
+    color: var(--surface);
+    box-shadow: var(--shadow-md);
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .task-drag-chip {
     position: fixed;
     z-index: 200;

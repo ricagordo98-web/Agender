@@ -11,6 +11,11 @@ const instances = new WeakMap();
 const pad = (value) => String(value).padStart(2, '0');
 const formatMinute = (minute) => `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const formatDuration = (minutes) => {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return hours === 0 ? `${rest}m` : rest === 0 ? `${hours}h` : `${hours}h${pad(rest)}`;
+};
 
 export function init(root, dotNetRef, readOnly = false) {
     instances.get(root)?.();
@@ -37,6 +42,7 @@ export function init(root, dotNetRef, readOnly = false) {
     let mouseTask = null;
     let chip = null;
     let ghost = null;
+    let timeBadge = null;
     let suppressClick = false;
     let autoScrollFrame = null;
     let press = null;
@@ -60,6 +66,21 @@ export function init(root, dotNetRef, readOnly = false) {
     function hideGhost() {
         ghost?.remove();
         ghost = null;
+        timeBadge?.remove();
+        timeBadge = null;
+    }
+
+    function showTimeBadge(x, y, start, end) {
+        if (!timeBadge) {
+            timeBadge = document.createElement('div');
+            timeBadge.className = 'drag-time';
+            document.body.appendChild(timeBadge);
+        }
+
+        timeBadge.textContent = `${formatMinute(start)} – ${formatMinute(end)} · ${formatDuration(end - start)}`;
+        const left = Math.min(x + 16, window.innerWidth - timeBadge.offsetWidth - 8);
+        timeBadge.style.left = `${Math.max(8, left)}px`;
+        timeBadge.style.top = `${Math.max(8, y - timeBadge.offsetHeight - 12)}px`;
     }
 
     function updateDrag(clientX, clientY) {
@@ -93,6 +114,7 @@ export function init(root, dotNetRef, readOnly = false) {
         }
 
         showGhost(drag.column, drag.start, drag.end, drag.colorClass);
+        showTimeBadge(clientX, clientY, drag.start, drag.end);
     }
 
     function autoScroll() {
@@ -428,6 +450,7 @@ export function init(root, dotNetRef, readOnly = false) {
         taskDrag.column = column;
         taskDrag.start = taskSlot(column, y);
         showGhost(column, taskDrag.start, taskDrag.start + defaultDuration(), taskDrag.colorClass);
+        showTimeBadge(x, chip ? y - 8 : y, taskDrag.start, taskDrag.start + defaultDuration());
     }
 
     function onTaskPointerMove(event) {
