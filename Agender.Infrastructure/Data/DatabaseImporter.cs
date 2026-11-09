@@ -47,6 +47,32 @@ public sealed class DatabaseImporter(string databasePath, IDbContextFactory<Agen
         }
     }
 
+    public async Task<byte[]> ExportAsync(CancellationToken cancellationToken = default)
+    {
+        await Gate.WaitAsync(cancellationToken);
+        string exportPath = $"{databasePath}.export-{Guid.NewGuid():N}";
+
+        try
+        {
+            using (SqliteConnection live = Open(databasePath, SqliteOpenMode.ReadOnly))
+            using (SqliteConnection copy = Open(exportPath, SqliteOpenMode.ReadWriteCreate))
+            {
+                live.BackupDatabase(copy);
+            }
+
+            return await File.ReadAllBytesAsync(exportPath, cancellationToken);
+        }
+        catch (SqliteException ex)
+        {
+            throw new PersistenceException("The database could not be exported.", ex);
+        }
+        finally
+        {
+            TryDelete(exportPath);
+            Gate.Release();
+        }
+    }
+
     private void Validate(string uploadPath)
     {
         using AgenderDbContext context = factory.CreateDbContext();

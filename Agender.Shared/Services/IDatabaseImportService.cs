@@ -5,4 +5,6 @@ public interface IDatabaseImportService
     bool IsAvailable { get; }
 
     Task ImportAsync(byte[] database, CancellationToken cancellationToken = default);
+
+    Task<string> ExportAsync(CancellationToken cancellationToken = default);
 }

@@ -1,8 +1,9 @@
 @implements IDisposable
 @inject AgendaStore Store
 @inject AgendaScope Scope
+@inject NavigationManager Navigation
 
-@if (Store.IsInitialized && !Scope.IsForeign)
+@if (Store.IsInitialized && !Scope.IsForeign && (Store.ActiveTimer is not null || IsOnAgenda))
 {
     <div class="timer-dock">
         @if (Store.ActiveTimer is ActiveTimer timer)
@@ -61,8 +62,11 @@
     private string _description = string.Empty;
     private Guid? _projectId;
 
+    private bool IsOnAgenda => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Length == 0;
+
     protected override async Task OnInitializedAsync()
     {
+        Navigation.LocationChanged += OnLocationChanged;
         Store.Changed += OnStoreChanged;
         await Store.InitializeAsync();
         _ = TickAsync();
@@ -101,8 +105,15 @@
 
     private void OnStoreChanged() => _ = InvokeAsync(StateHasChanged);
 
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _open = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
+        Navigation.LocationChanged -= OnLocationChanged;
         Store.Changed -= OnStoreChanged;
         _lifetime.Cancel();
         _lifetime.Dispose();

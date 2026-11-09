@@ -6,7 +6,7 @@
 <PageTitle>Refeições · Agender</PageTitle>
 
 <div class="page">
-    <PageHeader Title="Refeições" Subtitle="Planeiem o almoço e o jantar da semana, escolham receitas e gerem a lista de compras com um clique." />
+    <PageHeader Title="Refeições" Subtitle="Planeiem o almoço, o jantar e a sobremesa da semana, escolham receitas e gerem a lista de compras com um clique." />
     <CasaTabs />
 
     @if (Loading)
@@ -49,7 +49,7 @@
                         }
                         else
                         {
-                            <span class="cs-muted">Clica num almoço ou jantar para escolher a refeição.</span>
+                            <span class="cs-muted">Clica num almoço, jantar ou sobremesa para escolher.</span>
                         }
                     </span>
                 </div>
@@ -204,7 +204,10 @@
                     }
                     else
                     {
-                        <p class="cs-muted">@_catalog.Total receitas</p>
+                        <div class="ml-catalog-bar">
+                            <p class="cs-muted">@_catalog.Total receitas</p>
+                            @LoadPhotosButton(_catalogItems)
+                        </div>
                     }
 
                     <div class="ml-cards">
@@ -324,9 +327,10 @@
                 {
                     <p class="cs-hint"><Icon Name="IconName.Check" Size="13" /> Enviada para o WhatsApp a @sent.ToLocalTime().ToString("d 'de' MMMM 'às' HH:mm", CasaCatalog.Culture).</p>
                 }
-                else if (_overview.SendError is not null)
+
+                @if (_overview.SendError is not null)
                 {
-                    <p class="cs-hint ml-error">O envio automático falhou: @_overview.SendError</p>
+                    <p class="cs-hint ml-error">@(_overview.SentAt is null ? "O envio falhou: " : "Atenção: ")@_overview.SendError</p>
                 }
                 <p class="cs-hint">«Partilhar no WhatsApp» abre o WhatsApp com a ementa e a lista já escritas, para escolheres o grupo. O envio automático configura-se em <a href="definicoes">Definições → Refeições</a>.</p>
             }
@@ -334,80 +338,91 @@
 
         @if (_picker is not null)
         {
-            <Modal Title="@($"{MealCatalog.SlotEmoji(_picker.Slot)} {MealCatalog.SlotLabel(_picker.Slot)} · {DayName(_picker.Date)}, {_picker.Date.ToString("d MMM", CasaCatalog.Culture)}")" OnClose="ClosePicker">
+            <Modal Title="@($"{MealCatalog.SlotEmoji(_picker.Slot)} {MealCatalog.SlotLabel(_picker.Slot)} · {DayName(_picker.Date)}, {_picker.Date.ToString("d MMM", CasaCatalog.Culture)}")" Class="wide" OnClose="ClosePicker">
                 <ChildContent>
-                    @if (_picker.Existing is MealPlanEntry existing)
+                    @if (_picker.Preview is PreviewState preview)
                     {
-                        Recipe? current = RecipeOf(existing);
+                        Recipe? own = preview.Own;
+                        CatalogRecipe? item = preview.Catalog;
 
-                        <div class="ml-current">
-                            @Thumb(current?.ImageUrl, current is null ? "🥡" : "🍲", "ml-thumb")
-                            <span class="ml-slot-body">
-                                <small class="cs-muted">Escolhido</small>
-                                <strong>@(current?.Title ?? existing.Title)</strong>
-                            </span>
-                            @if (current is not null)
-                            {
-                                <button type="button" class="btn btn-ghost" @onclick="() => OpenDetail(current, null)">Ver receita</button>
-                            }
-                            <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="RemoveEntryAsync"><Icon Name="IconName.Trash" Size="15" /></button>
-                        </div>
-                    }
-
-                    <div class="ml-servings">
-                        <span>Para</span>
-                        <button type="button" class="icon-btn" aria-label="Menos pessoas" @onclick="() => _picker.Servings = Math.Max(1, _picker.Servings - 1)">−</button>
-                        <strong>@_picker.Servings</strong>
-                        <button type="button" class="icon-btn" aria-label="Mais pessoas" @onclick="() => _picker.Servings = Math.Min(Recipe.MaxServings, _picker.Servings + 1)"><Icon Name="IconName.Plus" Size="14" /></button>
-                        <span>@(_picker.Servings == 1 ? "pessoa" : "pessoas")</span>
-                        @if (_picker.Existing is not null && _picker.Existing.Servings != _picker.Servings)
-                        {
-                            <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="SaveServingsAsync">Guardar</button>
-                        }
-                    </div>
-
-                    <SegmentedControl Label="Escolher de" Options="PickerTabOptions" Value="(int)_picker.Tab" ValueChanged="ChangePickerTabAsync" />
-
-                    @if (_picker.Tab == PickerTab.Text)
-                    {
-                        <div class="ml-free">
-                            <input class="field" maxlength="@MealPlanEntry.TitleMaxLength" placeholder="Ex.: Bifanas, Sobras de ontem…" aria-label="Refeição"
-                                   @bind="_picker.Text" @bind:event="oninput" @onkeydown="OnFreeKeyAsync" />
-                            <div class="cs-chips">
-                                @foreach (string quick in MealCatalog.QuickTitles)
-                                {
-                                    <button type="button" class="cs-chip" @onclick="() => PickTextAsync(quick)">@quick</button>
-                                }
-                            </div>
-                            <p class="cs-hint">Refeições escritas à mão não acrescentam ingredientes à lista de compras.</p>
-                            <button type="button" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_picker.Text))" @onclick="() => PickTextAsync(_picker.Text)">Usar</button>
-                        </div>
+                        <button type="button" class="btn btn-ghost ml-back" @onclick="() => _picker.Preview = null"><Icon Name="IconName.ChevronLeft" Size="16" /> Voltar às receitas</button>
+                        <RecipeView Title="@(own?.Title ?? item!.Title)" ImageUrl="@(own?.ImageUrl ?? item?.ImageUrl)" SourceName="@(own?.SourceName ?? item?.SourceName)"
+                                    SourceUrl="@(own?.SourceUrl ?? item?.Url)" Minutes="@(own?.Minutes ?? item?.Minutes)" Servings="@(own?.Servings ?? item?.Servings)"
+                                    Category="@(own?.Category ?? item?.Category)" Ingredients="@(own?.Ingredients ?? item?.Ingredients)"
+                                    Instructions="@(own?.Instructions ?? item?.Instructions)" Loading="preview.Loading" />
                     }
                     else
                     {
-                        <input class="field ml-picker-search" type="search" placeholder="Procurar…" aria-label="Procurar receitas"
-                               @bind="_picker.Query" @bind:event="oninput" @bind:after="OnPickerQueryAsync" />
+                        @if (_picker.Existing is MealPlanEntry existing)
+                        {
+                            Recipe? current = RecipeOf(existing);
 
-                        <div class="ml-pick-list">
+                            <div class="ml-current">
+                                @Thumb(current?.ImageUrl, current is null ? "🥡" : "🍲", "ml-thumb")
+                                <span class="ml-slot-body">
+                                    <small class="cs-muted">Escolhido</small>
+                                    <strong>@(current?.Title ?? existing.Title)</strong>
+                                </span>
+                                @if (current is not null)
+                                {
+                                    <button type="button" class="btn btn-ghost" @onclick="() => OpenPreviewAsync(current, null)">Ver receita</button>
+                                }
+                                <button type="button" class="btn btn-danger" disabled="@_busy" aria-label="Remover refeição" @onclick="RemoveEntryAsync"><Icon Name="IconName.Trash" Size="15" /></button>
+                            </div>
+                        }
+
+                        <div class="ml-picker-bar">
+                            <SegmentedControl Label="Escolher de" Options="PickerTabOptions" Value="(int)_picker.Tab" ValueChanged="ChangePickerTabAsync" />
+                            @ServingsStepper
+                        </div>
+
+                        @if (_picker.Tab == PickerTab.Text)
+                        {
+                            <div class="ml-free">
+                                <input class="field" maxlength="@MealPlanEntry.TitleMaxLength" placeholder="Ex.: Bifanas, Sobras de ontem…" aria-label="Refeição"
+                                       @bind="_picker.Text" @bind:event="oninput" @onkeydown="OnFreeKeyAsync" />
+                                <div class="cs-chips">
+                                    @foreach (string quick in MealCatalog.QuickTitles)
+                                    {
+                                        <button type="button" class="cs-chip" @onclick="() => PickTextAsync(quick)">@quick</button>
+                                    }
+                                </div>
+                                <p class="cs-hint">Refeições escritas à mão não acrescentam ingredientes à lista de compras.</p>
+                                <button type="button" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_picker.Text))" @onclick="() => PickTextAsync(_picker.Text)">Usar</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <input class="field ml-picker-search" type="search" placeholder="Procurar uma receita… (ex.: bacalhau, frango, sopa)" aria-label="Procurar receitas"
+                                   @bind="_picker.Query" @bind:event="oninput" @bind:after="OnPickerQueryAsync" />
+
                             @if (_picker.Tab == PickerTab.Ours)
                             {
                                 List<Recipe> options = [.. FilterOwn(_picker.Query)];
 
                                 @if (_recipes.Count == 0)
                                 {
-                                    <p class="cs-muted">Ainda não têm receitas guardadas. Procura no catálogo ou escreve a refeição.</p>
+                                    <p class="cs-muted">Ainda não têm receitas guardadas. Espreitem o catálogo ou escrevam a refeição.</p>
                                 }
 
-                                @foreach (Recipe recipe in options)
-                                {
-                                    <button type="button" class="ml-pick" disabled="@_busy" @key="recipe.Id" @onclick="() => PickRecipeAsync(recipe.Id)">
-                                        @Thumb(recipe.ImageUrl, "🍲", "ml-thumb")
-                                        <span class="ml-slot-body">
-                                            <strong>@(recipe.IsFavorite ? "★ " : string.Empty)@recipe.Title</strong>
-                                            <span class="ml-slot-meta">@Meta(recipe.SourceName, MealCatalog.Duration(recipe.Minutes))</span>
-                                        </span>
-                                    </button>
-                                }
+                                <div class="ml-pick-grid">
+                                    @foreach (Recipe recipe in options)
+                                    {
+                                        <button type="button" class="ml-pick-card" @key="recipe.Id" @onclick="() => OpenPreviewAsync(recipe, null)">
+                                            <span class="ml-pick-img">
+                                                @Thumb(recipe.ImageUrl, "🍲", "ml-card-pic")
+                                                @if (recipe.IsFavorite)
+                                                {
+                                                    <span class="ml-fav" aria-label="Favorita">★</span>
+                                                }
+                                            </span>
+                                            <span class="ml-pick-body">
+                                                <strong>@recipe.Title</strong>
+                                                <span class="ml-slot-meta">@Meta(recipe.SourceName, MealCatalog.Duration(recipe.Minutes))</span>
+                                            </span>
+                                        </button>
+                                    }
+                                </div>
                             }
                             else if (_pickerCatalog is null)
                             {
@@ -415,28 +430,44 @@
                             }
                             else
                             {
+                                @LoadPhotosButton(_pickerCatalog.Items)
+
                                 @if (_pickerCatalog.Total == 0)
                                 {
                                     <p class="cs-muted">Nada encontrado no catálogo.</p>
                                 }
 
-                                @foreach (CatalogRecipe item in _pickerCatalog.Items)
-                                {
-                                    <button type="button" class="ml-pick" disabled="@_busy" @key="item.Id" @onclick="() => PickCatalogAsync(item)">
-                                        @Thumb(item.ImageUrl, "🍲", "ml-thumb")
-                                        <span class="ml-slot-body">
-                                            <strong>@item.Title</strong>
-                                            <span class="ml-slot-meta">@Meta(item.SourceName, item.Status == CatalogRecipeStatus.Pending ? "detalhes ao escolher" : MealCatalog.Duration(item.Minutes))</span>
-                                        </span>
-                                    </button>
-                                }
+                                <div class="ml-pick-grid">
+                                    @foreach (CatalogRecipe item in _pickerCatalog.Items)
+                                    {
+                                        <button type="button" class="ml-pick-card" @key="item.Id" @onclick="() => OpenPreviewAsync(null, item)">
+                                            <span class="ml-pick-img">@Thumb(item.ImageUrl, "🍲", "ml-card-pic")</span>
+                                            <span class="ml-pick-body">
+                                                <strong>@item.Title</strong>
+                                                <span class="ml-slot-meta">@Meta(item.SourceName, item.Status == CatalogRecipeStatus.Pending ? null : MealCatalog.Duration(item.Minutes))</span>
+                                            </span>
+                                        </button>
+                                    }
+                                </div>
                             }
-                        </div>
+                        }
                     }
                 </ChildContent>
                 <Footer>
-                    <span class="spacer"></span>
-                    <button type="button" class="btn btn-ghost" @onclick="ClosePicker">Fechar</button>
+                    @if (_picker.Preview is PreviewState chosen)
+                    {
+                        @ServingsStepper
+                        <span class="spacer"></span>
+                        <button type="button" class="btn btn-ghost" @onclick="() => _picker.Preview = null">Voltar</button>
+                        <button type="button" class="btn btn-primary" disabled="@(_busy || chosen.Loading)" @onclick="ChoosePreviewAsync">
+                            🍽️ Escolher para @MealCatalog.SlotWithArticle(_picker.Slot) de @DayName(_picker.Date).ToLowerInvariant()
+                        </button>
+                    }
+                    else
+                    {
+                        <span class="spacer"></span>
+                        <button type="button" class="btn btn-ghost" @onclick="ClosePicker">Fechar</button>
+                    }
                 </Footer>
             </Modal>
         }
@@ -445,87 +476,36 @@
         {
             Recipe? own = _detail.Own;
             CatalogRecipe? item = _detail.Catalog;
-            string? image = own?.ImageUrl ?? item?.ImageUrl;
-            string? link = own?.SourceUrl ?? item?.Url;
-            List<string> ingredients = [.. Recipe.SplitLines(own?.Ingredients ?? item?.Ingredients)];
 
-            <Modal Title="@(own?.Title ?? item!.Title)" OnClose="() => _detail = null">
+            <Modal Title="🍲 Receita" Class="wide" OnClose="() => _detail = null">
                 <ChildContent>
-                    @if (image is not null)
-                    {
-                        <img class="ml-detail-img" src="@image" alt="" loading="lazy" referrerpolicy="no-referrer" />
-                    }
-                    <div class="ml-detail-meta">
-                        @if (!string.IsNullOrEmpty(own?.SourceName ?? item?.SourceName))
-                        {
-                            <span class="ml-badge">@(own?.SourceName ?? item?.SourceName)</span>
-                        }
-                        @if (MealCatalog.Duration(own?.Minutes ?? item?.Minutes) is string duration)
-                        {
-                            <span><Icon Name="IconName.Clock" Size="14" /> @duration</span>
-                        }
-                        @if ((own?.Servings ?? item?.Servings) is int servings)
-                        {
-                            <span><Icon Name="IconName.Users" Size="14" /> @servings @(servings == 1 ? "pessoa" : "pessoas")</span>
-                        }
-                        @if (!string.IsNullOrEmpty(own?.Category ?? item?.Category))
-                        {
-                            <span>@(own?.Category ?? item?.Category)</span>
-                        }
-                        @if (link is not null)
-                        {
-                            <a href="@link" target="_blank" rel="noopener noreferrer">Ver no site ↗</a>
-                        }
-                    </div>
-
-                    @if (ingredients.Count > 0)
-                    {
-                        <h3 class="ml-detail-h">Ingredientes</h3>
-                        <ul class="ml-ingredients">
-                            @foreach (string ingredient in ingredients)
-                            {
-                                <li>@ingredient</li>
-                            }
-                        </ul>
-                    }
-                    else if (item is not null)
-                    {
-                        <p class="cs-muted">Os ingredientes aparecem quando guardares ou planeares a receita.</p>
-                    }
-
-                    @if (!string.IsNullOrWhiteSpace(own?.Instructions))
-                    {
-                        <h3 class="ml-detail-h">Preparação</h3>
-                        <ol class="ml-steps">
-                            @foreach (string step in Recipe.SplitLines(own.Instructions))
-                            {
-                                <li>@step</li>
-                            }
-                        </ol>
-                    }
-
-                    <div class="ml-plan-box">
-                        <span>Planear para</span>
-                        <select class="field" aria-label="Dia" value="@_detail.PlanDay" @onchange="e => _detail.PlanDay = DateOnly.Parse(e.Value!.ToString()!, System.Globalization.CultureInfo.InvariantCulture)">
-                            @for (int offset = 0; offset < 7; offset++)
-                            {
-                                DateOnly day = _weekStart.AddDays(offset);
-                                <option value="@day.ToString("yyyy-MM-dd")">@DayName(day), @day.ToString("d MMM", CasaCatalog.Culture)</option>
-                            }
-                        </select>
-                        <select class="field" aria-label="Refeição" value="@_detail.PlanSlot" @onchange="e => _detail.PlanSlot = Enum.Parse<MealSlot>(e.Value!.ToString()!)">
-                            @foreach (MealSlot slot in MealCatalog.Slots)
-                            {
-                                <option value="@slot">@MealCatalog.SlotLabel(slot)</option>
-                            }
-                        </select>
-                        <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="PlanFromDetailAsync">Planear</button>
-                    </div>
+                    <RecipeView Title="@(own?.Title ?? item!.Title)" ImageUrl="@(own?.ImageUrl ?? item?.ImageUrl)" SourceName="@(own?.SourceName ?? item?.SourceName)"
+                                SourceUrl="@(own?.SourceUrl ?? item?.Url)" Minutes="@(own?.Minutes ?? item?.Minutes)" Servings="@(own?.Servings ?? item?.Servings)"
+                                Category="@(own?.Category ?? item?.Category)" Ingredients="@(own?.Ingredients ?? item?.Ingredients)"
+                                Instructions="@(own?.Instructions ?? item?.Instructions)" Loading="_detail.Loading">
+                        <div class="ml-plan-box">
+                            <span>📅 Planear para</span>
+                            <select class="field" aria-label="Dia" value="@_detail.PlanDay.ToString("yyyy-MM-dd")" @onchange="e => _detail.PlanDay = DateOnly.Parse(e.Value!.ToString()!, System.Globalization.CultureInfo.InvariantCulture)">
+                                @for (int offset = 0; offset < 7; offset++)
+                                {
+                                    DateOnly day = _weekStart.AddDays(offset);
+                                    <option value="@day.ToString("yyyy-MM-dd")">@DayName(day), @day.ToString("d MMM", CasaCatalog.Culture)</option>
+                                }
+                            </select>
+                            <select class="field" aria-label="Refeição" value="@_detail.PlanSlot" @onchange="e => _detail.PlanSlot = Enum.Parse<MealSlot>(e.Value!.ToString()!)">
+                                @foreach (MealSlot slot in MealCatalog.Slots)
+                                {
+                                    <option value="@slot">@MealCatalog.SlotLabel(slot)</option>
+                                }
+                            </select>
+                            <button type="button" class="btn btn-primary" disabled="@(_busy || _detail.Loading)" @onclick="PlanFromDetailAsync">Planear</button>
+                        </div>
+                    </RecipeView>
                 </ChildContent>
                 <Footer>
                     @if (own is not null)
                     {
-                        <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="() => DeleteRecipeAsync(own)"><Icon Name="IconName.Trash" Size="16" /></button>
+                        <button type="button" class="btn btn-danger" disabled="@_busy" aria-label="Eliminar receita" @onclick="() => DeleteRecipeAsync(own)"><Icon Name="IconName.Trash" Size="16" /></button>
                         <button type="button" class="btn btn-ghost" @onclick="() => OpenEditRecipe(own)"><Icon Name="IconName.Pencil" Size="15" /> Editar</button>
                     }
                     <span class="spacer"></span>
@@ -535,7 +515,7 @@
                     }
                     else
                     {
-                        <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="() => SaveCatalogAsync(item!)">Guardar nas nossas receitas</button>
+                        <button type="button" class="btn btn-ghost" disabled="@(_busy || _detail.Loading)" @onclick="() => SaveCatalogAsync(item!)">Guardar nas nossas receitas</button>
                     }
                 </Footer>
             </Modal>
@@ -641,6 +621,17 @@
         public string Query { get; set; } = string.Empty;
 
         public string Text { get; set; } = string.Empty;
+
+        public PreviewState? Preview { get; set; }
+    }
+
+    private sealed class PreviewState
+    {
+        public Recipe? Own { get; init; }
+
+        public CatalogRecipe? Catalog { get; set; }
+
+        public bool Loading { get; set; }
     }
 
     private sealed class DetailState(Recipe? own, CatalogRecipe? catalog, DateOnly planDay, MealSlot planSlot)
@@ -652,6 +643,8 @@
         public DateOnly PlanDay { get; set; } = planDay;
 
         public MealSlot PlanSlot { get; set; } = planSlot;
+
+        public bool Loading { get; set; }
     }
 
     private MealWeekOverview _overview = new();
@@ -674,6 +667,7 @@
     private bool _isNewRecipe;
     private bool _linesDirty;
     private bool _busy;
+    private bool _loadingPhotos;
     private CancellationTokenSource? _searchDelay;
 
     protected override bool IsEditing => _picker is not null || _detail is not null || _edit is not null || _importUrl is not null || _linesDirty;
@@ -873,6 +867,76 @@
         }
     }
 
+    private RenderFragment LoadPhotosButton(List<CatalogRecipe> items)
+    {
+        int pending = items.Count(i => i.Status is CatalogRecipeStatus.Pending or CatalogRecipeStatus.Failed);
+
+        return @<text>
+            @if (pending > 0 || _loadingPhotos)
+            {
+                <button type="button" class="btn btn-ghost ml-photos" disabled="@_loadingPhotos" @onclick="() => LoadPhotosAsync(items)">
+                    @(_loadingPhotos ? "📸 A carregar fotos e receitas…" : $"📸 Carregar fotos ({pending})")
+                </button>
+            }
+        </text>;
+    }
+
+    private async Task LoadPhotosAsync(List<CatalogRecipe> items)
+    {
+        List<Guid> ids = [.. items.Where(i => i.Status is CatalogRecipeStatus.Pending or CatalogRecipeStatus.Failed).Select(i => i.Id)];
+
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        _loadingPhotos = true;
+
+        try
+        {
+            List<CatalogRecipe> loaded = await Meals.LoadCatalogDetailsAsync(ids, Cancellation);
+            Dictionary<Guid, CatalogRecipe> byId = loaded.ToDictionary(i => i.Id);
+
+            void Merge(List<CatalogRecipe> list)
+            {
+                for (int index = list.Count - 1; index >= 0; index--)
+                {
+                    if (!byId.TryGetValue(list[index].Id, out CatalogRecipe? fresh))
+                    {
+                        continue;
+                    }
+
+                    if (fresh.Status == CatalogRecipeStatus.NotRecipe)
+                    {
+                        list.RemoveAt(index);
+                    }
+                    else
+                    {
+                        list[index] = fresh;
+                    }
+                }
+            }
+
+            Merge(_catalogItems);
+
+            if (_pickerCatalog is not null)
+            {
+                Merge(_pickerCatalog.Items);
+            }
+
+            int failed = loaded.Count(i => i.Status == CatalogRecipeStatus.Failed);
+            Toasts.Show(failed == 0 ? "Fotos carregadas. 😋" : $"Fotos carregadas. {failed} não responderam — tenta outra vez daqui a pouco.", failed == 0 ? ToastKind.Success : ToastKind.Info);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível carregar as fotos. Tenta novamente.", ToastKind.Error);
+        }
+        finally
+        {
+            _loadingPhotos = false;
+        }
+    }
+
     private async Task LoadPickerCatalogAsync()
     {
         try
@@ -955,9 +1019,116 @@
     private void OpenDetail(Recipe? own, CatalogRecipe? item)
     {
         DateOnly firstFree = Enumerable.Range(0, 7).Select(_weekStart.AddDays).FirstOrDefault(d => EntryAt(d, MealSlot.Dinner) is null, _weekStart);
-        _detail = new DetailState(own, item, _picker?.Date ?? firstFree, _picker?.Slot ?? MealSlot.Dinner);
+        DetailState detail = new(own, item, _picker?.Date ?? firstFree, _picker?.Slot ?? MealSlot.Dinner) { Loading = item is not null };
+        _detail = detail;
         ClosePicker();
+
+        if (item is not null)
+        {
+            _ = LoadDetailAsync(detail, item.Id);
+        }
     }
+
+    private async Task LoadDetailAsync(DetailState detail, Guid catalogId)
+    {
+        CatalogRecipe? full = await LoadCatalogRecipeAsync(catalogId);
+
+        if (_detail != detail)
+        {
+            return;
+        }
+
+        if (full is null)
+        {
+            _detail = null;
+        }
+        else
+        {
+            detail.Catalog = full;
+            detail.Loading = false;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenPreviewAsync(Recipe? own, CatalogRecipe? item)
+    {
+        if (_picker is null)
+        {
+            return;
+        }
+
+        PreviewState preview = new() { Own = own, Catalog = item, Loading = item is not null };
+        _picker.Preview = preview;
+
+        if (item is null)
+        {
+            return;
+        }
+
+        CatalogRecipe? full = await LoadCatalogRecipeAsync(item.Id);
+
+        if (_picker?.Preview != preview)
+        {
+            return;
+        }
+
+        if (full is null)
+        {
+            _picker.Preview = null;
+            return;
+        }
+
+        preview.Catalog = full;
+        preview.Loading = false;
+    }
+
+    private async Task<CatalogRecipe?> LoadCatalogRecipeAsync(Guid catalogId)
+    {
+        try
+        {
+            return await Meals.GetCatalogRecipeAsync(catalogId, Cancellation);
+        }
+        catch (ArgumentException ex)
+        {
+            Toasts.Show(IsReadable(ex.Message) ? ex.Message : "Não foi possível abrir a receita.", ToastKind.Error);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível abrir a receita.", ToastKind.Error);
+        }
+
+        return null;
+    }
+
+    private async Task ChoosePreviewAsync()
+    {
+        if (_picker?.Preview is not PreviewState preview)
+        {
+            return;
+        }
+
+        if (preview.Own is Recipe own)
+        {
+            await PickRecipeAsync(own.Id);
+        }
+        else if (preview.Catalog is CatalogRecipe item)
+        {
+            await PickCatalogAsync(item);
+        }
+    }
+
+    private RenderFragment ServingsStepper => @<div class="ml-servings">
+        <span>Para</span>
+        <button type="button" class="icon-btn" aria-label="Menos pessoas" @onclick="() => _picker!.Servings = Math.Max(1, _picker.Servings - 1)">−</button>
+        <strong>@_picker!.Servings</strong>
+        <button type="button" class="icon-btn" aria-label="Mais pessoas" @onclick="() => _picker!.Servings = Math.Min(Recipe.MaxServings, _picker.Servings + 1)"><Icon Name="IconName.Plus" Size="14" /></button>
+        <span>@(_picker.Servings == 1 ? "pessoa" : "pessoas")</span>
+        @if (_picker.Existing is not null && _picker.Existing.Servings != _picker.Servings && _picker.Preview is null)
+        {
+            <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="SaveServingsAsync">Guardar doses</button>
+        }
+    </div>;
 
     private async Task<Recipe?> AdoptAsync(CatalogRecipe item)
     {
@@ -1000,7 +1171,7 @@
 
         MealPlanEntry entry = new() { Date = _detail.PlanDay, Slot = _detail.PlanSlot, RecipeId = recipe.Id, Servings = _overview.People };
 
-        if (await BusyAsync(() => Meals.SaveEntryAsync(entry), $"Planeada para {DayName(entry.Date).ToLowerInvariant()} ao {MealCatalog.SlotLabel(entry.Slot).ToLowerInvariant()}."))
+        if (await BusyAsync(() => Meals.SaveEntryAsync(entry), $"Planeada para {MealCatalog.SlotWithArticle(entry.Slot)} de {DayName(entry.Date).ToLowerInvariant()}."))
         {
             _detail = null;
             await RefreshAsync();

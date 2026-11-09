@@ -1,0 +1,126 @@
+<article class="rv">
+    <div class="rv-hero">
+        @if (!string.IsNullOrEmpty(ImageUrl))
+        {
+            <img src="@ImageUrl" alt="" referrerpolicy="no-referrer" />
+        }
+        else
+        {
+            <span class="rv-hero-ph" aria-hidden="true">🍲</span>
+        }
+        <div class="rv-hero-text">
+            @if (!string.IsNullOrEmpty(SourceName))
+            {
+                <span class="rv-source">@SourceName</span>
+            }
+            <h3>@Title</h3>
+        </div>
+    </div>
+
+    <div class="rv-chips">
+        @if (MealCatalog.Duration(Minutes) is string duration)
+        {
+            <span class="rv-chip">⏱️ @duration</span>
+        }
+        @if (Servings is int servings)
+        {
+            <span class="rv-chip">👥 @servings @(servings == 1 ? "pessoa" : "pessoas")</span>
+        }
+        @if (!string.IsNullOrEmpty(Category))
+        {
+            <span class="rv-chip">🏷️ @Category</span>
+        }
+        @if (!string.IsNullOrEmpty(SourceUrl))
+        {
+            <a class="rv-chip rv-link" href="@SourceUrl" target="_blank" rel="noopener noreferrer">Ver no site ↗</a>
+        }
+    </div>
+
+    @ChildContent
+
+    @if (Loading)
+    {
+        <p class="rv-loading">A ir buscar a receita ao site… 🍳</p>
+    }
+    else
+    {
+        List<string> ingredients = [.. Recipe.SplitLines(Ingredients)];
+        List<string> steps = [.. Recipe.SplitLines(Instructions)];
+
+        <div class="rv-cols">
+            <section class="rv-card rv-ingredients">
+                <h4>🧺 Ingredientes</h4>
+                @if (ingredients.Count == 0)
+                {
+                    <p class="rv-empty">Sem ingredientes registados.</p>
+                }
+                else
+                {
+                    <ul>
+                        @foreach (string ingredient in ingredients)
+                        {
+                            <li>@ingredient</li>
+                        }
+                    </ul>
+                }
+            </section>
+            <section class="rv-card rv-steps">
+                <h4>👩‍🍳 Preparação</h4>
+                @if (steps.Count == 0)
+                {
+                    <p class="rv-empty">
+                        Sem modo de preparação registado.
+                        @if (!string.IsNullOrEmpty(SourceUrl))
+                        {
+                            <a href="@SourceUrl" target="_blank" rel="noopener noreferrer">Vê no site ↗</a>
+                        }
+                    </p>
+                }
+                else
+                {
+                    <ol>
+                        @foreach (string step in steps)
+                        {
+                            <li>@step</li>
+                        }
+                    </ol>
+                }
+            </section>
+        </div>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? ImageUrl { get; set; }
+
+    [Parameter]
+    public string? SourceName { get; set; }
+
+    [Parameter]
+    public string? SourceUrl { get; set; }
+
+    [Parameter]
+    public int? Minutes { get; set; }
+
+    [Parameter]
+    public int? Servings { get; set; }
+
+    [Parameter]
+    public string? Category { get; set; }
+
+    [Parameter]
+    public string? Ingredients { get; set; }
+
+    [Parameter]
+    public string? Instructions { get; set; }
+
+    [Parameter]
+    public bool Loading { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

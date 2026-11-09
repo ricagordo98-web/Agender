@@ -102,3 +102,7 @@ a.btn { text-decoration: none; }
     .nav-tab.active { box-shadow: none; }
     .settings-panel { padding: 20px 18px 10px; }
 }
+
+.data-title { margin: 20px 0 4px; font-size: 15px; }
+.file-btn { position: relative; cursor: pointer; }
+.file-btn ::deep input[type=file] { display: none; }

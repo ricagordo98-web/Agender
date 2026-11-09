@@ -8,4 +8,7 @@ public sealed class UnavailableDatabaseImportService : IDatabaseImportService
 
     public Task ImportAsync(byte[] database, CancellationToken cancellationToken = default) =>
         throw new UnauthorizedAccessException("Loading a database is only available in the desktop app.");
+
+    public Task<string> ExportAsync(CancellationToken cancellationToken = default) =>
+        throw new UnauthorizedAccessException("Exporting the database is only available in the desktop app.");
 }

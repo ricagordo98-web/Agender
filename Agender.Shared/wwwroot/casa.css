@@ -811,19 +811,47 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .ml-servings { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; }
 .ml-servings strong { min-width: 20px; text-align: center; font-size: 16px; }
 .ml-picker-search { margin: 12px 0 8px; width: 100%; }
-.ml-pick-list { display: grid; gap: 2px; max-height: 50vh; overflow-y: auto; }
-.ml-pick { display: flex; align-items: center; gap: 10px; padding: 6px; border: 0; border-radius: 10px; background: transparent; text-align: left; cursor: pointer; font: inherit; color: inherit; }
-.ml-pick:hover { background: var(--surface-hover); }
 .ml-free { display: grid; gap: 8px; margin-top: 12px; }
 .ml-free .cs-chips { margin: 0; }
 .ml-free .btn { justify-self: start; }
-.ml-detail-img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 14px; margin-bottom: 10px; }
-.ml-detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 13px; color: var(--text-muted); }
-.ml-detail-meta span { display: inline-flex; align-items: center; gap: 4px; }
-.ml-detail-h { font-size: 14px; margin: 16px 0 6px; }
-.ml-ingredients { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
-.ml-steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; line-height: 1.45; }
 .ml-plan-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, #F2994A 10%, var(--surface-2)); }
+.ml-picker-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.ml-picker-bar .ml-servings { margin: 0; }
+.ml-pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); grid-auto-rows: max-content; gap: 12px; max-height: 56vh; overflow-y: auto; padding: 2px; }
+.ml-pick-card { display: grid; grid-template-rows: auto 1fr; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); text-align: left; cursor: pointer; font: inherit; color: inherit; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
+.ml-pick-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: #F2994A; }
+.ml-pick-img { position: relative; display: block; aspect-ratio: 4 / 3; background: var(--surface-hover); }
+.ml-pick-body { display: grid; gap: 4px; padding: 8px 10px 10px; align-content: start; }
+.ml-pick-body strong { font-size: 13.5px; line-height: 1.25; }
+.ml-back { justify-self: start; }
+.ml-catalog-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.ml-catalog-bar p { margin: 0; }
+.ml-photos { justify-self: start; border-color: color-mix(in srgb, #F2994A 45%, var(--border)); }
+.rv { display: grid; gap: 14px; }
+.rv-hero { position: relative; height: 240px; border-radius: 18px; overflow: hidden; background: linear-gradient(135deg, color-mix(in srgb, #F2C94C 35%, var(--surface-2)), color-mix(in srgb, #F2994A 35%, var(--surface-2))); }
+.rv-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rv-hero-ph { display: grid; place-items: center; height: 100%; font-size: 64px; }
+.rv-hero-text { position: absolute; inset: auto 0 0 0; display: grid; gap: 6px; padding: 48px 20px 16px; background: linear-gradient(transparent, rgba(30, 18, 8, 0.8)); color: #fff; }
+.rv-hero-text h3 { margin: 0; font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; font-size: 26px; font-weight: 700; line-height: 1.15; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35); }
+.rv-source { justify-self: start; padding: 3px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.22); font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; backdrop-filter: blur(4px); }
+.rv-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 999px; background: color-mix(in srgb, #F2994A 12%, var(--surface-2)); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; }
+.rv-link { color: color-mix(in srgb, #F2994A 70%, var(--text)); }
+.rv-link:hover { background: color-mix(in srgb, #F2994A 22%, var(--surface-2)); }
+.rv-loading { padding: 32px; text-align: center; color: var(--text-muted); }
+.rv-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; align-items: start; }
+.rv-card { padding: 16px 18px; border-radius: 16px; border: 1px solid color-mix(in srgb, #D4B483 35%, transparent); background: color-mix(in srgb, #F2C94C 8%, var(--surface)); }
+.rv-card h4 { margin: 0 0 10px; font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif; font-size: 17px; }
+.rv-ingredients ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.rv-ingredients li { position: relative; padding: 7px 0 7px 22px; border-bottom: 1px dashed color-mix(in srgb, #D4B483 45%, transparent); font-size: 14px; }
+.rv-ingredients li:last-child { border-bottom: 0; }
+.rv-ingredients li::before { content: ""; position: absolute; left: 4px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #6FCF97; }
+.rv-steps ol { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+.rv-steps li { position: relative; padding-left: 40px; font-size: 14px; line-height: 1.55; counter-increment: step; }
+.rv-steps li::before { content: counter(step); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #F2994A; color: #fff; font-size: 13px; font-weight: 800; }
+.rv-empty { margin: 0; color: var(--text-muted); font-size: 13.5px; }
+.rv .ml-plan-box { margin-top: 0; }
+@media (max-width: 760px) { .rv-cols { grid-template-columns: 1fr; } .rv-hero { height: 190px; } }
 .ml-plan-box select { width: auto; }
 .ml-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .ml-banner { display: flex; align-items: center; gap: 16px; text-decoration: none; color: inherit; border-left: 5px solid #F2994A; background: linear-gradient(135deg, color-mix(in srgb, #F2994A 14%, var(--surface, transparent)), var(--surface, transparent) 70%); }

@@ -239,6 +239,7 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
 
         dashboard.LunchToday = MealTitle(MealSlot.Lunch);
         dashboard.DinnerToday = MealTitle(MealSlot.Dinner);
+        dashboard.DessertToday = MealTitle(MealSlot.Dessert);
 
         DateOnly nextWeek = MealCatalog.WeekStartOf(todayDate).AddDays(7);
         DateOnly nextWeekEnd = nextWeek.AddDays(6);

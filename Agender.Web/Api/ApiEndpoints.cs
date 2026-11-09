@@ -88,6 +88,11 @@ public static class ApiEndpoints
             return Results.NoContent();
         }).DisableAntiforgery();
 
+        api.MapGet("/database/export", async (HttpContext context, DatabaseImporter importer, CancellationToken ct) =>
+            IsDirectLocalRequest(context)
+                ? Results.File(await importer.ExportAsync(ct), "application/octet-stream", $"agender-{DateTime.Now:yyyy-MM-dd-HHmm}.db")
+                : Results.NotFound());
+
         api.MapGet("/tags", async (ITagService service, CancellationToken ct) => await service.GetAllAsync(ct));
 
         return app;

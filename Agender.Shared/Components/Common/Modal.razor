@@ -1,5 +1,5 @@
 <div class="backdrop" @onclick="OnClose" @onkeydown="OnKeyDownAsync">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="@_titleId" @onclick:stopPropagation>
+    <div class="modal @Class" role="dialog" aria-modal="true" aria-labelledby="@_titleId" @onclick:stopPropagation>
         <header class="modal-head">
             <h2 id="@_titleId">@Title</h2>
             <button type="button" class="icon-btn" aria-label="Fechar" @onclick="OnClose">
@@ -25,6 +25,9 @@
 
     [Parameter, EditorRequired]
     public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Class { get; set; }
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }

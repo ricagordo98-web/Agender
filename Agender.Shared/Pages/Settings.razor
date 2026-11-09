@@ -178,14 +178,27 @@
             {
                 <header class="panel-head">
                     <h2>Dados</h2>
-                    <p>Carrega uma base de dados do Agender copiada de outro computador.</p>
+                    <p>Leva os teus dados para outro computador: exporta aqui e carrega lá.</p>
                 </header>
+                <h3 class="data-title">Exportar</h3>
+                <p class="hint">Guarda uma cópia completa da base de dados (contas, agenda, casa, finanças, casamento e refeições) na pasta Transferências.</p>
+                <div class="account-actions">
+                    <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="ExportDatabaseAsync"><Icon Name="IconName.Download" Size="16" /> Exportar base de dados</button>
+                </div>
+                @if (_exportedPath is not null)
+                {
+                    <p class="hint">Guardada em <strong>@_exportedPath</strong></p>
+                }
+                <h3 class="data-title">Carregar</h3>
                 <p class="hint">
-                    Isto <strong>substitui todos os dados deste computador</strong> (contas, agenda, casa, finanças e casamento) pelos do ficheiro.
+                    Isto <strong>substitui todos os dados deste computador</strong> pelos do ficheiro.
                     Antes disso é guardada uma cópia de segurança na pasta de dados. No fim, a sessão termina: entra com a conta que vem no ficheiro.
                 </p>
                 <div class="account-actions">
-                    <InputFile OnChange="OnDatabaseSelected" accept=".db" aria-label="Ficheiro da base de dados" />
+                    <label class="btn btn-ghost file-btn">
+                        Escolher ficheiro…
+                        <InputFile OnChange="OnDatabaseSelected" accept=".db" aria-label="Ficheiro da base de dados" />
+                    </label>
                 </div>
                 @if (_database is not null)
                 {
@@ -277,6 +290,7 @@
     private string _writeCalendarId = string.Empty;
     private bool _busy;
     private byte[]? _database;
+    private string? _exportedPath;
     private string _databaseName = string.Empty;
     private bool _saved;
     private CancellationTokenSource? _savedTimer;
@@ -380,6 +394,25 @@
         catch (Exception ex) when (ex is PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
         {
             Toasts.Show("Não foi possível carregar o ficheiro.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ExportDatabaseAsync()
+    {
+        _busy = true;
+
+        try
+        {
+            _exportedPath = await DatabaseImport.ExportAsync();
+            Toasts.Show("Base de dados exportada.", ToastKind.Success);
+        }
+        catch (Exception ex) when (ex is PersistenceException or ServerUnavailableException or UnauthorizedAccessException or IOException)
+        {
+            Toasts.Show("Não foi possível exportar a base de dados.", ToastKind.Error);
         }
         finally
         {

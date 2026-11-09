@@ -99,6 +99,10 @@ public interface IMealService
 
     Task<CatalogPage> SearchCatalogAsync(string? query, string? category, int skip, CancellationToken cancellationToken = default);
 
+    Task<List<CatalogRecipe>> LoadCatalogDetailsAsync(List<Guid> catalogIds, CancellationToken cancellationToken = default);
+
+    Task<CatalogRecipe> GetCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default);
+
     Task<Recipe> AdoptCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default);
 
     Task<List<MealIngredientLine>> GetShoppingPreviewAsync(DateOnly weekStart, CancellationToken cancellationToken = default);

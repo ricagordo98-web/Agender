@@ -55,10 +55,9 @@ public class MealMessageDispatcher(
 
             try
             {
-                string text = await MealMessages.BuildAsync(context, settings.HouseholdId, target, cancellationToken);
-                await MealMessages.SendAsync(sender, dataProtection, settings, text, cancellationToken);
+                string? partial = await MealMessages.SendWeekAsync(sender, dataProtection, settings, context, settings.HouseholdId, target, cancellationToken);
                 week.SentAt = DateTime.UtcNow;
-                week.LastError = null;
+                week.LastError = partial is null ? null : MealService.Truncate(partial, MealWeek.ErrorMaxLength);
             }
             catch (ArgumentException ex)
             {

@@ -17,6 +17,7 @@ public class MealService(
     private const int CatalogPageSize = 24;
     private const int MaxCatalogCategories = 30;
     private const int MaxShoppingLines = 300;
+    private const int ParallelFetches = 4;
 
     public async Task<MealWeekOverview> GetWeekAsync(DateOnly weekStart, CancellationToken cancellationToken = default)
     {
@@ -39,7 +40,7 @@ public class MealService(
             Recipes = [.. recipes.Values],
             ShoppingListId = listId,
             SentAt = week?.SentAt,
-            SendError = week?.SentAt is null ? week?.LastError : null,
+            SendError = week?.LastError,
             WhatsAppReady = settings?.WhatsAppEnabled == true && MealMessages.IsReady(settings)
         };
     }
@@ -246,6 +247,57 @@ public class MealService(
         };
     }
 
+    public async Task<List<CatalogRecipe>> LoadCatalogDetailsAsync(List<Guid> catalogIds, CancellationToken cancellationToken = default)
+    {
+        await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
+        Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
+
+        List<Guid> ids = [.. catalogIds.Distinct().Take(CatalogPageSize)];
+        List<CatalogRecipe> items = await context.CatalogRecipes
+            .Where(c => c.HouseholdId == householdId && ids.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+
+        using SemaphoreSlim gate = new(ParallelFetches);
+
+        await Task.WhenAll(items.Where(i => i.Status is CatalogRecipeStatus.Pending or CatalogRecipeStatus.Failed).Select(async item =>
+        {
+            await gate.WaitAsync(cancellationToken);
+
+            try
+            {
+                await RecipeCatalogSync.EnrichAsync(item, scraper, cancellationToken);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }));
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        Dictionary<Guid, string> sources = await context.RecipeSources.AsNoTracking().Where(s => s.HouseholdId == householdId)
+            .ToDictionaryAsync(s => s.Id, s => s.Name, cancellationToken);
+
+        foreach (CatalogRecipe item in items)
+        {
+            item.SourceName = sources.GetValueOrDefault(item.SourceId);
+            item.Instructions = null;
+        }
+
+        return items;
+    }
+
+    public async Task<CatalogRecipe> GetCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default)
+    {
+        await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
+        Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
+
+        CatalogRecipe item = await ReadyCatalogItemAsync(context, householdId, catalogId, cancellationToken);
+        item.SourceName = await context.RecipeSources.Where(s => s.Id == item.SourceId).Select(s => s.Name).FirstOrDefaultAsync(cancellationToken);
+
+        return item;
+    }
+
     public async Task<Recipe> AdoptCatalogRecipeAsync(Guid catalogId, CancellationToken cancellationToken = default)
     {
         await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
@@ -261,18 +313,7 @@ public class MealService(
             return existing;
         }
 
-        if (item.Status != CatalogRecipeStatus.Ready)
-        {
-            await RecipeCatalogSync.EnrichAsync(item, scraper, cancellationToken);
-            await context.SaveChangesAsync(cancellationToken);
-
-            if (item.Status != CatalogRecipeStatus.Ready)
-            {
-                throw new ArgumentException(item.Status == CatalogRecipeStatus.NotRecipe
-                    ? "Esta página não tem uma receita reconhecível."
-                    : "Não foi possível abrir a receita no site. Tenta novamente daqui a pouco.");
-            }
-        }
+        await EnsureReadyAsync(context, item, cancellationToken);
 
         string sourceName = await context.RecipeSources.Where(s => s.Id == item.SourceId).Select(s => s.Name).FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
         int people = await PeopleAsync(context, householdId, cancellationToken);
@@ -384,8 +425,6 @@ public class MealService(
             throw new ArgumentException("Configura primeiro o WhatsApp em Definições → Refeições.");
         }
 
-        string text = await MealMessages.BuildAsync(context, householdId, weekStart, cancellationToken);
-
         MealWeek? week = await context.MealWeeks.FirstOrDefaultAsync(w => w.HouseholdId == householdId && w.WeekStart == weekStart, cancellationToken);
 
         if (week is null)
@@ -398,9 +437,9 @@ public class MealService(
 
         try
         {
-            await MealMessages.SendAsync(whatsApp, dataProtection, settings!, text, cancellationToken);
+            string? partial = await MealMessages.SendWeekAsync(whatsApp, dataProtection, settings!, context, householdId, weekStart, cancellationToken);
             week.SentAt = DateTime.UtcNow;
-            week.LastError = null;
+            week.LastError = partial is null ? null : Truncate(partial, MealWeek.ErrorMaxLength);
         }
         catch (ArgumentException ex)
         {
@@ -410,6 +449,34 @@ public class MealService(
         }
 
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<CatalogRecipe> ReadyCatalogItemAsync(AgenderDbContext context, Guid householdId, Guid catalogId, CancellationToken cancellationToken)
+    {
+        CatalogRecipe item = await context.CatalogRecipes.FirstOrDefaultAsync(c => c.Id == catalogId && c.HouseholdId == householdId, cancellationToken)
+            ?? throw new NotFoundException($"Catalog recipe {catalogId} was not found.");
+
+        await EnsureReadyAsync(context, item, cancellationToken);
+
+        return item;
+    }
+
+    private async Task EnsureReadyAsync(AgenderDbContext context, CatalogRecipe item, CancellationToken cancellationToken)
+    {
+        if (item.Status == CatalogRecipeStatus.Ready)
+        {
+            return;
+        }
+
+        await RecipeCatalogSync.EnrichAsync(item, scraper, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (item.Status != CatalogRecipeStatus.Ready)
+        {
+            throw new ArgumentException(item.Status == CatalogRecipeStatus.NotRecipe
+                ? "Esta página não tem uma receita reconhecível."
+                : "Não foi possível abrir a receita no site. Tenta novamente daqui a pouco.");
+        }
     }
 
     internal static Recipe FromScraped(ScrapedRecipe scraped, Guid householdId, string url, string sourceName, int people) => new()

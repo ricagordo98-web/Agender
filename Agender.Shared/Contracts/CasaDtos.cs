@@ -110,6 +110,8 @@ public class CasaDashboard
 
     public string? DinnerToday { get; set; }
 
+    public string? DessertToday { get; set; }
+
     public int MealsPlannedNextWeek { get; set; }
 }
 

@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Agender.Shared.Domain;
 
-public enum MealSlot { Lunch = 0, Dinner = 1 }
+public enum MealSlot { Lunch = 0, Dinner = 1, Dessert = 2 }
 
 public enum CatalogRecipeStatus { Pending = 0, Ready = 1, NotRecipe = 2, Failed = 3 }
 
@@ -186,7 +186,7 @@ public static class MealCatalog
 {
     public const string DefaultPantry = "Sal\nPimenta\nAzeite\nÓleo\nÁgua\nVinagre\nAçúcar\nFarinha\nLouro\nColorau";
 
-    public static readonly MealSlot[] Slots = [MealSlot.Lunch, MealSlot.Dinner];
+    public static readonly MealSlot[] Slots = [MealSlot.Lunch, MealSlot.Dinner, MealSlot.Dessert];
 
     public static readonly string[] QuickTitles = ["Sobras", "Jantar fora", "Takeaway"];
 
@@ -198,9 +198,21 @@ public static class MealCatalog
         new("Pingo Doce", "https://www.pingodoce.pt/sitemap_index.xml", "/receitas/")
     ];
 
-    public static string SlotLabel(MealSlot slot) => slot == MealSlot.Lunch ? "Almoço" : "Jantar";
+    public static string SlotLabel(MealSlot slot) => slot switch
+    {
+        MealSlot.Lunch => "Almoço",
+        MealSlot.Dinner => "Jantar",
+        _ => "Sobremesa"
+    };
 
-    public static string SlotEmoji(MealSlot slot) => slot == MealSlot.Lunch ? "☀️" : "🌙";
+    public static string SlotEmoji(MealSlot slot) => slot switch
+    {
+        MealSlot.Lunch => "☀️",
+        MealSlot.Dinner => "🌙",
+        _ => "🍰"
+    };
+
+    public static string SlotWithArticle(MealSlot slot) => slot == MealSlot.Dessert ? "a sobremesa" : $"o {SlotLabel(slot).ToLowerInvariant()}";
 
     public static DateOnly WeekStartOf(DateOnly date) => date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
 

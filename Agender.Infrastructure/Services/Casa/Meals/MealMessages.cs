@@ -87,8 +87,20 @@ internal static class MealMessages
 
             foreach (MealPlanEntry entry in day.OrderBy(e => e.Slot))
             {
-                string title = entry.RecipeId is Guid id && recipes.TryGetValue(id, out Recipe? recipe) ? recipe.Title : entry.Title ?? string.Empty;
-                text.Append(MealCatalog.SlotEmoji(entry.Slot)).Append(' ').Append(MealCatalog.SlotLabel(entry.Slot)).Append(": ").Append(title).Append('\n');
+                Recipe? recipe = entry.RecipeId is Guid id ? recipes.GetValueOrDefault(id) : null;
+                text.Append(MealCatalog.SlotEmoji(entry.Slot)).Append(' ').Append(MealCatalog.SlotLabel(entry.Slot)).Append(": ").Append(recipe?.Title ?? entry.Title ?? string.Empty);
+
+                if (!string.IsNullOrEmpty(recipe?.SourceName))
+                {
+                    text.Append(" · ").Append(recipe.SourceName);
+                }
+
+                text.Append('\n');
+
+                if (!string.IsNullOrEmpty(recipe?.SourceUrl))
+                {
+                    text.Append("   ").Append(recipe.SourceUrl).Append('\n');
+                }
             }
         }
 
@@ -111,6 +123,88 @@ internal static class MealMessages
         }
 
         return text.ToString().TrimEnd();
+    }
+
+    public static async Task<List<string>> BuildRecipesAsync(AgenderDbContext context, Guid householdId, DateOnly weekStart, CancellationToken cancellationToken)
+    {
+        (List<MealPlanEntry> entries, Dictionary<Guid, Recipe> recipes) = await LoadWeekAsync(context, householdId, weekStart, cancellationToken);
+        List<string> messages = [];
+
+        foreach (IGrouping<Guid, MealPlanEntry> group in entries.Where(e => e.RecipeId is Guid id && recipes.ContainsKey(id)).GroupBy(e => e.RecipeId!.Value))
+        {
+            Recipe recipe = recipes[group.Key];
+            StringBuilder text = new();
+
+            text.Append("*📖 ").Append(recipe.Title).Append('*').Append('\n');
+            text.Append("🗓️ ").Append(string.Join(", ", group.OrderBy(e => e.Date).ThenBy(e => e.Slot)
+                .Select(e => $"{CasaCatalog.Capitalize(e.Date.ToString("dddd", CasaCatalog.Culture).Split('-')[0])} ({MealCatalog.SlotLabel(e.Slot).ToLowerInvariant()})"))).Append('\n');
+
+            if (!string.IsNullOrEmpty(recipe.SourceName))
+            {
+                text.Append("🏪 Receita ").Append(recipe.SourceName).Append(" — atenção a ingredientes da marca da loja").Append('\n');
+            }
+
+            if (!string.IsNullOrEmpty(recipe.SourceUrl))
+            {
+                text.Append("🔗 ").Append(recipe.SourceUrl).Append('\n');
+            }
+
+            int people = group.Max(e => e.Servings);
+            text.Append("👥 Receita para ").Append(recipe.Servings).Append(recipe.Servings == 1 ? " pessoa" : " pessoas");
+
+            if (people != recipe.Servings)
+            {
+                text.Append(" (vão cozinhar para ").Append(people).Append(')');
+            }
+
+            text.Append('\n');
+
+            List<string> ingredients = [.. recipe.IngredientLines];
+
+            if (ingredients.Count > 0)
+            {
+                text.Append('\n').Append("*Ingredientes*").Append('\n');
+                ingredients.ForEach(i => text.Append("• ").Append(i).Append('\n'));
+            }
+
+            List<string> steps = [.. Recipe.SplitLines(recipe.Instructions)];
+
+            if (steps.Count > 0)
+            {
+                text.Append('\n').Append("*Preparação*").Append('\n');
+
+                for (int index = 0; index < steps.Count; index++)
+                {
+                    text.Append(index + 1).Append(". ").Append(steps[index]).Append('\n');
+                }
+            }
+
+            messages.Add(text.ToString().TrimEnd());
+        }
+
+        return messages;
+    }
+
+    public static async Task<string?> SendWeekAsync(WhatsAppSender sender, IDataProtectionProvider dataProtection, MealSettings settings, AgenderDbContext context, Guid householdId, DateOnly weekStart, CancellationToken cancellationToken)
+    {
+        string main = await BuildAsync(context, householdId, weekStart, cancellationToken);
+        List<string> recipes = await BuildRecipesAsync(context, householdId, weekStart, cancellationToken);
+
+        await SendAsync(sender, dataProtection, settings, main, cancellationToken);
+
+        try
+        {
+            foreach (string recipe in recipes)
+            {
+                await SendAsync(sender, dataProtection, settings, recipe, cancellationToken);
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            return $"A ementa foi enviada, mas falhou o envio de uma receita: {ex.Message}";
+        }
+
+        return null;
     }
 
     public static string Describe(decimal? quantity, string? unit, string name) => quantity switch

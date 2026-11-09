@@ -21,6 +21,8 @@
     animation: pop-in 0.28s var(--ease);
 }
 
+.modal.wide { width: min(940px, 100%); }
+
 .modal-head,
 .modal-foot {
     display: flex;
