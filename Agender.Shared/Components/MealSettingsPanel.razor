@@ -42,9 +42,9 @@ else
 
         <div class="account-actions">
             <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="NewSource"><Icon Name="IconName.Plus" Size="16" /> Fonte</button>
-            @if (MealCatalog.SuggestedSources.Any(s => _form.Sources.All(x => x.SitemapUrl != s.SitemapUrl)))
+            @if (MealCatalog.SuggestedSources.Where(s => _form.Sources.All(x => x.SitemapUrl != s.SitemapUrl)).Select(s => s.Name).ToList() is { Count: > 0 } missing)
             {
-                <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="AddSuggestedAsync">Adicionar Continente e Pingo Doce</button>
+                <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="AddSuggestedAsync">Adicionar @(missing.Count == 1 ? missing[0] : $"{string.Join(", ", missing.SkipLast(1))} e {missing[^1]}")</button>
             }
             @if (_form.Sources.Count > 0)
             {

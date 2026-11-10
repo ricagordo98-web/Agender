@@ -888,3 +888,5 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .iv-expiring-item span { font-size: 12px; color: #C0581B; }
 .iv-expiring-item.expired { border-color: color-mix(in srgb, #e5484d 50%, transparent); background: color-mix(in srgb, #e5484d 10%, transparent); }
 .iv-expiring-item.expired span { color: #e5484d; }
+.ml-cost { font-size: 13px; font-weight: 700; color: color-mix(in srgb, #27AE60 70%, var(--text)); }
+.ml-cost-hint { font-size: 12.5px; }

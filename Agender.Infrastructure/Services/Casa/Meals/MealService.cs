@@ -37,6 +37,9 @@ public class MealService(
             .Where(e => e.HouseholdId == householdId && e.Date >= previousStart && e.Date < weekStart && !e.IsLeftover && e.RecipeId != null)
             .Select(e => e.RecipeId!.Value).Distinct().ToListAsync(cancellationToken);
         List<InventoryItem> inventory = await context.InventoryItems.AsNoTracking().Where(i => i.HouseholdId == householdId).ToListAsync(cancellationToken);
+        MealPrices.Estimate estimate = entries.Any(e => e.RecipeId is not null)
+            ? MealPrices.EstimateOf(await MealMessages.PreviewAsync(context, householdId, weekStart, cancellationToken), await MealPrices.LoadAsync(context, householdId, cancellationToken))
+            : new MealPrices.Estimate(0, 0, 0);
 
         return new MealWeekOverview
         {
@@ -51,7 +54,10 @@ public class MealService(
             WhatsAppReady = MealMessages.IsReady(settings),
             PreviousWeekRecipeIds = previous,
             Inventory = inventory,
-            Pantry = [.. Recipe.SplitLines(settings?.Pantry ?? MealCatalog.DefaultPantry)]
+            Pantry = [.. Recipe.SplitLines(settings?.Pantry ?? MealCatalog.DefaultPantry)],
+            EstimatedCost = estimate.Total,
+            PricedItems = estimate.Priced,
+            ShoppingItems = estimate.Count
         };
     }
 
@@ -446,9 +452,12 @@ public class MealService(
             list.UpdatedAt = DateTime.UtcNow;
         }
 
+        List<MealPrices.KnownPrice> prices = await MealPrices.LoadAsync(context, householdId, cancellationToken);
+
         foreach (MealIngredientLine line in lines)
         {
             string name = Truncate(line.Name.Trim(), ShoppingItem.NameMaxLength);
+            decimal? price = MealPrices.PriceFor(prices, line.Key, line.Unit);
 
             context.ShoppingItems.Add(new ShoppingItem
             {
@@ -458,6 +467,7 @@ public class MealService(
                 Unit = line.Quantity is null || line.Unit is not { Length: <= 10 } ? null : line.Unit,
                 Category = CasaCatalog.ShoppingCategories.Any(c => c.Name == line.Category) ? line.Category : CasaCatalog.GuessCategory(name),
                 Note = Note(line),
+                Price = price is > 0 and <= 100_000m ? Math.Round(price.Value, 2) : null,
                 AddedBy = displayName
             });
         }

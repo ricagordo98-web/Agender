@@ -27,6 +27,12 @@ public class MealWeekOverview
     public List<InventoryItem> Inventory { get; set; } = [];
 
     public List<string> Pantry { get; set; } = [];
+
+    public decimal EstimatedCost { get; set; }
+
+    public int PricedItems { get; set; }
+
+    public int ShoppingItems { get; set; }
 }
 
 public class CatalogPage

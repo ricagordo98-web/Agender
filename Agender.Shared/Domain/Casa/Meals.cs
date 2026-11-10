@@ -201,7 +201,8 @@ public static class MealCatalog
     public static readonly SuggestedSource[] SuggestedSources =
     [
         new("Continente", "https://feed.continente.pt/sitemap", "/receitas/"),
-        new("Pingo Doce", "https://www.pingodoce.pt/sitemap_index.xml", "/receitas/")
+        new("Pingo Doce", "https://www.pingodoce.pt/sitemap_index.xml", "/receitas/"),
+        new("Lidl", "https://receitas.lidl.pt/sitemap.xml", "/receitas/")
     ];
 
     public static string SlotLabel(MealSlot slot) => slot switch

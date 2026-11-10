@@ -218,6 +218,23 @@ public static class CasaCatalog
 
     public static string Money(decimal value) => value.ToString("C", Culture);
 
+    public static string? PriceUnit(string? unit) => unit switch
+    {
+        "g" or "kg" => "kg",
+        "ml" or "L" or "l" => "L",
+        "un" or "" => null,
+        _ => unit
+    };
+
+    public static decimal LineCost(decimal price, decimal quantity, string? unit) =>
+        price * quantity * (unit is "g" or "ml" ? 0.001m : 1);
+
+    public static string PriceLabel(string? unit) => PriceUnit(unit) switch
+    {
+        null => "Preço por unidade (€)",
+        string per => $"Preço por {per} (€)"
+    };
+
     public static string MoneyShort(decimal value) =>
         Math.Abs(value) >= 1000 ? (value / 1000m).ToString("0.#", Culture) + " mil €" : value.ToString("0", Culture) + " €";
 

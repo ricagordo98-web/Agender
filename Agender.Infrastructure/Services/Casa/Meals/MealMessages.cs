@@ -130,6 +130,14 @@ internal static class MealMessages
                     text.Append("• ").Append(line).Append('\n');
                 }
             }
+
+            MealPrices.Estimate estimate = MealPrices.EstimateOf(await PreviewAsync(context, householdId, weekStart, cancellationToken), await MealPrices.LoadAsync(context, householdId, cancellationToken));
+
+            if (estimate.Priced > 0)
+            {
+                text.Append('\n').Append("💶 Estimativa: ≈ ").Append(CasaCatalog.Money(estimate.Total))
+                    .Append(" (").Append(estimate.Priced).Append(" de ").Append(estimate.Count).Append(" artigos com preço)").Append('\n');
+            }
         }
 
         return text.ToString().TrimEnd();

@@ -51,6 +51,19 @@
                         {
                             <span class="cs-muted">Clica num almoço, jantar ou sobremesa para escolher.</span>
                         }
+                        @if (_view == MealView.Week && _overview.ShoppingItems > 0)
+                        {
+                            @if (_overview.PricedItems > 0)
+                            {
+                                <span class="ml-cost" title="Com base nos últimos preços que puseram na lista de compras">
+                                    💶 ≈ @CasaCatalog.Money(_overview.EstimatedCost) · @_overview.PricedItems de @_overview.ShoppingItems artigos com preço
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="cs-muted ml-cost-hint">💶 Ponham o preço nos artigos da lista de compras e a estimativa da semana aparece aqui.</span>
+                            }
+                        }
                     </span>
                 </div>
                 @if (_view == MealView.Week && planned > 0)

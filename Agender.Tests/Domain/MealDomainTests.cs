@@ -234,6 +234,20 @@ public class MealDomainTests
     }
 
     [Fact]
+    public void MealPrices_EstimateOf_ConvertsUnitsAndCountsUnpricedItems()
+    {
+        List<MealPrices.KnownPrice> book = [new("batata", "kg", 1.2m), new("ovo", null, 0.25m)];
+        List<MealIngredientLine> lines = IngredientParser.Aggregate([("1,5 kg de batatas", 1m, "A"), ("6 ovos", 1m, "A"), ("200 g de queijo", 1m, "A")], []);
+
+        MealPrices.Estimate estimate = MealPrices.EstimateOf(lines, book);
+
+        estimate.Total.Should().Be(3.30m);
+        estimate.Priced.Should().Be(2);
+        estimate.Count.Should().Be(3);
+        MealPrices.PriceFor(book, "batata", "kg").Should().Be(1.2m);
+    }
+
+    [Fact]
     public void MealCatalog_NextMeal_DinnerLeftoversGoToNextLunch()
     {
         MealCatalog.NextMeal(new DateOnly(2026, 11, 16), MealSlot.Dinner).Should().Be((new DateOnly(2026, 11, 17), MealSlot.Lunch));

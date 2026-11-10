@@ -168,7 +168,7 @@
                 </div>
             </div>
             <div class="cs-two">
-                <label class="cs-field">Preço estimado (€)
+                <label class="cs-field">@CasaCatalog.PriceLabel(_editItem.Unit)
                     <input class="field" type="number" step="0.01" min="0" placeholder="Opcional" @bind="_editItem.Price" />
                 </label>
                 <label class="cs-field">Nota
@@ -278,7 +278,7 @@
 
     protected override bool IsEditing => _editItem is not null || _showShare || _showEditList || _confirmDelete || !string.IsNullOrWhiteSpace(_newText);
 
-    private decimal Total => _list?.Items.Where(i => i.Price.HasValue).Sum(i => i.Price!.Value * i.Quantity) ?? 0;
+    private decimal Total => _list?.Items.Where(i => i.Price.HasValue).Sum(i => CasaCatalog.LineCost(i.Price!.Value, i.Quantity, i.Unit)) ?? 0;
 
     private List<string> Categories => _list is null
         ? []
@@ -321,7 +321,7 @@
                         }
                         @if (item.Price is decimal price)
                         {
-                            <span>@CasaCatalog.Money(price * item.Quantity)</span>
+                            <span>@CasaCatalog.Money(CasaCatalog.LineCost(price, item.Quantity, item.Unit))</span>
                         }
                     </span>
                 }
