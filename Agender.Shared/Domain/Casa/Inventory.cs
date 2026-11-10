@@ -18,6 +18,8 @@ public class InventoryItem
 
     public string Category { get; set; } = CasaCatalog.DefaultShoppingCategory;
 
+    public DateOnly? ExpiresOn { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 

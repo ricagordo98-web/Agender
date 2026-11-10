@@ -221,7 +221,7 @@ public static partial class IngredientParser
         return [.. lines.Values.OrderBy(l => categoryOrder.IndexOf(l.Category)).ThenBy(l => l.Name, StringComparer.Create(CasaCatalog.Culture, true))];
     }
 
-    private static bool SameIngredient(string lineKey, string stockKey) =>
+    public static bool SameIngredient(string lineKey, string stockKey) =>
         lineKey == stockKey
         || lineKey.StartsWith(stockKey + " ", StringComparison.Ordinal)
         || stockKey.StartsWith(lineKey + " ", StringComparison.Ordinal);
@@ -324,7 +324,7 @@ public static partial class IngredientParser
         return total > 0 ? total : null;
     }
 
-    private static string Singular(string word)
+    internal static string Singular(string word)
     {
         if (word.Length <= 3 || !word.EndsWith('s'))
         {
@@ -344,7 +344,7 @@ public static partial class IngredientParser
         return word[..^1];
     }
 
-    private static string RemoveDiacritics(string text)
+    internal static string RemoveDiacritics(string text)
     {
         StringBuilder builder = new(text.Length);
 

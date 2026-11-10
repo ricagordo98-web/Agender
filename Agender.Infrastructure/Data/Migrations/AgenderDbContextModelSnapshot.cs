@@ -860,6 +860,9 @@ namespace Agender.Infrastructure.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateOnly?>("ExpiresOn")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("TEXT");
 
@@ -929,6 +932,9 @@ namespace Agender.Infrastructure.Data.Migrations
 
                     b.Property<Guid>("HouseholdId")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsLeftover")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("RecipeId")
                         .HasColumnType("TEXT");

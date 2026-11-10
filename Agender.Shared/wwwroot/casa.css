@@ -869,3 +869,22 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .iv-qty { display: inline-flex; align-items: center; gap: 4px; }
 .iv-qty strong { min-width: 64px; padding: 2px 10px; border-radius: 999px; background: var(--surface-hover); font-size: 12.5px; text-align: center; font-variant-numeric: tabular-nums; }
 .iv-edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ml-variety { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.ml-variety-chips { display: inline-flex; gap: 10px; padding: 4px 12px; border-radius: 999px; background: var(--surface-2); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ml-note { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, #F2C94C 20%, transparent); color: color-mix(in srgb, #B7791F 70%, var(--text)); }
+.ml-slot.leftover { border-style: dashed; background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.ml-filters { margin-top: 8px; align-items: center; }
+.ml-filter-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+.ml-home { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 11.5px; font-weight: 700; color: color-mix(in srgb, #27AE60 70%, var(--text)); }
+.ml-home-expiring { padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, #F2994A 20%, transparent); color: color-mix(in srgb, #C0581B 75%, var(--text)); }
+.ml-leftover-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; cursor: pointer; }
+.iv-date { width: auto; flex: 0 0 auto; padding: 6px 8px; }
+.iv-expiry { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+.iv-expiry.soon { color: #C0581B; }
+.iv-expiring { border-top: 4px solid #F2994A; display: grid; gap: 10px; margin-top: 14px; justify-items: start; }
+.iv-expiring .btn { text-decoration: none; }
+.iv-expiring-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.iv-expiring-item { display: grid; text-align: left; gap: 1px; padding: 6px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, #F2994A 40%, transparent); background: color-mix(in srgb, #F2994A 10%, transparent); color: var(--text); cursor: pointer; font: inherit; }
+.iv-expiring-item span { font-size: 12px; color: #C0581B; }
+.iv-expiring-item.expired { border-color: color-mix(in srgb, #e5484d 50%, transparent); background: color-mix(in srgb, #e5484d 10%, transparent); }
+.iv-expiring-item.expired span { color: #e5484d; }

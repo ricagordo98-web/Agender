@@ -90,7 +90,15 @@ internal static class MealMessages
             foreach (MealPlanEntry entry in day.OrderBy(e => e.Slot))
             {
                 Recipe? recipe = entry.RecipeId is Guid id ? recipes.GetValueOrDefault(id) : null;
-                text.Append(MealCatalog.SlotEmoji(entry.Slot)).Append(' ').Append(MealCatalog.SlotLabel(entry.Slot)).Append(": ").Append(recipe?.Title ?? entry.Title ?? string.Empty);
+                text.Append(MealCatalog.SlotEmoji(entry.Slot)).Append(' ').Append(MealCatalog.SlotLabel(entry.Slot)).Append(": ");
+
+                if (entry.IsLeftover)
+                {
+                    text.Append("🍱 Restos · ").Append(recipe?.Title ?? entry.Title ?? string.Empty).Append('\n');
+                    continue;
+                }
+
+                text.Append(recipe?.Title ?? entry.Title ?? string.Empty);
 
                 if (!string.IsNullOrEmpty(recipe?.SourceName))
                 {
@@ -139,7 +147,12 @@ internal static class MealMessages
 
             text.Append("*📖 ").Append(recipe.Title).Append('*').Append('\n');
             text.Append("🗓️ ").Append(string.Join(", ", group.OrderBy(e => e.Date).ThenBy(e => e.Slot)
-                .Select(e => $"{CasaCatalog.Capitalize(e.Date.ToString("dddd", CasaCatalog.Culture).Split('-')[0])} ({MealCatalog.SlotLabel(e.Slot).ToLowerInvariant()})"))).Append('\n');
+                .Select(e => $"{CasaCatalog.Capitalize(e.Date.ToString("dddd", CasaCatalog.Culture).Split('-')[0])} ({MealCatalog.SlotLabel(e.Slot).ToLowerInvariant()}{(e.IsLeftover ? ", restos" : string.Empty)})"))).Append('\n');
+
+            if (group.Any(e => e.IsLeftover))
+            {
+                text.Append("🍱 Fazer a dobrar: os restos dão para a refeição seguinte").Append('\n');
+            }
 
             if (!string.IsNullOrEmpty(recipe.SourceName))
             {
@@ -151,7 +164,7 @@ internal static class MealMessages
                 text.Append("🔗 ").Append(recipe.SourceUrl).Append('\n');
             }
 
-            int people = group.Max(e => e.Servings);
+            int people = group.Where(e => !e.IsLeftover).Select(e => e.Servings + LeftoverServings(group, e)).DefaultIfEmpty(group.Max(e => e.Servings)).Max();
             text.Append("👥 Receita para ").Append(recipe.Servings).Append(recipe.Servings == 1 ? " pessoa" : " pessoas");
 
             if (people != recipe.Servings)
@@ -208,6 +221,11 @@ internal static class MealMessages
 
         return null;
     }
+
+    private static int LeftoverServings(IEnumerable<MealPlanEntry> group, MealPlanEntry cooked) =>
+        MealCatalog.NextMeal(cooked.Date, cooked.Slot) is var (date, slot)
+            ? group.Where(e => e.IsLeftover && e.Date == date && e.Slot == slot).Sum(e => e.Servings)
+            : 0;
 
     public static string Describe(decimal? quantity, string? unit, string name) => quantity switch
     {

@@ -493,6 +493,8 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.Property(c => c.Instructions).HasMaxLength(Recipe.InstructionsMaxLength);
             entity.Property(c => c.Status).HasConversion<string>().HasMaxLength(12);
             entity.Ignore(c => c.SourceName);
+            entity.Ignore(c => c.Course);
+            entity.Ignore(c => c.AtHome);
             entity.HasIndex(c => new { c.SourceId, c.Url }).IsUnique();
             entity.HasIndex(c => new { c.HouseholdId, c.Status });
             entity.HasOne<RecipeSource>().WithMany().HasForeignKey(c => c.SourceId).OnDelete(DeleteBehavior.Cascade);

@@ -21,6 +21,12 @@ public class MealWeekOverview
     public string? SendError { get; set; }
 
     public bool WhatsAppReady { get; set; }
+
+    public List<Guid> PreviousWeekRecipeIds { get; set; } = [];
+
+    public List<InventoryItem> Inventory { get; set; } = [];
+
+    public List<string> Pantry { get; set; } = [];
 }
 
 public class CatalogPage
@@ -56,6 +62,8 @@ public class MealSettingsDto
 
     public List<RecipeSource> Sources { get; set; } = [];
 }
+
+public record CatalogQuery(string? Text = null, string? Category = null, RecipeCourse? Course = null, bool AtHome = false, int Skip = 0);
 
 public record ImportRecipeRequest(string Url);
 

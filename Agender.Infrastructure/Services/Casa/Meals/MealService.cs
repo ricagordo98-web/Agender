@@ -1,3 +1,4 @@
+using System.Globalization;
 using Agender.Infrastructure.Data;
 using Agender.Shared.Contracts;
 using Agender.Shared.Domain;
@@ -31,6 +32,12 @@ public class MealService(
 
         Guid? listId = week?.ShoppingListId is Guid id && await context.ShoppingLists.AnyAsync(l => l.Id == id, cancellationToken) ? id : null;
 
+        DateOnly previousStart = weekStart.AddDays(-7);
+        List<Guid> previous = await context.MealPlanEntries.AsNoTracking()
+            .Where(e => e.HouseholdId == householdId && e.Date >= previousStart && e.Date < weekStart && !e.IsLeftover && e.RecipeId != null)
+            .Select(e => e.RecipeId!.Value).Distinct().ToListAsync(cancellationToken);
+        List<InventoryItem> inventory = await context.InventoryItems.AsNoTracking().Where(i => i.HouseholdId == householdId).ToListAsync(cancellationToken);
+
         return new MealWeekOverview
         {
             WeekStart = weekStart,
@@ -41,7 +48,10 @@ public class MealService(
             ShoppingListId = listId,
             SentAt = week?.SentAt,
             SendError = week?.LastError,
-            WhatsAppReady = MealMessages.IsReady(settings)
+            WhatsAppReady = MealMessages.IsReady(settings),
+            PreviousWeekRecipeIds = previous,
+            Inventory = inventory,
+            Pantry = [.. Recipe.SplitLines(settings?.Pantry ?? MealCatalog.DefaultPantry)]
         };
     }
 
@@ -76,10 +86,15 @@ public class MealService(
             target = new MealPlanEntry { HouseholdId = householdId, Date = entry.Date, Slot = entry.Slot };
             context.MealPlanEntries.Add(target);
         }
+        else if (target.RecipeId is Guid previousRecipe && previousRecipe != entry.RecipeId)
+        {
+            await RemoveLeftoversAsync(context, householdId, target, cancellationToken);
+        }
 
         target.RecipeId = entry.RecipeId;
         target.Title = title;
         target.Servings = entry.Servings;
+        target.IsLeftover = entry.IsLeftover && entry.RecipeId is not null && entry.Slot != MealSlot.Dessert;
         await context.SaveChangesAsync(cancellationToken);
 
         return target;
@@ -90,12 +105,28 @@ public class MealService(
         await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
         Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
 
-        if (await context.MealPlanEntries.Where(e => e.Id == id && e.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken) == 0)
+        MealPlanEntry entry = await context.MealPlanEntries.FirstOrDefaultAsync(e => e.Id == id && e.HouseholdId == householdId, cancellationToken)
+            ?? throw new NotFoundException($"Meal {id} was not found.");
+
+        await RemoveLeftoversAsync(context, householdId, entry, cancellationToken);
+        context.MealPlanEntries.Remove(entry);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task RemoveLeftoversAsync(AgenderDbContext context, Guid householdId, MealPlanEntry cooked, CancellationToken cancellationToken)
+    {
+        if (cooked.IsLeftover || cooked.RecipeId is not Guid recipeId || MealCatalog.NextMeal(cooked.Date, cooked.Slot) is not var (date, slot))
         {
-            throw new NotFoundException($"Meal {id} was not found.");
+            return;
         }
 
-        context.MarkWritten();
+        MealPlanEntry? leftover = await context.MealPlanEntries.FirstOrDefaultAsync(
+            e => e.HouseholdId == householdId && e.Date == date && e.Slot == slot && e.IsLeftover && e.RecipeId == recipeId, cancellationToken);
+
+        if (leftover is not null)
+        {
+            context.MealPlanEntries.Remove(leftover);
+        }
     }
 
     public async Task<List<Recipe>> GetRecipesAsync(CancellationToken cancellationToken = default)
@@ -190,7 +221,7 @@ public class MealService(
         return recipe;
     }
 
-    public async Task<CatalogPage> SearchCatalogAsync(string? query, string? category, int skip, CancellationToken cancellationToken = default)
+    public async Task<CatalogPage> SearchCatalogAsync(CatalogQuery query, CancellationToken cancellationToken = default)
     {
         await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
         Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
@@ -201,50 +232,81 @@ public class MealService(
 
         List<Guid> sourceIds = [.. sources.Keys];
 
-        IQueryable<CatalogRecipe> catalog = context.CatalogRecipes.AsNoTracking()
+        List<CatalogIndex.Row> rows = await context.CatalogRecipes.AsNoTracking()
             .Where(c => c.HouseholdId == householdId && sourceIds.Contains(c.SourceId)
-                && (c.Status == CatalogRecipeStatus.Ready || c.Status == CatalogRecipeStatus.Pending));
-
-        IQueryable<CatalogRecipe> filtered = catalog;
-
-        if (!string.IsNullOrWhiteSpace(query))
-        {
-            string pattern = $"%{query.Trim().Replace("%", string.Empty).Replace("_", string.Empty)}%";
-            filtered = filtered.Where(c => EF.Functions.Like(c.Title, pattern));
-        }
-
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            filtered = filtered.Where(c => c.Category == category);
-        }
-
-        int total = await filtered.CountAsync(cancellationToken);
-
-        List<CatalogRecipe> items = await filtered
-            .OrderBy(c => c.Status == CatalogRecipeStatus.Ready ? 0 : 1).ThenBy(c => c.Title)
-            .Skip(Math.Max(0, skip)).Take(CatalogPageSize)
+                && (c.Status == CatalogRecipeStatus.Ready || c.Status == CatalogRecipeStatus.Pending))
+            .Select(c => new CatalogIndex.Row(c.Id, c.Title, c.Category, c.Status, c.FetchedAt))
             .ToListAsync(cancellationToken);
+
+        List<CatalogIndex.Row> inCourse = query.Course is RecipeCourse course ? [.. rows.Where(r => CatalogIndex.CourseOf(r) == course)] : rows;
+        List<CatalogIndex.Row> filtered = [.. inCourse.Where(r => MatchesText(r.Title, query.Text) && (string.IsNullOrWhiteSpace(query.Category) || r.Category == query.Category))];
+
+        Dictionary<Guid, HomeMatch> matches = query.AtHome ? await MatchAtHomeAsync(context, householdId, filtered, cancellationToken) : [];
+        List<CatalogIndex.Row> ordered = query.AtHome
+            ? [.. HomeMatcher.Rank(filtered.Where(r => matches.ContainsKey(r.Id)).Select(r => (r, (HomeMatch?)matches[r.Id])))]
+            : [.. filtered.OrderBy(r => r.Status == CatalogRecipeStatus.Ready ? 0 : 1).ThenBy(r => r.Title, StringComparer.Create(CasaCatalog.Culture, true))];
+
+        List<Guid> pageIds = [.. ordered.Skip(Math.Max(0, query.Skip)).Take(CatalogPageSize).Select(r => r.Id)];
+        Dictionary<Guid, CatalogRecipe> loaded = await context.CatalogRecipes.AsNoTracking()
+            .Where(c => pageIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, cancellationToken);
+
+        List<CatalogRecipe> items = [.. pageIds.Where(loaded.ContainsKey).Select(id => loaded[id])];
 
         foreach (CatalogRecipe item in items)
         {
             item.SourceName = sources.GetValueOrDefault(item.SourceId);
             item.Instructions = null;
+            item.Course = RecipeClassifier.Course(item.Title, item.Category);
+            item.AtHome = matches.GetValueOrDefault(item.Id);
         }
 
-        List<string> categories = await catalog
-            .Where(c => c.Category != null && c.Category != string.Empty)
-            .GroupBy(c => c.Category!)
+        List<string> categories = [.. inCourse
+            .Where(r => !string.IsNullOrEmpty(r.Category))
+            .GroupBy(r => r.Category!)
             .OrderByDescending(g => g.Count())
             .Take(MaxCatalogCategories)
             .Select(g => g.Key)
-            .ToListAsync(cancellationToken);
+            .Order(StringComparer.Create(CasaCatalog.Culture, true))];
 
         return new CatalogPage
         {
             Items = items,
-            Total = total,
-            Categories = [.. categories.Order(StringComparer.Create(CasaCatalog.Culture, true))]
+            Total = ordered.Count,
+            Categories = categories
         };
+    }
+
+    private static bool MatchesText(string title, string? text) =>
+        string.IsNullOrWhiteSpace(text)
+        || CasaCatalog.Culture.CompareInfo.IndexOf(title, text.Trim(), CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) >= 0;
+
+    private async Task<Dictionary<Guid, HomeMatch>> MatchAtHomeAsync(AgenderDbContext context, Guid householdId, List<CatalogIndex.Row> rows, CancellationToken cancellationToken)
+    {
+        List<CatalogIndex.Row> ready = [.. rows.Where(r => r.Status == CatalogRecipeStatus.Ready)];
+        await CatalogIndex.EnsureKeysAsync(context, ready, cancellationToken);
+
+        string? pantryText = await context.MealPreferences.AsNoTracking().Where(s => s.HouseholdId == householdId).Select(s => s.Pantry).FirstOrDefaultAsync(cancellationToken);
+        List<string> pantry = HomeMatcher.PantryKeys(Recipe.SplitLines(pantryText ?? MealCatalog.DefaultPantry));
+        List<(string Key, InventoryItem Item)> stock = HomeMatcher.Stock(
+            await context.InventoryItems.AsNoTracking().Where(i => i.HouseholdId == householdId).ToListAsync(cancellationToken));
+        DateOnly today = Today();
+        Dictionary<Guid, HomeMatch> matches = [];
+
+        if (stock.Count == 0)
+        {
+            return matches;
+        }
+
+        foreach (CatalogIndex.Row row in ready)
+        {
+            if (HomeMatcher.Match(CatalogIndex.KeysOf(row), pantry, stock, today) is { Have: > 0 } match)
+            {
+                matches[row.Id] = match;
+            }
+        }
+
+        return matches;
     }
 
     public async Task<List<CatalogRecipe>> LoadCatalogDetailsAsync(List<Guid> catalogIds, CancellationToken cancellationToken = default)

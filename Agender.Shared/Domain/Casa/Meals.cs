@@ -68,6 +68,8 @@ public class MealPlanEntry
 
     public int Servings { get; set; } = 2;
 
+    public bool IsLeftover { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -131,6 +133,10 @@ public class CatalogRecipe
     public DateTime? FetchedAt { get; set; }
 
     public string? SourceName { get; set; }
+
+    public RecipeCourse Course { get; set; }
+
+    public HomeMatch? AtHome { get; set; }
 }
 
 public class MealSettings
@@ -213,6 +219,20 @@ public static class MealCatalog
     };
 
     public static string SlotWithArticle(MealSlot slot) => slot == MealSlot.Dessert ? "a sobremesa" : $"o {SlotLabel(slot).ToLowerInvariant()}";
+
+    public static (DateOnly Date, MealSlot Slot)? NextMeal(DateOnly date, MealSlot slot) => slot switch
+    {
+        MealSlot.Lunch => (date, MealSlot.Dinner),
+        MealSlot.Dinner => (date.AddDays(1), MealSlot.Lunch),
+        _ => null
+    };
+
+    public static (DateOnly Date, MealSlot Slot)? PreviousMeal(DateOnly date, MealSlot slot) => slot switch
+    {
+        MealSlot.Dinner => (date, MealSlot.Lunch),
+        MealSlot.Lunch => (date.AddDays(-1), MealSlot.Dinner),
+        _ => null
+    };
 
     public static DateOnly WeekStartOf(DateOnly date) => date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
 

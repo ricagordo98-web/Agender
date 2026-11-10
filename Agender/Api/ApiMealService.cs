@@ -33,8 +33,9 @@ public sealed class ApiMealService(IHttpClientFactory httpClientFactory, AuthSes
     public Task<Recipe> ImportRecipeAsync(string url, CancellationToken cancellationToken = default) =>
         SendAsync<Recipe>(HttpMethod.Post, $"{Root}/recipes/import", new ImportRecipeRequest(url), cancellationToken, RemoteTimeout);
 
-    public Task<CatalogPage> SearchCatalogAsync(string? query, string? category, int skip, CancellationToken cancellationToken = default) =>
-        GetAsync<CatalogPage>($"{Root}/catalog?q={Uri.EscapeDataString(query ?? string.Empty)}&category={Uri.EscapeDataString(category ?? string.Empty)}&skip={skip}", cancellationToken);
+    public Task<CatalogPage> SearchCatalogAsync(CatalogQuery query, CancellationToken cancellationToken = default) =>
+        GetAsync<CatalogPage>($"{Root}/catalog?q={Uri.EscapeDataString(query.Text ?? string.Empty)}&category={Uri.EscapeDataString(query.Category ?? string.Empty)}"
+            + $"&course={query.Course?.ToString() ?? string.Empty}&home={query.AtHome}&skip={query.Skip}", cancellationToken);
 
     public Task<List<CatalogRecipe>> LoadCatalogDetailsAsync(List<Guid> catalogIds, CancellationToken cancellationToken = default) =>
         SendAsync<List<CatalogRecipe>>(HttpMethod.Post, $"{Root}/catalog/details", catalogIds, cancellationToken, TimeSpan.FromMinutes(2));

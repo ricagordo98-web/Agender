@@ -53,6 +53,20 @@
                         }
                     </span>
                 </div>
+                @if (_view == MealView.Week && planned > 0)
+                {
+                    VarietySummary variety = Variety();
+
+                    <div class="ml-variety">
+                        <span class="ml-variety-chips" title="Almoços e jantares por tipo">
+                            <span>🥩 @variety.Meat</span><span>🐟 @variety.Fish</span><span>🥦 @variety.Veggie</span>
+                        </span>
+                        @foreach (string note in variety.Notes)
+                        {
+                            <span class="ml-note">@note</span>
+                        }
+                    </div>
+                }
             </section>
         }
 
@@ -119,15 +133,20 @@
                             else
                             {
                                 Recipe? recipe = RecipeOf(entry);
+                                MealProtein? protein = slot == MealSlot.Dessert ? null : ProteinOf(entry);
 
-                                <button type="button" class="ml-slot filled" @onclick="() => OpenPicker(day, slot, entry)">
+                                <button type="button" class="ml-slot filled @(entry.IsLeftover ? "leftover" : string.Empty)" @onclick="() => OpenPicker(day, slot, entry)">
                                     @Thumb(recipe?.ImageUrl, recipe is null ? "🥡" : "🍲", "ml-thumb")
                                     <span class="ml-slot-body">
                                         <span class="ml-slot-label">@MealCatalog.SlotEmoji(slot) @MealCatalog.SlotLabel(slot)</span>
                                         <span class="ml-slot-title">@(recipe?.Title ?? entry.Title)</span>
-                                        @if (recipe is not null)
+                                        @if (entry.IsLeftover)
                                         {
-                                            <span class="ml-slot-meta">@Meta(MealCatalog.Duration(recipe.Minutes), $"{entry.Servings} {(entry.Servings == 1 ? "pessoa" : "pessoas")}")</span>
+                                            <span class="ml-slot-meta">@Meta(protein is MealProtein leftoverKind ? RecipeClassifier.Emoji(leftoverKind) : null, $"🍱 Restos {LeftoverSource(entry)}")</span>
+                                        }
+                                        else if (recipe is not null)
+                                        {
+                                            <span class="ml-slot-meta">@Meta(protein is MealProtein kind ? RecipeClassifier.Emoji(kind) : null, MealCatalog.Duration(recipe.Minutes), $"{entry.Servings} {(entry.Servings == 1 ? "pessoa" : "pessoas")}", HasLeftover(entry) ? "🍱 a dobrar" : null)</span>
                                         }
                                     </span>
                                 </button>
@@ -148,10 +167,23 @@
                 <button type="button" class="btn btn-primary" @onclick="() => OpenEditRecipe(null)"><Icon Name="IconName.Plus" Size="16" /> Receita</button>
             </div>
 
+            <div class="cs-chips ml-filters">
+                @foreach ((RecipeCourse? course, string label) in CourseFilters)
+                {
+                    <button type="button" class="cs-chip @(_course == course ? "on" : string.Empty)" @onclick="() => SetCourseAsync(course)">@label</button>
+                }
+                <span class="ml-filter-sep" aria-hidden="true"></span>
+                <button type="button" class="cs-chip @(_atHome ? "on" : string.Empty)" title="Ordena pelas receitas que usam mais coisas do inventário" @onclick="ToggleAtHomeAsync">🧺 Com o que há em casa</button>
+            </div>
+            @if (_atHome && _overview.Inventory.Count == 0)
+            {
+                <p class="cs-hint">O inventário está vazio. Acrescenta o que têm em casa em <a href="casa/inventario">Casa → Inventário</a>.</p>
+            }
+
             @if (_recipeTab == RecipeTab.Ours)
             {
                 List<string> categories = [.. _recipes.Where(r => !string.IsNullOrEmpty(r.Category)).Select(r => r.Category!).Distinct().Order()];
-                List<Recipe> shown = [.. FilterOwn(_query).Where(r => _ownFilter switch { null => true, FavoritesFilter => r.IsFavorite, _ => r.Category == _ownFilter })];
+                List<Recipe> shown = [.. OwnOptions(_query, _course, _atHome).Where(r => _ownFilter switch { null => true, FavoritesFilter => r.IsFavorite, _ => r.Category == _ownFilter })];
 
                 <div class="cs-chips">
                     <button type="button" class="cs-chip @(_ownFilter is null ? "on" : string.Empty)" @onclick="() => _ownFilter = null">Todas (@_recipes.Count)</button>
@@ -195,6 +227,10 @@
                                     }
                                     @Meta(MealCatalog.Duration(recipe.Minutes), recipe.Category)
                                 </span>
+                                @if (_atHome)
+                                {
+                                    @HomeBadge(HomeOf(recipe))
+                                }
                             </span>
                         </button>
                     }
@@ -223,7 +259,12 @@
                     {
                         <div class="card ml-empty">
                             <span class="ml-empty-emoji">📚</span>
-                            @if (string.IsNullOrWhiteSpace(_query) && _catalogCategory is null)
+                            @if (_atHome)
+                            {
+                                <strong>Nenhuma receita usa o que têm em casa</strong>
+                                <span class="cs-muted">Acrescenta mais produtos ao <a href="casa/inventario">inventário</a> ou desliga o filtro.</span>
+                            }
+                            else if (string.IsNullOrWhiteSpace(_query) && _catalogCategory is null)
                             {
                                 <strong>O catálogo está vazio</strong>
                                 <span class="cs-muted">Adiciona fontes de receitas (por exemplo, Continente e Pingo Doce) em <a href="definicoes">Definições → Refeições</a>. As receitas começam a aparecer passados uns minutos.</span>
@@ -264,6 +305,7 @@
                                             @Meta(MealCatalog.Duration(item.Minutes), item.Category)
                                         }
                                     </span>
+                                    @HomeBadge(item.AtHome)
                                 </span>
                             </button>
                         }
@@ -302,12 +344,16 @@
                             <div class="ml-current">
                                 @Thumb(current?.ImageUrl, current is null ? "🥡" : "🍲", "ml-thumb")
                                 <span class="ml-slot-body">
-                                    <small class="cs-muted">Escolhido</small>
+                                    <small class="cs-muted">@(existing.IsLeftover ? $"🍱 Restos {LeftoverSource(existing)}" : "Escolhido")</small>
                                     <strong>@(current?.Title ?? existing.Title)</strong>
                                 </span>
                                 @if (current is not null)
                                 {
                                     <button type="button" class="btn btn-ghost" @onclick="() => OpenPreviewAsync(current, null)">Ver receita</button>
+                                    @if (!existing.IsLeftover && !HasLeftover(existing) && MealCatalog.NextMeal(existing.Date, existing.Slot) is not null)
+                                    {
+                                        <button type="button" class="btn btn-ghost" disabled="@_busy" title="Fazer a dobrar e guardar os restos para a refeição seguinte" @onclick="AddLeftoverToExistingAsync">🍱 Restos para @NextMealLabel(existing.Date, existing.Slot)</button>
+                                    }
                                 }
                                 <button type="button" class="btn btn-danger" disabled="@_busy" aria-label="Remover refeição" @onclick="RemoveEntryAsync"><Icon Name="IconName.Trash" Size="15" /></button>
                             </div>
@@ -337,10 +383,16 @@
                         {
                             <input class="field ml-picker-search" type="search" placeholder="Procurar uma receita… (ex.: bacalhau, frango, sopa)" aria-label="Procurar receitas"
                                    @bind="_picker.Query" @bind:event="oninput" @bind:after="OnPickerQueryAsync" />
+                            <div class="cs-chips ml-filters">
+                                <button type="button" class="cs-chip @(_picker.OnlyCourse ? "on" : string.Empty)" @onclick="() => TogglePickerFilterAsync(onlyCourse: true)">
+                                    @(_picker.Slot == MealSlot.Dessert ? "🍰 Só sobremesas" : "🍽️ Só refeições")
+                                </button>
+                                <button type="button" class="cs-chip @(_picker.AtHome ? "on" : string.Empty)" @onclick="() => TogglePickerFilterAsync(onlyCourse: false)">🧺 Com o que há em casa</button>
+                            </div>
 
                             @if (_picker.Tab == PickerTab.Ours)
                             {
-                                List<Recipe> options = [.. FilterOwn(_picker.Query)];
+                                List<Recipe> options = [.. OwnOptions(_picker.Query, _picker.OnlyCourse ? SlotCourse(_picker.Slot) : null, _picker.AtHome)];
 
                                 @if (_recipes.Count == 0)
                                 {
@@ -361,6 +413,10 @@
                                             <span class="ml-pick-body">
                                                 <strong>@recipe.Title</strong>
                                                 <span class="ml-slot-meta">@Meta(recipe.SourceName, MealCatalog.Duration(recipe.Minutes))</span>
+                                                @if (_picker.AtHome)
+                                                {
+                                                    @HomeBadge(HomeOf(recipe))
+                                                }
                                             </span>
                                         </button>
                                     }
@@ -387,6 +443,7 @@
                                             <span class="ml-pick-body">
                                                 <strong>@item.Title</strong>
                                                 <span class="ml-slot-meta">@Meta(item.SourceName, item.Status == CatalogRecipeStatus.Pending ? null : MealCatalog.Duration(item.Minutes))</span>
+                                                @HomeBadge(item.AtHome)
                                             </span>
                                         </button>
                                     }
@@ -399,6 +456,19 @@
                     @if (_picker.Preview is PreviewState chosen)
                     {
                         @ServingsStepper
+                        @if (MealCatalog.NextMeal(_picker.Date, _picker.Slot) is var (nextDate, nextSlot))
+                        {
+                            MealPlanEntry? occupied = EntryAt(nextDate, nextSlot);
+
+                            <label class="ml-leftover-toggle" title="Cozinhar a dobrar e guardar os restos">
+                                <input type="checkbox" checked="@_picker.Leftovers" @onchange="e => _picker.Leftovers = e.Value is true" />
+                                🍱 A dobrar para @NextMealLabel(_picker.Date, _picker.Slot)
+                                @if (_picker.Leftovers && occupied is not null && !occupied.IsLeftover)
+                                {
+                                    <small class="cs-muted">(substitui «@(RecipeOf(occupied)?.Title ?? occupied.Title)»)</small>
+                                }
+                            </label>
+                        }
                         <span class="spacer"></span>
                         <button type="button" class="btn btn-ghost" @onclick="() => _picker.Preview = null">Voltar</button>
                         <button type="button" class="btn btn-primary" disabled="@(_busy || chosen.Loading)" @onclick="ChoosePreviewAsync">
@@ -539,6 +609,9 @@
 
     private static readonly string[] RecipeCategories = ["Carne", "Peixe", "Vegetariano", "Massas", "Sopas", "Saladas", "Acompanhamentos", "Sobremesas"];
 
+    private static readonly (RecipeCourse? Course, string Label)[] CourseFilters =
+        [(RecipeCourse.Main, "🍽️ Refeições"), (RecipeCourse.Dessert, "🍰 Sobremesas"), (RecipeCourse.Other, "🥪 Snacks e outros"), (RecipeCourse.Drink, "🥤 Bebidas"), (null, "Tudo")];
+
     private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
         [new((int)MealView.Week, "Semana"), new((int)MealView.Recipes, "Receitas")];
 
@@ -565,6 +638,12 @@
         public string Text { get; set; } = string.Empty;
 
         public PreviewState? Preview { get; set; }
+
+        public bool OnlyCourse { get; set; } = true;
+
+        public bool AtHome { get; set; }
+
+        public bool Leftovers { get; set; }
     }
 
     private sealed class PreviewState
@@ -609,6 +688,13 @@
     private bool _busy;
     private bool _loadingPhotos;
     private CancellationTokenSource? _searchDelay;
+    private RecipeCourse? _course = RecipeCourse.Main;
+    private bool _atHome;
+    private List<string> _pantryKeys = [];
+    private List<(string Key, InventoryItem Item)> _stock = [];
+
+    [SupplyParameterFromQuery(Name = "emcasa")]
+    public bool OpenAtHome { get; set; }
 
     protected override bool IsEditing => _picker is not null || _detail is not null || _edit is not null || _importUrl is not null;
 
@@ -617,10 +703,19 @@
         if (_weekStart == default)
         {
             _weekStart = MealCatalog.WeekStartOf(DateOnly.FromDateTime(DateTime.Now)).AddDays(7);
+
+            if (OpenAtHome)
+            {
+                _view = MealView.Recipes;
+                _recipeTab = RecipeTab.Catalog;
+                _atHome = true;
+            }
         }
 
         _overview = await Meals.GetWeekAsync(_weekStart, cancellationToken);
         _recipes = await Meals.GetRecipesAsync(cancellationToken);
+        _pantryKeys = HomeMatcher.PantryKeys(_overview.Pantry);
+        _stock = HomeMatcher.Stock(_overview.Inventory);
 
         _shareText = _view == MealView.Week && _overview.Entries.Count > 0 ? await Meals.GetShareTextAsync(_weekStart, cancellationToken) : null;
 
@@ -682,6 +777,115 @@
             ? _recipes
             : _recipes.Where(r => CasaCatalog.Culture.CompareInfo.IndexOf(r.Title, query.Trim(), System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0);
 
+    private IEnumerable<Recipe> OwnOptions(string? query, RecipeCourse? course, bool atHome)
+    {
+        IEnumerable<Recipe> recipes = FilterOwn(query).Where(r => course is null || RecipeClassifier.Course(r.Title, r.Category) == course);
+
+        return atHome ? HomeMatcher.Rank(recipes.Select(r => (r, HomeOf(r)))) : recipes;
+    }
+
+    private HomeMatch? HomeOf(Recipe recipe) =>
+        _stock.Count == 0 ? null : HomeMatcher.Match(HomeMatcher.KeysOf(recipe.IngredientLines), _pantryKeys, _stock, _overview.Today);
+
+    private static RenderFragment HomeBadge(HomeMatch? match) => @<text>
+        @if (match is { Have: > 0 })
+        {
+            <span class="ml-home" title="@(match.Expiring.Count > 0 ? $"Usa o que está a acabar o prazo: {string.Join(", ", match.Expiring)}" : "Ingredientes que já têm em casa")">
+                🧺 @match.Have de @match.Total em casa
+                @if (match.Expiring.Count > 0)
+                {
+                    <span class="ml-home-expiring">⏳ @string.Join(", ", match.Expiring)</span>
+                }
+            </span>
+        }
+    </text>;
+
+    private static RecipeCourse SlotCourse(MealSlot slot) => slot == MealSlot.Dessert ? RecipeCourse.Dessert : RecipeCourse.Main;
+
+    private MealProtein? ProteinOf(MealPlanEntry entry) =>
+        RecipeOf(entry) is Recipe recipe
+            ? RecipeClassifier.Protein(recipe.Title, recipe.Category, recipe.Ingredients)
+            : RecipeClassifier.Protein(entry.Title, null, null) is MealProtein protein && protein != MealProtein.Veggie ? protein : null;
+
+    private VarietySummary Variety()
+    {
+        List<MealVariety.PlannedMeal> meals = [.. _overview.Entries.Select(e => new MealVariety.PlannedMeal(
+            e.Date, e.Slot, e.RecipeId, RecipeOf(e)?.Title ?? e.Title ?? string.Empty, e.Slot == MealSlot.Dessert ? null : ProteinOf(e), e.IsLeftover))];
+
+        return MealVariety.Analyze(meals, _overview.PreviousWeekRecipeIds.ToHashSet());
+    }
+
+    private bool HasLeftover(MealPlanEntry entry) =>
+        !entry.IsLeftover && entry.RecipeId is not null && MealCatalog.NextMeal(entry.Date, entry.Slot) is var (date, slot)
+        && EntryAt(date, slot) is { IsLeftover: true } next && next.RecipeId == entry.RecipeId;
+
+    private static string MealLabel(DateOnly date, MealSlot slot, DateOnly reference) =>
+        $"{MealCatalog.SlotWithArticle(slot)} {(date == reference ? "do mesmo dia" : $"de {DayName(date).ToLowerInvariant()}")}";
+
+    private static string NextMealLabel(DateOnly date, MealSlot slot) =>
+        MealCatalog.NextMeal(date, slot) is var (nextDate, nextSlot) ? MealLabel(nextDate, nextSlot, date) : string.Empty;
+
+    private static string LeftoverSource(MealPlanEntry entry) =>
+        MealCatalog.PreviousMeal(entry.Date, entry.Slot) is var (date, slot) ? "d" + MealLabel(date, slot, entry.Date) : "de ontem";
+
+    private async Task SetCourseAsync(RecipeCourse? course)
+    {
+        _course = course;
+
+        if (_recipeTab == RecipeTab.Catalog)
+        {
+            await FilterCatalogAsync(null);
+        }
+    }
+
+    private async Task ToggleAtHomeAsync()
+    {
+        _atHome = !_atHome;
+
+        if (_recipeTab == RecipeTab.Catalog)
+        {
+            await SearchCatalogAsync(Cancellation);
+        }
+    }
+
+    private async Task TogglePickerFilterAsync(bool onlyCourse)
+    {
+        if (_picker is null)
+        {
+            return;
+        }
+
+        if (onlyCourse)
+        {
+            _picker.OnlyCourse = !_picker.OnlyCourse;
+        }
+        else
+        {
+            _picker.AtHome = !_picker.AtHome;
+        }
+
+        if (_picker.Tab == PickerTab.Catalog)
+        {
+            await LoadPickerCatalogAsync();
+        }
+    }
+
+    private async Task AddLeftoverToExistingAsync()
+    {
+        if (_picker?.Existing is not { RecipeId: Guid recipeId } existing || MealCatalog.NextMeal(existing.Date, existing.Slot) is not var (date, slot))
+        {
+            return;
+        }
+
+        MealPlanEntry leftover = new() { Date = date, Slot = slot, RecipeId = recipeId, Servings = existing.Servings, IsLeftover = true };
+
+        if (await BusyAsync(() => Meals.SaveEntryAsync(leftover), $"Restos guardados para {MealLabel(date, slot, existing.Date)}. 🍱"))
+        {
+            ClosePicker();
+            await RefreshAsync();
+        }
+    }
+
     private async Task ChangeViewAsync(int value)
     {
         _view = (MealView)value;
@@ -722,7 +926,7 @@
     {
         try
         {
-            _catalog = await Meals.SearchCatalogAsync(_query, _catalogCategory, 0, cancellationToken);
+            _catalog = await Meals.SearchCatalogAsync(new CatalogQuery(_query, _catalogCategory, _course, _atHome), cancellationToken);
             _catalogItems = [.. _catalog.Items];
         }
         catch (Exception ex) when (IsExpected(ex))
@@ -735,7 +939,7 @@
     {
         try
         {
-            CatalogPage page = await Meals.SearchCatalogAsync(_query, _catalogCategory, _catalogItems.Count, Cancellation);
+            CatalogPage page = await Meals.SearchCatalogAsync(new CatalogQuery(_query, _catalogCategory, _course, _atHome, _catalogItems.Count), Cancellation);
             _catalogItems.AddRange(page.Items.Where(i => _catalogItems.All(x => x.Id != i.Id)));
             _catalog!.Total = page.Total;
         }
@@ -875,7 +1079,9 @@
     {
         try
         {
-            _pickerCatalog = await Meals.SearchCatalogAsync(_picker?.Query, null, 0, Cancellation);
+            _pickerCatalog = _picker is null
+                ? null
+                : await Meals.SearchCatalogAsync(new CatalogQuery(_picker.Query, null, _picker.OnlyCourse ? SlotCourse(_picker.Slot) : null, _picker.AtHome), Cancellation);
         }
         catch (Exception ex) when (IsExpected(ex))
         {
@@ -915,8 +1121,19 @@
         }
 
         MealPlanEntry entry = new() { Date = _picker.Date, Slot = _picker.Slot, RecipeId = recipeId, Title = title, Servings = _picker.Servings };
+        (DateOnly Date, MealSlot Slot)? next = recipeId is not null && _picker.Leftovers ? MealCatalog.NextMeal(entry.Date, entry.Slot) : null;
 
-        if (await BusyAsync(() => Meals.SaveEntryAsync(entry), "Refeição planeada."))
+        async Task SaveAsync()
+        {
+            await Meals.SaveEntryAsync(entry);
+
+            if (next is var (date, slot))
+            {
+                await Meals.SaveEntryAsync(new MealPlanEntry { Date = date, Slot = slot, RecipeId = recipeId, Servings = entry.Servings, IsLeftover = true });
+            }
+        }
+
+        if (await BusyAsync(SaveAsync, next is null ? "Refeição planeada." : "Refeição planeada, a dobrar. 🍱"))
         {
             ClosePicker();
             await RefreshAsync();
@@ -930,7 +1147,7 @@
             return;
         }
 
-        MealPlanEntry entry = new() { Date = existing.Date, Slot = existing.Slot, RecipeId = existing.RecipeId, Title = existing.Title, Servings = _picker.Servings };
+        MealPlanEntry entry = new() { Date = existing.Date, Slot = existing.Slot, RecipeId = existing.RecipeId, Title = existing.Title, Servings = _picker.Servings, IsLeftover = existing.IsLeftover };
 
         if (await BusyAsync(() => Meals.SaveEntryAsync(entry), "Doses atualizadas."))
         {

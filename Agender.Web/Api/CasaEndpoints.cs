@@ -78,8 +78,8 @@ public static class CasaEndpoints
         group.MapPost("/recipes/import", async (ImportRecipeRequest request, IMealService service, CancellationToken ct) =>
             await service.ImportRecipeAsync(request.Url, ct));
 
-        group.MapGet("/catalog", async (string? q, string? category, int? skip, IMealService service, CancellationToken ct) =>
-            await service.SearchCatalogAsync(q, category, skip ?? 0, ct));
+        group.MapGet("/catalog", async (string? q, string? category, RecipeCourse? course, bool? home, int? skip, IMealService service, CancellationToken ct) =>
+            await service.SearchCatalogAsync(new CatalogQuery(q, category, course, home ?? false, skip ?? 0), ct));
 
         group.MapPost("/catalog/details", async (List<Guid> ids, IMealService service, CancellationToken ct) =>
             await service.LoadCatalogDetailsAsync(ids, ct));

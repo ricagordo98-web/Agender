@@ -23,6 +23,7 @@
             <Icon Name="IconName.Plus" Size="18" />
             <input class="bare" aria-label="Adicionar produto" placeholder="Adicionar produto…  ex.: 2 kg arroz, 6 ovos, 1 lata de grão" maxlength="@InventoryItem.NameMaxLength"
                    value="@_newText" @oninput="e => _newText = e.Value?.ToString() ?? string.Empty" />
+            <input class="field iv-date" type="date" aria-label="Validade (opcional)" title="Validade (opcional)" @bind="_newExpires" />
             <button type="submit" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_newText))">Adicionar</button>
         </form>
 
@@ -31,7 +32,26 @@
             InventoryItem preview = Parse(_newText);
             CasaCatalog.Category guessed = CasaCatalog.ShoppingCategory(CasaCatalog.GuessCategory(preview.Name));
 
-            <p class="cs-hint">→ @InventoryCatalog.Format(preview.Quantity, preview.Unit) <strong>@preview.Name</strong> em @guessed.Emoji @guessed.Name. Se já existir, soma à quantidade.</p>
+            <p class="cs-hint">→ @InventoryCatalog.Format(preview.Quantity, preview.Unit) <strong>@preview.Name</strong> em @guessed.Emoji @guessed.Name@(_newExpires is DateOnly expires ? $", validade {expires.ToString("d MMM", CasaCatalog.Culture)}" : string.Empty). Se já existir, soma à quantidade.</p>
+        }
+
+        List<InventoryItem> expiring = [.. _items.Where(i => HomeMatcher.IsExpiring(i, Today)).OrderBy(i => i.ExpiresOn)];
+
+        @if (expiring.Count > 0)
+        {
+            <section class="card iv-expiring">
+                <header class="iv-group-head"><span class="cl-emoji small">⏳</span> <h2>A acabar o prazo</h2></header>
+                <div class="iv-expiring-list">
+                    @foreach (InventoryItem item in expiring)
+                    {
+                        <button type="button" class="iv-expiring-item @(item.ExpiresOn < Today ? "expired" : string.Empty)" @key="item.Id" @onclick="() => OpenEdit(item)">
+                            <strong>@item.Name</strong>
+                            <span>@HomeMatcher.ExpiryLabel(item.ExpiresOn, Today)</span>
+                        </button>
+                    }
+                </div>
+                <a class="btn btn-primary" href="casa/refeicoes?emcasa=true">🍳 Ver receitas que os aproveitam</a>
+            </section>
         }
 
         @if (_items.Count == 0)
@@ -62,7 +82,13 @@
                         @foreach (InventoryItem item in group)
                         {
                             <div class="iv-row" @key="item.Id">
-                                <span class="iv-name">@item.Name</span>
+                                <span class="iv-name">
+                                    @item.Name
+                                    @if (HomeMatcher.ExpiryLabel(item.ExpiresOn, Today) is string expiry)
+                                    {
+                                        <small class="iv-expiry @(HomeMatcher.IsExpiring(item, Today) ? "soon" : string.Empty)">@expiry</small>
+                                    }
+                                </span>
                                 <span class="iv-qty">
                                     <button type="button" class="icon-btn" aria-label="Menos @item.Name" disabled="@_busy" @onclick="() => StepAsync(item, -1)">−</button>
                                     <strong>@InventoryCatalog.Format(item.Quantity, item.Unit)</strong>
@@ -96,6 +122,9 @@
                             </select>
                         </label>
                     </div>
+                    <label class="cs-field">Validade (opcional)
+                        <input class="field" type="date" @bind="_edit.ExpiresOn" />
+                    </label>
                     <label class="cs-field">Secção
                         <select class="field" @bind="_edit.Category">
                             @foreach (CasaCatalog.Category category in CasaCatalog.ShoppingCategories)
@@ -119,6 +148,7 @@
 @code {
     private List<InventoryItem> _items = [];
     private string _newText = string.Empty;
+    private DateOnly? _newExpires;
     private string _query = string.Empty;
     private InventoryItem? _edit;
     private decimal _editQuantity;
@@ -126,6 +156,8 @@
     private bool _busy;
 
     protected override bool IsEditing => _edit is not null;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
 
     protected override async Task LoadAsync(CancellationToken cancellationToken) =>
         _items = await Inventory.GetAsync(cancellationToken);
@@ -155,11 +187,13 @@
         }
 
         InventoryItem item = Parse(_newText);
+        item.ExpiresOn = _newExpires;
         _busy = true;
 
         if (await RunAsync(() => Inventory.AddAsync(item, Cancellation), $"{item.Name} no inventário."))
         {
             _newText = string.Empty;
+            _newExpires = null;
         }
 
         _busy = false;
@@ -231,6 +265,7 @@
         Name = item.Name,
         Quantity = item.Quantity,
         Unit = item.Unit,
-        Category = item.Category
+        Category = item.Category,
+        ExpiresOn = item.ExpiresOn
     };
 }

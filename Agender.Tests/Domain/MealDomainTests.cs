@@ -156,6 +156,92 @@ public class MealDomainTests
         RecipeScraper.TryCreateSafeUri(url, out _).Should().Be(expected);
 
     [Theory]
+    [InlineData("Bacalhau à Brás", "Peixe", RecipeCourse.Main)]
+    [InlineData("Tarte de maçã", "Tartes", RecipeCourse.Dessert)]
+    [InlineData("Tarte de legumes", "Tartes", RecipeCourse.Main)]
+    [InlineData("Bolo de cenoura", null, RecipeCourse.Dessert)]
+    [InlineData("Bolo de carne", "Sem categoria", RecipeCourse.Main)]
+    [InlineData("Queques de ovo com legumes", "Ovos", RecipeCourse.Main)]
+    [InlineData("Batido de banana e espinafres", "Sem categoria", RecipeCourse.Drink)]
+    [InlineData("Gelado de kiwi", "Sem categoria", RecipeCourse.Dessert)]
+    [InlineData("Pão de cebola com orégãos", "Sem categoria", RecipeCourse.Other)]
+    [InlineData("Hummus de cenoura", "Vegetais", RecipeCourse.Other)]
+    [InlineData("Caldo verde", "Sopas", RecipeCourse.Main)]
+    [InlineData("Cheesecake de caramelo", "Doces e compotas", RecipeCourse.Dessert)]
+    [InlineData("Mojito", "Bebida", RecipeCourse.Drink)]
+    [InlineData("Arroz de pato", null, RecipeCourse.Main)]
+    [InlineData("Batata-doce assada", null, RecipeCourse.Main)]
+    [InlineData("Esparguete com molho de pimentos e burrata", "Massas", RecipeCourse.Main)]
+    [InlineData("Koftas com hummus e salada", "Carne", RecipeCourse.Main)]
+    public void RecipeClassifier_Course_SeparatesMealsFromDessertsAndDrinks(string title, string? category, RecipeCourse expected) =>
+        RecipeClassifier.Course(title, category).Should().Be(expected);
+
+    [Theory]
+    [InlineData("Lombos de bacalhau no forno", null, null, MealProtein.Fish)]
+    [InlineData("Hambúrguer de beterraba", null, null, MealProtein.Veggie)]
+    [InlineData("Arroz de pato", null, null, MealProtein.Meat)]
+    [InlineData("Massa à primavera", "Massas", "500 g de massa\n1 curgete", MealProtein.Veggie)]
+    [InlineData("Arroz de forno", null, "2 peitos de frango\n300 g de arroz", MealProtein.Meat)]
+    [InlineData("Lasanha de vegetais grelhados", null, null, MealProtein.Veggie)]
+    [InlineData("Bife de Seitan Grelhado", "Vegetariano", null, MealProtein.Veggie)]
+    [InlineData("Lasanha à bolonhesa", null, null, MealProtein.Meat)]
+    public void RecipeClassifier_Protein_DetectsMeatFishOrVeggie(string title, string? category, string? ingredients, MealProtein expected) =>
+        RecipeClassifier.Protein(title, category, ingredients).Should().Be(expected);
+
+    [Fact]
+    public void HomeMatcher_Match_CountsNonPantryIngredientsAtHomeAndFlagsExpiring()
+    {
+        DateOnly today = new(2026, 11, 10);
+        List<(string, InventoryItem)> stock = HomeMatcher.Stock(
+        [
+            new InventoryItem { Name = "Ovos", Quantity = 6 },
+            new InventoryItem { Name = "Natas", Quantity = 1, Unit = "emb", ExpiresOn = today.AddDays(2) }
+        ]);
+
+        HomeMatch? match = HomeMatcher.Match(HomeMatcher.KeysOf(["4 ovos", "200 ml de natas", "100 g de bacon", "Sal q.b.", "2 c. sopa de azeite"]),
+            HomeMatcher.PantryKeys(["Sal", "Azeite"]), stock, today);
+
+        match.Should().NotBeNull();
+        match!.Have.Should().Be(2);
+        match.Total.Should().Be(3);
+        match.Expiring.Should().Equal("Natas");
+    }
+
+    [Fact]
+    public void MealVariety_Analyze_WarnsAboutStreaksMissingFishAndRepeats()
+    {
+        Guid repeated = Guid.NewGuid();
+        DateOnly monday = new(2026, 11, 16);
+        List<MealVariety.PlannedMeal> meals =
+        [
+            new(monday, MealSlot.Lunch, repeated, "Arroz de pato", MealProtein.Meat, false),
+            new(monday, MealSlot.Dinner, Guid.NewGuid(), "Bifanas", MealProtein.Meat, false),
+            new(monday.AddDays(1), MealSlot.Lunch, repeated, "Arroz de pato", MealProtein.Meat, true),
+            new(monday.AddDays(1), MealSlot.Dinner, Guid.NewGuid(), "Frango assado", MealProtein.Meat, false),
+            new(monday.AddDays(2), MealSlot.Lunch, Guid.NewGuid(), "Sopa", MealProtein.Veggie, false),
+            new(monday.AddDays(2), MealSlot.Dinner, Guid.NewGuid(), "Omelete", MealProtein.Veggie, false),
+            new(monday.AddDays(2), MealSlot.Dessert, Guid.NewGuid(), "Pudim", null, false)
+        ];
+
+        VarietySummary summary = MealVariety.Analyze(meals, new HashSet<Guid> { repeated });
+
+        summary.Meat.Should().Be(4);
+        summary.Veggie.Should().Be(2);
+        summary.Notes.Should().Contain(n => n.Contains("4 refeições seguidas de carne"));
+        summary.Notes.Should().Contain("🐟 Ainda não há peixe esta semana");
+        summary.Notes.Should().Contain("📅 Arroz de pato já foi na semana passada");
+        summary.Notes.Should().NotContain(n => n.Contains("aparece"));
+    }
+
+    [Fact]
+    public void MealCatalog_NextMeal_DinnerLeftoversGoToNextLunch()
+    {
+        MealCatalog.NextMeal(new DateOnly(2026, 11, 16), MealSlot.Dinner).Should().Be((new DateOnly(2026, 11, 17), MealSlot.Lunch));
+        MealCatalog.NextMeal(new DateOnly(2026, 11, 16), MealSlot.Lunch).Should().Be((new DateOnly(2026, 11, 16), MealSlot.Dinner));
+        MealCatalog.NextMeal(new DateOnly(2026, 11, 16), MealSlot.Dessert).Should().BeNull();
+    }
+
+    [Theory]
     [InlineData("2026-11-15T18:00", "2026-11-15T18:00", "2026-11-16")]
     [InlineData("2026-11-15T17:59", "2026-11-08T18:00", "2026-11-09")]
     [InlineData("2026-11-17T09:00", "2026-11-15T18:00", "2026-11-16")]

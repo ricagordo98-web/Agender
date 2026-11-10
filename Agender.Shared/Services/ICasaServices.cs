@@ -108,7 +108,7 @@ public interface IMealService
 
     Task<Recipe> ImportRecipeAsync(string url, CancellationToken cancellationToken = default);
 
-    Task<CatalogPage> SearchCatalogAsync(string? query, string? category, int skip, CancellationToken cancellationToken = default);
+    Task<CatalogPage> SearchCatalogAsync(CatalogQuery query, CancellationToken cancellationToken = default);
 
     Task<List<CatalogRecipe>> LoadCatalogDetailsAsync(List<Guid> catalogIds, CancellationToken cancellationToken = default);
 

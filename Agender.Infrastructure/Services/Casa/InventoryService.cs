@@ -30,6 +30,7 @@ public class InventoryService(IUserDbContextFactory contextFactory) : IInventory
         if (existing is not null)
         {
             existing.Quantity = Math.Min(existing.Quantity + quantity, InventoryItem.MaxQuantity);
+            existing.ExpiresOn = new[] { existing.ExpiresOn, item.ExpiresOn }.Min();
             existing.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync(cancellationToken);
 
@@ -42,7 +43,8 @@ public class InventoryService(IUserDbContextFactory contextFactory) : IInventory
             Name = name,
             Quantity = quantity,
             Unit = unit,
-            Category = Category(item.Category, name)
+            Category = Category(item.Category, name),
+            ExpiresOn = item.ExpiresOn
         };
 
         context.InventoryItems.Add(created);
@@ -65,6 +67,7 @@ public class InventoryService(IUserDbContextFactory contextFactory) : IInventory
         stored.Quantity = quantity;
         stored.Unit = unit;
         stored.Category = Category(item.Category, name);
+        stored.ExpiresOn = item.ExpiresOn;
         stored.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
 
