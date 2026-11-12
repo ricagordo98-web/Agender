@@ -1,0 +1,57 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="sa @Class" @ref="_root">
+    <button type="button" class="sa-btn sa-prev" aria-label="Deslocar para a esquerda" tabindex="-1">
+        <Icon Name="IconName.ChevronLeft" Size="16" />
+    </button>
+    @ChildContent
+    <button type="button" class="sa-btn sa-next" aria-label="Deslocar para a direita" tabindex="-1">
+        <Icon Name="IconName.ChevronRight" Size="16" />
+    </button>
+</div>
+
+@code {
+    private ElementReference _root;
+    private IJSObjectReference? _module;
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Components/Common/ScrollArrows.razor.js");
+            await _module.InvokeVoidAsync("init", _root);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or TaskCanceledException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _module.InvokeVoidAsync("dispose", _root);
+            await _module.DisposeAsync();
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or TaskCanceledException)
+        {
+        }
+    }
+}

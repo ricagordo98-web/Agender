@@ -55,6 +55,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMealSettingsService, MealSettingsService>();
         services.AddSingleton<RecipeCatalogSync>();
         services.AddSingleton<MealMessageDispatcher>();
+        services.AddScoped<IDailyReminderService, DailyReminderService>();
+        services.AddSingleton<DailyReminderDispatcher>();
         services.AddHttpClient<RecipeScraper>(client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(20);

@@ -2,10 +2,12 @@
 @attribute [Authorize]
 @implements IAsyncDisposable
 @using Agender.Shared.Reports
+@using Microsoft.Extensions.DependencyInjection
 @inject AgendaStore Store
 @inject ITimeEntryService TimeEntryService
 @inject IJSRuntime JS
 @inject IToastService Toasts
+@inject IServiceProvider Services
 
 <PageTitle>Relatórios · Agender</PageTitle>
 
@@ -14,9 +16,12 @@
         <button type="button" class="btn btn-ghost" disabled="@(_filtered.Count == 0)" @onclick="ExportCsvAsync">
             <Icon Name="IconName.Download" Size="16" /> Exportar CSV
         </button>
-        <button type="button" class="btn btn-ghost" disabled="@(_filtered.Count == 0)" @onclick="ExportPdfAsync">
-            <Icon Name="IconName.Download" Size="16" /> Exportar PDF
-        </button>
+        @if (NativeFiles?.CanCreatePdf ?? true)
+        {
+            <button type="button" class="btn btn-ghost" disabled="@(_filtered.Count == 0)" @onclick="ExportPdfAsync">
+                <Icon Name="IconName.Download" Size="16" /> Exportar PDF
+            </button>
+        }
         <button type="button" class="btn btn-primary" disabled="@(_filtered.Count == 0)" @onclick="ExportXlsxAsync">
             <Icon Name="IconName.Download" Size="16" /> Exportar XLSX
         </button>
@@ -202,16 +207,26 @@
         return DownloadAsync("pdf", "application/pdf", () => ReportPdf.Build(_filtered, Store.Projects, _result, options));
     }
 
+    private INativeFileSaver? NativeFiles => Services.GetService<INativeFileSaver>();
+
     private async Task DownloadAsync(string extension, string contentType, Func<byte[]> build)
     {
+        string fileName = $"agender-{_from:yyyy-MM-dd}_{_to:yyyy-MM-dd}.{extension}";
+
         try
         {
+            if (NativeFiles is INativeFileSaver native)
+            {
+                await native.SaveAsync(fileName, contentType, build());
+                return;
+            }
+
             _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Pages/Reports.razor.js");
             using MemoryStream stream = new(build());
             using DotNetStreamReference reference = new(stream);
-            await _module.InvokeVoidAsync("downloadFile", $"agender-{_from:yyyy-MM-dd}_{_to:yyyy-MM-dd}.{extension}", contentType, reference);
+            await _module.InvokeVoidAsync("downloadFile", fileName, contentType, reference);
         }
-        catch (JSException)
+        catch (Exception ex) when (ex is JSException or IOException or InvalidOperationException)
         {
             Toasts.Show("Não foi possível exportar o ficheiro.", ToastKind.Error);
         }

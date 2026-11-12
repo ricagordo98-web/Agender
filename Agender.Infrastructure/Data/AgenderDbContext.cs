@@ -107,6 +107,8 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<MealWeek> MealWeeks => Set<MealWeek>();
 
+    public DbSet<DailyReminder> DailyReminders => Set<DailyReminder>();
+
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
 
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
@@ -515,6 +517,14 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.HasKey(w => w.Id);
             entity.Property(w => w.LastError).HasMaxLength(MealWeek.ErrorMaxLength);
             entity.HasIndex(w => new { w.HouseholdId, w.WeekStart }).IsUnique();
+        });
+
+        modelBuilder.Entity<DailyReminder>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            entity.Property(r => r.Destination).HasMaxLength(MealSettings.TextMaxLength);
+            entity.Property(r => r.LastError).HasMaxLength(DailyReminder.ErrorMaxLength);
+            entity.HasIndex(r => new { r.HouseholdId, r.Section }).IsUnique();
         });
 
         modelBuilder.Entity<InventoryItem>(entity =>

@@ -1,3 +1,4 @@
+<ScrollArrows>
 <div class="seg" role="radiogroup" aria-label="@Label">
     @foreach (SegmentOption option in Options)
     {
@@ -6,6 +7,7 @@
                 @onclick="() => ValueChanged.InvokeAsync(option.Value)">@option.Label</button>
     }
 </div>
+</ScrollArrows>
 
 @code {
     public record SegmentOption(int Value, string Label);

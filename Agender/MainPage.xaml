@@ -4,7 +4,8 @@
              xmlns:local="clr-namespace:Agender"
              xmlns:shared="clr-namespace:Agender.Shared;assembly=Agender.Shared"
              x:Class="Agender.MainPage"
-             BackgroundColor="{DynamicResource PageBackgroundColor}">
+             BackgroundColor="#080A10"
+             SafeAreaEdges="All">
 
     <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
         <BlazorWebView.RootComponents>

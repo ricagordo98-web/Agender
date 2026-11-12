@@ -9,4 +9,10 @@
 
 h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; }
 p { margin-top: 2px; color: var(--text-muted); }
-.page-actions { display: flex; align-items: center; gap: 8px; }
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+@media (max-width: 640px) {
+    .page-header { margin-bottom: 18px; }
+    h1 { font-size: 23px; }
+    p { font-size: 13.5px; }
+}

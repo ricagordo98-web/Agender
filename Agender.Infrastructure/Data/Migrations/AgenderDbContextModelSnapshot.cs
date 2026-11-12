@@ -492,6 +492,46 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.ToTable("CleaningRooms");
                 });
 
+            modelBuilder.Entity("Agender.Shared.Domain.DailyReminder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Destination")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("LastSentOn")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Section")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<TimeOnly>("SendTime")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseholdId", "Section")
+                        .IsUnique();
+
+                    b.ToTable("DailyReminders");
+                });
+
             modelBuilder.Entity("Agender.Shared.Domain.DayNote", b =>
                 {
                     b.Property<string>("UserId")

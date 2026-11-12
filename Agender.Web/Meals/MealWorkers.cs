@@ -75,3 +75,32 @@ public sealed class MealMessageWorker(MealMessageDispatcher dispatcher, ILogger<
         }
     }
 }
+
+public sealed class DailyReminderWorker(DailyReminderDispatcher dispatcher, ILogger<DailyReminderWorker> logger) : BackgroundService
+{
+    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using PeriodicTimer timer = new(Interval);
+
+        try
+        {
+            do
+            {
+                try
+                {
+                    await dispatcher.DispatchDueAsync(stoppingToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(ex, "Daily reminder dispatch failed.");
+                }
+            }
+            while (await timer.WaitForNextTickAsync(stoppingToken));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+}

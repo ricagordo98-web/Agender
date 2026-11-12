@@ -1,8 +1,10 @@
 /* ---------- Casa (household) ---------- */
+.sa.cs-tabs-wrap { display: flex; margin: 4px 0 22px; }
+
 .cs-tabs {
+    flex: 1 1 auto;
     display: flex;
     gap: 4px;
-    margin: 4px 0 22px;
     padding: 4px;
     overflow-x: auto;
     border: 1px solid var(--border);
@@ -554,9 +556,9 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 
 /* Responsive */
 @media (max-width: 900px) {
-    .cs-dash { grid-template-columns: 1fr; }
-    .cs-events-layout { grid-template-columns: 1fr; }
-    .cs-two { grid-template-columns: 1fr; }
+    .cs-dash { grid-template-columns: minmax(0, 1fr); }
+    .cs-events-layout { grid-template-columns: minmax(0, 1fr); }
+    .cs-two { grid-template-columns: minmax(0, 1fr); }
     .cs-legend-row { grid-template-columns: 10px 100px 1fr 76px; }
     .cs-cal-cell { min-height: 64px; }
     .cs-cal-ev, .cs-cal-more { display: none; }
@@ -665,7 +667,7 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .fi-details ul { margin: 8px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 13px; }
 
 @media (max-width: 900px) {
-    .fb-hero { grid-template-columns: 1fr; }
+    .fb-hero { grid-template-columns: minmax(0, 1fr); }
     .fb-title h2 { font-size: 30px; }
 }
 
@@ -837,7 +839,7 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .rv-steps li::before { content: counter(step); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #F2994A; color: #fff; font-size: 13px; font-weight: 800; }
 .rv-empty { margin: 0; color: var(--text-muted); font-size: 13.5px; }
 .rv .ml-plan-box { margin-top: 0; }
-@media (max-width: 760px) { .rv-cols { grid-template-columns: 1fr; } .rv-hero { height: 190px; } }
+@media (max-width: 760px) { .rv-cols { grid-template-columns: minmax(0, 1fr); } .rv-hero { height: 190px; } }
 .ml-plan-box select { width: auto; }
 .ml-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .ml-banner { display: flex; align-items: center; gap: 16px; text-decoration: none; color: inherit; border-left: 5px solid #F2994A; background: linear-gradient(135deg, color-mix(in srgb, #F2994A 14%, var(--surface, transparent)), var(--surface, transparent) 70%); }
@@ -890,3 +892,30 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .iv-expiring-item.expired span { color: #e5484d; }
 .ml-cost { font-size: 13px; font-weight: 700; color: color-mix(in srgb, #27AE60 70%, var(--text)); }
 .ml-cost-hint { font-size: 12.5px; }
+
+/* ---------- Phones ---------- */
+@media (max-width: 640px) {
+    .sa.cs-tabs-wrap { max-width: none; margin: 0 -16px 18px; }
+    .cs-tabs { padding: 4px 16px; border-left: 0; border-right: 0; border-radius: 0; scroll-padding-inline: 16px; }
+    .cs-quick-add { flex-wrap: wrap; padding: 8px 8px 8px 12px; }
+    .cs-quick-add .bare { flex: 1 1 calc(100% - 40px); min-height: 36px; }
+    .cs-quick-add .iv-date { flex: 1 1 auto; }
+    .ml-pick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; overflow: visible; }
+    .ml-actions .btn { flex: 1 1 auto; }
+    .iv-groups { grid-template-columns: minmax(0, 1fr); }
+    .cs-card-head { flex-wrap: wrap; row-gap: 8px; }
+    .fm-bar .cs-chips { flex-basis: 100%; }
+    .cs-week { grid-template-columns: minmax(0, 1fr); }
+    .cs-week-head { flex-direction: row; align-items: baseline; gap: 8px; }
+}
+
+.dr-card { display: grid; gap: 4px; padding: 14px; margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.dr-card.off { opacity: 0.75; }
+.dr-card .ms-grid { margin-top: 6px; }
+.dr-head { display: flex; align-items: center; gap: 12px; }
+.dr-emoji { font-size: 22px; }
+.dr-title { display: grid; flex: 1; min-width: 0; }
+.dr-title .hint { margin: 0; }
+.dr-status { margin: 0; }
+.dr-send { justify-self: start; }
+.dr-time { width: 120px; }

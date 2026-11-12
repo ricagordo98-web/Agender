@@ -78,6 +78,7 @@ builder.Services.AddSignalR();
 builder.Services.AddHostedService<ChangeForwarder>();
 builder.Services.AddHostedService<RecipeCatalogWorker>();
 builder.Services.AddHostedService<MealMessageWorker>();
+builder.Services.AddHostedService<DailyReminderWorker>();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 

@@ -140,6 +140,19 @@ public interface IMealSettingsService
     Task SendTestAsync(CancellationToken cancellationToken = default);
 }
 
+public interface IDailyReminderService
+{
+    Task<DailyRemindersDto> GetAsync(CancellationToken cancellationToken = default);
+
+    Task<DailyRemindersDto> SaveAsync(List<DailyReminderDto> reminders, CancellationToken cancellationToken = default);
+
+    Task<List<WhatsAppGroupDto>> GetGroupsAsync(CancellationToken cancellationToken = default);
+
+    Task SendNowAsync(DailySection section, CancellationToken cancellationToken = default);
+
+    Task<DailyDigestDto> GetDigestAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IWeddingService
 {
     Task<WeddingOverview> GetAsync(CancellationToken cancellationToken = default);

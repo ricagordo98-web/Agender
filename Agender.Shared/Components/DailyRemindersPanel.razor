@@ -1,0 +1,303 @@
+@using Microsoft.Extensions.DependencyInjection
+@inject IDailyReminderService Reminders
+@inject IServiceProvider Services
+@inject IToastService Toasts
+
+@if (Device is not null)
+{
+    <section class="ms-section">
+        <h3>Notificação neste telemóvel</h3>
+        <p class="hint">
+            Todos os dias à hora escolhida, o telemóvel pede ao servidor o resumo do dia (limpezas, refeições, agenda da casa e inventário) e mostra uma notificação.
+            Fica guardado só neste telemóvel. Com a poupança de bateria ativa, a notificação pode chegar com alguns minutos de atraso.
+        </p>
+        <SettingRow Title="Resumo diário" Description="Só aparece se houver alguma coisa para hoje.">
+            <ToggleSwitch Label="Resumo diário neste telemóvel" Value="_deviceEnabled" ValueChanged="ToggleDeviceAsync" />
+        </SettingRow>
+        <SettingRow Title="Hora" Description="A hora a que a notificação aparece.">
+            <input class="field dr-time" type="time" aria-label="Hora da notificação" value="@_deviceTime.ToString("HH:mm")" @onchange="ChangeDeviceTimeAsync" />
+        </SettingRow>
+        <div class="account-actions">
+            <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="ShowDeviceNowAsync"><Icon Name="IconName.Bell" Size="15" /> Mostrar agora</button>
+        </div>
+    </section>
+}
+
+<section class="ms-section">
+    <h3>WhatsApp diário</h3>
+    <p class="hint">
+        Cada secção pode ir para um grupo diferente, à sua hora. Para usar um grupo novo, cria-o no WhatsApp com o número ligado à Evolution API e carrega aqui a lista de grupos.
+        Se não houver nada para hoje, não é enviada mensagem. Partilhado com toda a casa.
+    </p>
+
+    @if (!_loaded)
+    {
+        <p class="hint">A carregar…</p>
+    }
+    else if (_data is null)
+    {
+        <p class="hint">@(_error ?? "Não foi possível carregar os lembretes.")</p>
+    }
+    else
+    {
+        @if (!_data.WhatsAppReady)
+        {
+            <p class="hint ms-next">Primeiro configura a ligação ao WhatsApp em <strong>Definições → Refeições</strong> (endereço, instância e chave da Evolution API).</p>
+        }
+        else
+        {
+            <div class="account-actions">
+                <button type="button" class="btn btn-ghost" disabled="@_busy" @onclick="LoadGroupsAsync">
+                    <Icon Name="IconName.Refresh" Size="15" /> @(_groups is null ? "Carregar grupos do WhatsApp" : "Atualizar grupos")
+                </button>
+                @if (_groups is not null)
+                {
+                    <span class="hint">@(_groups.Count == 1 ? "1 grupo encontrado" : $"{_groups.Count} grupos encontrados")</span>
+                }
+            </div>
+        }
+
+        @foreach (DailyReminderDto reminder in _data.Reminders)
+        {
+            <div class="dr-card @(reminder.IsEnabled ? string.Empty : "off")" @key="reminder.Section">
+                <div class="dr-head">
+                    <span class="dr-emoji" aria-hidden="true">@DailyCatalog.Emoji(reminder.Section)</span>
+                    <div class="dr-title">
+                        <strong>@DailyCatalog.Label(reminder.Section)</strong>
+                        <span class="hint">@DailyCatalog.Description(reminder.Section)</span>
+                    </div>
+                    <ToggleSwitch Label="@($"Enviar {DailyCatalog.Label(reminder.Section)}")" Value="reminder.IsEnabled" ValueChanged="value => reminder.IsEnabled = value" />
+                </div>
+                <div class="ms-grid">
+                    <label class="cs-field">Grupo ou número
+                        @if (_groups is null)
+                        {
+                            <input class="field" placeholder="351912345678 ou 1203…@@g.us" maxlength="@MealSettings.TextMaxLength" @bind="reminder.Destination" />
+                        }
+                        else
+                        {
+                            <select class="field" value="@(reminder.Destination ?? string.Empty)" @onchange="e => reminder.Destination = e.Value?.ToString()">
+                                <option value="">Escolher grupo…</option>
+                                @if (!string.IsNullOrEmpty(reminder.Destination) && _groups.All(g => g.Id != reminder.Destination))
+                                {
+                                    <option value="@reminder.Destination">@reminder.Destination</option>
+                                }
+                                @foreach (WhatsAppGroupDto group in _groups)
+                                {
+                                    <option value="@group.Id">@group.Name</option>
+                                }
+                            </select>
+                        }
+                    </label>
+                    <label class="cs-field">Hora
+                        <input class="field" type="time" @bind="reminder.SendTime" />
+                    </label>
+                </div>
+                @if (Status(reminder) is string status)
+                {
+                    <p class="hint dr-status">@status</p>
+                }
+                @if (reminder.LastError is not null)
+                {
+                    <p class="ms-error">@reminder.LastError</p>
+                }
+                @if (_data.WhatsAppReady && _saved.Contains(reminder.Section))
+                {
+                    <button type="button" class="btn btn-ghost dr-send" disabled="@_busy" @onclick="() => SendNowAsync(reminder.Section)">Enviar agora</button>
+                }
+            </div>
+        }
+
+        <div class="account-actions ms-save">
+            <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="SaveAsync"><Icon Name="IconName.Check" Size="16" /> Guardar</button>
+        </div>
+    }
+</section>
+
+@code {
+    private DailyRemindersDto? _data;
+    private List<WhatsAppGroupDto>? _groups;
+    private HashSet<DailySection> _saved = [];
+    private string? _error;
+    private bool _loaded;
+    private bool _busy;
+    private bool _deviceEnabled;
+    private TimeOnly _deviceTime = DailyCatalog.DefaultTime;
+
+    private IDeviceNotifications? Device => Services.GetService<IDeviceNotifications>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Device is IDeviceNotifications device)
+        {
+            _deviceEnabled = device.IsEnabled;
+            _deviceTime = device.Time;
+        }
+
+        try
+        {
+            Apply(await Reminders.GetAsync());
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+        }
+
+        _loaded = true;
+
+        if (_data is { WhatsAppReady: true } && _data.Reminders.Any(r => r.Destination?.EndsWith("@g.us", StringComparison.Ordinal) == true))
+        {
+            StateHasChanged();
+
+            try
+            {
+                _groups = await Reminders.GetGroupsAsync();
+            }
+            catch (Exception ex) when (IsExpected(ex))
+            {
+            }
+        }
+    }
+
+    private void Apply(DailyRemindersDto data)
+    {
+        _data = data;
+        _saved = [.. data.Reminders.Where(r => !string.IsNullOrEmpty(r.Destination)).Select(r => r.Section)];
+    }
+
+    private static string? Status(DailyReminderDto reminder)
+    {
+        if (!reminder.IsEnabled)
+        {
+            return null;
+        }
+
+        DateOnly today = DateOnly.FromDateTime(DateTime.Now);
+
+        return reminder.LastSentOn == today
+            ? $"Hoje já está tratado. Próximo envio amanhã às {reminder.SendTime:HH:mm}."
+            : $"Próximo envio hoje às {reminder.SendTime:HH:mm}.";
+    }
+
+    private async Task LoadGroupsAsync()
+    {
+        List<WhatsAppGroupDto>? groups = null;
+
+        if (await RunAsync(async () => groups = await Reminders.GetGroupsAsync(), null))
+        {
+            _groups = groups;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_data is null)
+        {
+            return;
+        }
+
+        List<DailyReminderDto> reminders = _data.Reminders;
+        DailyRemindersDto? saved = null;
+
+        if (await RunAsync(async () => saved = await Reminders.SaveAsync(reminders), "Lembretes diários guardados."))
+        {
+            Apply(saved!);
+        }
+    }
+
+    private Task SendNowAsync(DailySection section) =>
+        RunAsync(() => Reminders.SendNowAsync(section), "Mensagem enviada. Confirma no WhatsApp.");
+
+    private async Task ToggleDeviceAsync(bool value)
+    {
+        if (Device is not IDeviceNotifications device)
+        {
+            return;
+        }
+
+        if (!value)
+        {
+            device.Disable();
+            _deviceEnabled = false;
+            Toasts.Show("Notificação diária desligada.", ToastKind.Success);
+            return;
+        }
+
+        if (await device.EnableAsync(_deviceTime))
+        {
+            _deviceEnabled = true;
+            Toasts.Show($"Vais receber o resumo todos os dias às {_deviceTime:HH:mm}.", ToastKind.Success);
+        }
+        else
+        {
+            Toasts.Show("Sem autorização para mostrar notificações. Ativa-as nas definições do Android para o Agender.", ToastKind.Error);
+        }
+    }
+
+    private async Task ChangeDeviceTimeAsync(ChangeEventArgs e)
+    {
+        if (!TimeOnly.TryParse(e.Value?.ToString(), out TimeOnly time))
+        {
+            return;
+        }
+
+        _deviceTime = time;
+
+        if (_deviceEnabled && Device is IDeviceNotifications device && await device.EnableAsync(time))
+        {
+            Toasts.Show($"Hora alterada para as {time:HH:mm}.", ToastKind.Success);
+        }
+    }
+
+    private async Task ShowDeviceNowAsync()
+    {
+        if (Device is not IDeviceNotifications device)
+        {
+            return;
+        }
+
+        bool shown = false;
+
+        if (await RunAsync(async () => shown = await device.ShowNowAsync(), null) && !shown)
+        {
+            Toasts.Show("Não há nada para hoje, ou as notificações não estão autorizadas.", ToastKind.Info);
+        }
+    }
+
+    private async Task<bool> RunAsync(Func<Task> action, string? success)
+    {
+        _busy = true;
+
+        try
+        {
+            await action();
+
+            if (success is not null)
+            {
+                Toasts.Show(success, ToastKind.Success);
+            }
+
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            Toasts.Show(string.IsNullOrWhiteSpace(ex.Message) ? "Confirma os dados e tenta novamente." : ex.Message, ToastKind.Error);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível concluir a operação. Tenta novamente.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        return false;
+    }
+
+    private static bool IsExpected(Exception ex) =>
+        ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException;
+}

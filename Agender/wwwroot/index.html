@@ -18,9 +18,16 @@
 
     <div class="status-bar-safe-area"></div>
 
-    <div id="app">Loading...</div>
+    <div id="app">A carregar…</div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        setTimeout(function () {
+            if (!window.Blazor) {
+                document.getElementById('app').innerHTML = '<p style="padding:32px 24px;font:16px/1.5 system-ui,sans-serif">O Agender precisa de uma versão mais recente do <b>Android System WebView</b>. Atualiza-o na Play Store e volta a abrir a app.</p>';
+            }
+        }, 5000);
+    </script>
 
 </body>
 

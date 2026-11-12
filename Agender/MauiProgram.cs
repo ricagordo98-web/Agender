@@ -54,6 +54,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IMealService, ApiMealService>();
         builder.Services.AddScoped<IInventoryService, ApiInventoryService>();
         builder.Services.AddScoped<IMealSettingsService, ApiMealSettingsService>();
+        builder.Services.AddScoped<IDailyReminderService, ApiDailyReminderService>();
         builder.Services.AddScoped<IDatabaseImportService, ApiDatabaseImportService>();
         builder.Services.AddScoped<IFinanceService, ApiFinanceService>();
         builder.Services.AddScoped<IFinanceImportService, ApiFinanceImportService>();
@@ -64,6 +65,11 @@ public static class MauiProgram
         builder.Services.AddScoped<ApiAgendaSharingService>();
         builder.Services.AddScoped<IAgendaSharingService>(services => services.GetRequiredService<ApiAgendaSharingService>());
         builder.Services.AddScoped<IShareLinkBuilder>(services => services.GetRequiredService<ApiAgendaSharingService>());
+
+#if ANDROID
+        builder.Services.AddSingleton<INativeFileSaver, AndroidFileSaver>();
+        builder.Services.AddSingleton<IDeviceNotifications, AndroidDailyNotifications>();
+#endif
 
         builder.Services.AddMauiBlazorWebView();
 

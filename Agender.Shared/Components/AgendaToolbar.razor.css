@@ -161,7 +161,8 @@
 
 @media (max-width: 900px) {
     .toolbar { padding: 10px 14px; }
-    .tb-nav { order: 3; flex-basis: 100%; }
+    .tb-nav { order: 3; flex-basis: 100%; min-width: 0; }
+    .range-title { min-width: 0; margin-left: 6px; font-size: 15px; }
     .btn-label { display: none; }
     .snap-label { display: none; }
     .src-more { display: none; }

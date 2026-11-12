@@ -1,4 +1,7 @@
-<nav class="cs-tabs" aria-label="Secções da casa">
+@inject IJSRuntime JS
+
+<ScrollArrows Class="cs-tabs-wrap">
+<nav class="cs-tabs" aria-label="Secções da casa" @ref="_nav">
     @foreach (TabItem tab in Tabs)
     {
         <NavLink class="cs-tab" href="@tab.Href" Match="@tab.Match">
@@ -7,8 +10,28 @@
         </NavLink>
     }
 </nav>
+</ScrollArrows>
 
 @code {
+    private ElementReference _nav;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await using IJSObjectReference module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/viewport.js");
+            await module.InvokeVoidAsync("revealActive", _nav);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or TaskCanceledException)
+        {
+        }
+    }
+
     private record TabItem(string Href, string Label, IconName Icon, NavLinkMatch Match);
 
     private static readonly TabItem[] Tabs =

@@ -328,3 +328,42 @@ body.task-dragging .scrim {
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ---------- Phones and touch screens ---------- */
+@media (max-width: 640px) {
+    .page { padding: 20px 16px calc(32px + env(safe-area-inset-bottom)); }
+}
+
+@media (pointer: coarse) {
+    input.field, select.field, textarea.field { font-size: 16px; }
+    .icon-btn { min-width: 40px; min-height: 40px; }
+    .btn { min-height: 40px; }
+    html { -webkit-tap-highlight-color: transparent; }
+}
+
+.sa { position: relative; display: inline-flex; min-width: 0; max-width: 100%; vertical-align: middle; }
+.sa > :not(.sa-btn) { min-width: 0; }
+.sa.sa-block { display: flex; }
+.sa.sa-block > :not(.sa-btn) { flex: 1 1 auto; }
+.sa-btn {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    display: none;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-50%);
+    cursor: pointer;
+}
+.sa-btn:hover { background: var(--surface-hover); }
+.sa-prev { left: 4px; }
+.sa-next { right: 4px; }
+.sa[data-prev] > .sa-prev,
+.sa[data-next] > .sa-next { display: grid; }

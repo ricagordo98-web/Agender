@@ -216,7 +216,7 @@ public class MealSettingsService(IUserDbContextFactory contextFactory, WhatsAppS
         };
     }
 
-    private static string? NormalizeDestination(string? destination)
+    internal static string? NormalizeDestination(string? destination)
     {
         if (destination is null || destination.Contains('@'))
         {

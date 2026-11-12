@@ -8,6 +8,7 @@
 @inject UserSettingsState Settings
 @inject IHouseholdService Households
 @inject AgendaScope Scope
+@inject IJSRuntime JS
 
 <PageTitle>Agenda · Agender</PageTitle>
 
@@ -102,12 +103,35 @@
         await GoogleCalendar.EnsureStatusAsync();
         await Settings.EnsureLoadedAsync();
         await Store.ApplySettingsAsync(Settings.Current, applyView: !Store.HasAppliedSettings);
+        await PreferDayViewOnPhoneAsync();
         await LoadHouseholdAsync();
         await Store.InitializeAsync();
 
         if (Store.ConsumePendingNewEntry())
         {
             OpenNewEntryNow();
+        }
+    }
+
+    private async Task PreferDayViewOnPhoneAsync()
+    {
+        if (Store.HasCheckedScreen)
+        {
+            return;
+        }
+
+        try
+        {
+            await using IJSObjectReference module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/viewport.js");
+            Store.HasCheckedScreen = true;
+
+            if (await module.InvokeAsync<bool>("isCompact"))
+            {
+                await Store.PreferDayViewAsync();
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JSDisconnectedException or JSException or TaskCanceledException)
+        {
         }
     }
 

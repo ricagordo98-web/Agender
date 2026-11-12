@@ -27,4 +27,10 @@
     box-shadow: var(--shadow-sm);
 }
 
+@media (max-width: 900px) {
+    .seg { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .seg::-webkit-scrollbar { display: none; }
+    .seg-item { flex: none; height: 36px; }
+}
+
 .seg-item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }

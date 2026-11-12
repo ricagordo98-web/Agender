@@ -38,7 +38,7 @@ public sealed class AuthSession
     public UserInfoDto? User { get; private set; }
 
     private static string DefaultServerUrl =>
-        DeviceInfo.Platform == DevicePlatform.Android ? "http://10.0.2.2:5018" : "http://localhost:5018";
+        DeviceInfo.Platform == DevicePlatform.Android ? string.Empty : "http://localhost:5018";
 
     public async Task InitializeAsync()
     {

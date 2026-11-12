@@ -12,5 +12,5 @@
 }
 
 @media (max-width: 900px) {
-    .app-main { height: calc(100% - 64px); }
+    .app-main { height: calc(100% - 64px - env(safe-area-inset-bottom)); }
 }

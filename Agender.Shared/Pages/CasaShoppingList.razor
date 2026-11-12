@@ -80,6 +80,7 @@
 
         @if (Categories.Count > 1)
         {
+            <ScrollArrows Class="sa-block">
             <div class="cs-chips scroll" role="group" aria-label="Filtrar por categoria">
                 <button type="button" class="cs-chip @(_filter is null ? "on" : string.Empty)" @onclick="() => _filter = null">Todas</button>
                 @foreach (string category in Categories)
@@ -87,6 +88,7 @@
                     <button type="button" class="cs-chip @(_filter == category ? "on" : string.Empty)" @onclick="() => _filter = category">@CasaCatalog.ShoppingCategory(category).Emoji @category</button>
                 }
             </div>
+            </ScrollArrows>
         }
 
         <div class="card cs-flush">

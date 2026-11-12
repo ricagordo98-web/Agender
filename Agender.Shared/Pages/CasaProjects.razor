@@ -32,6 +32,7 @@
             <div class="card cs-kpi"><span class="cs-icon income"><Icon Name="IconName.Check" Size="15" /></span><small>Concluídos</small><strong>@_items.Count(p => p.Status == HomeStatus.Done)</strong><span class="cs-muted">@CasaCatalog.Money(_items.Where(p => p.Status == HomeStatus.Done).Sum(p => p.ActualCost ?? p.EstimatedCost ?? 0)) gastos</span></div>
         </div>
 
+        <ScrollArrows Class="sa-block">
         <div class="cs-chips scroll" role="group" aria-label="Filtrar por tipo">
             <button type="button" class="cs-chip @(_kind is null ? "on" : string.Empty)" @onclick="() => _kind = null">Todos</button>
             @foreach (HomeKind kind in Enum.GetValues<HomeKind>())
@@ -39,6 +40,7 @@
                 <button type="button" class="cs-chip @(_kind == kind ? "on" : string.Empty)" @onclick="() => _kind = kind">@CasaCatalog.Emoji(kind) @CasaCatalog.Label(kind)</button>
             }
         </div>
+        </ScrollArrows>
 
         @if (_items.Count == 0)
         {

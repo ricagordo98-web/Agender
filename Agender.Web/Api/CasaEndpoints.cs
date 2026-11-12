@@ -51,6 +51,24 @@ public static class CasaEndpoints
         MapMeals(group.MapGroup("/meals"));
         MapInventory(group.MapGroup("/inventory"));
         MapMealSettings(group.MapGroup("/meal-settings"));
+        MapDailyReminders(group.MapGroup("/daily"));
+    }
+
+    private static void MapDailyReminders(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (IDailyReminderService service, CancellationToken ct) => await service.GetAsync(ct));
+
+        group.MapPut("/", async (List<DailyReminderDto> reminders, IDailyReminderService service, CancellationToken ct) => await service.SaveAsync(reminders, ct));
+
+        group.MapGet("/groups", async (IDailyReminderService service, CancellationToken ct) => await service.GetGroupsAsync(ct));
+
+        group.MapPost("/send/{section:int}", async (int section, IDailyReminderService service, CancellationToken ct) =>
+        {
+            await service.SendNowAsync((DailySection)section, ct);
+            return Results.NoContent();
+        });
+
+        group.MapGet("/digest", async (IDailyReminderService service, CancellationToken ct) => await service.GetDigestAsync(ct));
     }
 
     private static void MapMeals(RouteGroupBuilder group)

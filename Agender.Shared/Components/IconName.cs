@@ -49,5 +49,6 @@ public enum IconName
     Users,
     Heart,
     Sparkles,
-    Utensils
+    Utensils,
+    Bell
 }

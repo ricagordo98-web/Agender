@@ -185,6 +185,7 @@ public class HouseholdService(IUserDbContextFactory contextFactory, TimeProvider
         await context.MealPlanEntries.Where(e => e.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.InventoryItems.Where(i => i.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.MealWeeks.Where(w => w.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
+        await context.DailyReminders.Where(r => r.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.MealPreferences.Where(s => s.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.Recipes.Where(r => r.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);
         await context.CatalogRecipes.Where(c => c.HouseholdId == householdId).ExecuteDeleteAsync(cancellationToken);

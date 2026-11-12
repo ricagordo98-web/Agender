@@ -18,6 +18,7 @@
     </PageHeader>
 
     <div class="settings-shell">
+        <ScrollArrows Class="settings-nav-wrap">
         <nav class="settings-nav" aria-label="Categorias das definições">
             @foreach (Category category in Categories.Where(c => c.Id != DataId || DatabaseImport.IsAvailable))
             {
@@ -28,6 +29,7 @@
                 </button>
             }
         </nav>
+        </ScrollArrows>
 
         <div class="settings-panel">
             @if (_active == AppearanceId)
@@ -174,6 +176,14 @@
                 </header>
                 <MealSettingsPanel />
             }
+            else if (_active == NotificationsId)
+            {
+                <header class="panel-head">
+                    <h2>Notificações</h2>
+                    <p>O resumo de cada dia: limpezas, refeições, agenda da casa e o que está a expirar.</p>
+                </header>
+                <DailyRemindersPanel />
+            }
             else if (_active == DataId)
             {
                 <header class="panel-head">
@@ -249,6 +259,7 @@
     private const string TraderId = "trader";
     private const string DataId = "dados";
     private const string MealsId = "refeicoes";
+    private const string NotificationsId = "notificacoes";
     private const string AccountId = "conta";
 
     private record Category(string Id, string Label, IconName Icon);
@@ -262,6 +273,7 @@
         new(IntegrationsId, "Google Calendar", IconName.Share),
         new(TraderId, "Trader", IconName.Wallet),
         new(MealsId, "Refeições", IconName.Utensils),
+        new(NotificationsId, "Notificações", IconName.Bell),
         new(DataId, "Dados", IconName.Download),
         new(AccountId, "Conta", IconName.Lock)
     ];

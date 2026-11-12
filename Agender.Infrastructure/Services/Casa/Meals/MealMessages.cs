@@ -10,27 +10,31 @@ internal static class MealMessages
 {
     public const string ProtectorPurpose = "Agender.Meals.WhatsApp";
 
-    public static bool IsReady(MealSettings? settings) =>
+    public static bool IsConnected(MealSettings? settings) =>
         settings is not null
         && !string.IsNullOrWhiteSpace(settings.WhatsAppApiUrl)
         && !string.IsNullOrWhiteSpace(settings.WhatsAppInstance)
-        && !string.IsNullOrWhiteSpace(settings.WhatsAppApiKey)
-        && !string.IsNullOrWhiteSpace(settings.WhatsAppDestination);
+        && !string.IsNullOrWhiteSpace(settings.WhatsAppApiKey);
 
-    public static Task SendAsync(WhatsAppSender sender, IDataProtectionProvider dataProtection, MealSettings settings, string text, CancellationToken cancellationToken)
+    public static bool IsReady(MealSettings? settings) =>
+        IsConnected(settings) && !string.IsNullOrWhiteSpace(settings!.WhatsAppDestination);
+
+    public static Task SendAsync(WhatsAppSender sender, IDataProtectionProvider dataProtection, MealSettings settings, string text, CancellationToken cancellationToken) =>
+        SendToAsync(sender, dataProtection, settings, settings.WhatsAppDestination!, text, cancellationToken);
+
+    public static Task SendToAsync(WhatsAppSender sender, IDataProtectionProvider dataProtection, MealSettings settings, string destination, string text, CancellationToken cancellationToken) =>
+        sender.SendAsync(settings.WhatsAppApiUrl!, settings.WhatsAppInstance!, ApiKey(dataProtection, settings), destination, text, cancellationToken);
+
+    public static string ApiKey(IDataProtectionProvider dataProtection, MealSettings settings)
     {
-        string apiKey;
-
         try
         {
-            apiKey = dataProtection.CreateProtector(ProtectorPurpose).Unprotect(settings.WhatsAppApiKey!);
+            return dataProtection.CreateProtector(ProtectorPurpose).Unprotect(settings.WhatsAppApiKey!);
         }
         catch (System.Security.Cryptography.CryptographicException ex)
         {
             throw new ArgumentException("A chave da Evolution API já não é válida. Volta a colá-la nas definições.", ex);
         }
-
-        return sender.SendAsync(settings.WhatsAppApiUrl!, settings.WhatsAppInstance!, apiKey, settings.WhatsAppDestination!, text, cancellationToken);
     }
 
     public static async Task<(List<MealPlanEntry> Entries, Dictionary<Guid, Recipe> Recipes)> LoadWeekAsync(AgenderDbContext context, Guid householdId, DateOnly weekStart, CancellationToken cancellationToken)

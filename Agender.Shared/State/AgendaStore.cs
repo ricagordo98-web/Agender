@@ -47,6 +47,8 @@ public sealed class AgendaStore(
 
     public bool HasAppliedSettings { get; private set; }
 
+    public bool HasCheckedScreen { get; set; }
+
     public UserSettings Preferences { get; private set; } = new();
 
     public bool ConfirmBeforeDelete { get; private set; } = true;
@@ -134,6 +136,22 @@ public sealed class AgendaStore(
         View = view;
         await LoadRangeAsync();
     });
+
+    public async Task PreferDayViewAsync()
+    {
+        if (View == AgendaView.Day)
+        {
+            return;
+        }
+
+        if (_initialized)
+        {
+            await ChangeViewAsync(AgendaView.Day);
+            return;
+        }
+
+        View = AgendaView.Day;
+    }
 
     public Task ShiftAsync(int direction) => RunSafeAsync(async () =>
     {
