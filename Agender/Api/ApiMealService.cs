@@ -21,6 +21,9 @@ public sealed class ApiMealService(IHttpClientFactory httpClientFactory, AuthSes
     public Task DeleteEntryAsync(Guid id, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Delete, $"{Root}/entries/{id}", null, cancellationToken);
 
+    public Task MoveEntryAsync(Guid id, DateOnly date, MealSlot slot, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, $"{Root}/entries/{id}/move", new MoveMealEntryRequest(date, slot), cancellationToken);
+
     public Task<List<Recipe>> GetRecipesAsync(CancellationToken cancellationToken = default) =>
         GetAsync<List<Recipe>>($"{Root}/recipes", cancellationToken);
 

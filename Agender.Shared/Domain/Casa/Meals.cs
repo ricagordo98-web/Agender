@@ -194,6 +194,25 @@ public static class MealCatalog
 
     public static readonly MealSlot[] Slots = [MealSlot.Lunch, MealSlot.Dinner, MealSlot.Dessert];
 
+    public sealed record RecipeBatch(Recipe Recipe, int Meals, int People, decimal Factor);
+
+    public static List<RecipeBatch> Batches(IEnumerable<MealPlanEntry> entries, IReadOnlyDictionary<Guid, Recipe> recipes) =>
+    [
+        .. entries
+            .Where(e => e.RecipeId is Guid id && recipes.ContainsKey(id))
+            .OrderBy(e => e.Date).ThenBy(e => e.Slot)
+            .GroupBy(e => e.RecipeId!.Value)
+            .Select(group =>
+            {
+                Recipe recipe = recipes[group.Key];
+                int people = group.Sum(e => e.Servings);
+
+                return new RecipeBatch(recipe, group.Count(), people, recipe.Servings > 0 ? (decimal)people / recipe.Servings : group.Count());
+            })
+    ];
+
+    public static bool CanMove(MealSlot from, MealSlot to) => (from == MealSlot.Dessert) == (to == MealSlot.Dessert);
+
     public static readonly string[] QuickTitles = ["Sobras", "Jantar fora", "Takeaway"];
 
     public record SuggestedSource(string Name, string SitemapUrl, string UrlFilter);

@@ -83,6 +83,12 @@ public static class CasaEndpoints
             return Results.NoContent();
         });
 
+        group.MapPost("/entries/{id:guid}/move", async (Guid id, MoveMealEntryRequest request, IMealService service, CancellationToken ct) =>
+        {
+            await service.MoveEntryAsync(id, request.Date, request.Slot, ct);
+            return Results.NoContent();
+        });
+
         group.MapGet("/recipes", async (IMealService service, CancellationToken ct) => await service.GetRecipesAsync(ct));
 
         group.MapPost("/recipes", async (Recipe recipe, IMealService service, CancellationToken ct) => await service.SaveRecipeAsync(recipe, ct));

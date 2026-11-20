@@ -73,4 +73,6 @@ public record CatalogQuery(string? Text = null, string? Category = null, RecipeC
 
 public record ImportRecipeRequest(string Url);
 
+public record MoveMealEntryRequest(DateOnly Date, MealSlot Slot);
+
 public record MealShareText(string Text);

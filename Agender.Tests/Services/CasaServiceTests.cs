@@ -5,6 +5,7 @@ using Agender.Shared.Contracts;
 using Agender.Shared.Domain;
 using Agender.Shared.Services;
 using FluentAssertions;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace Agender.Tests.Services;
 
@@ -1060,6 +1061,118 @@ public sealed class CasaServiceTests : IDisposable
         FamilyEvent created = await new FamilyEventService(_ana).CreateAsync(new FamilyEvent { Title = "Privado", Start = new DateTime(2026, 10, 5, 9, 0, 0) });
 
         Func<Task> act = () => new FamilyEventService(_eva).DeleteAsync(created.Id);
+
+        await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    private MealService Meals(IUserDbContextFactory factory) =>
+        new(factory, new RecipeScraper(new HttpClient()), new WhatsAppSender(new HttpClient()), new EphemeralDataProtectionProvider(), Time);
+
+    private static readonly DateOnly MealWeekStart = new(2026, 11, 23);
+
+    private async Task<(MealService Service, Recipe Lombo, Recipe Bacalhau)> MealPlanAsync()
+    {
+        await Households(_ana).CreateAsync("Casa");
+        MealService service = Meals(_ana);
+        Recipe lombo = await service.SaveRecipeAsync(new Recipe { Title = "Lombo assado", Servings = 2, Ingredients = "500 g de lombo de porco\n2 dentes de alho\nSal q.b." });
+        Recipe bacalhau = await service.SaveRecipeAsync(new Recipe { Title = "Bacalhau à Brás", Servings = 4, Ingredients = "400 g de bacalhau\n6 ovos" });
+
+        return (service, lombo, bacalhau);
+    }
+
+    [Fact]
+    public async Task GetShareTextAsync_RecipePlannedFourTimes_ScalesIngredientsByEveryMeal()
+    {
+        (MealService service, Recipe lombo, _) = await MealPlanAsync();
+
+        for (int day = 0; day < 4; day++)
+        {
+            await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart.AddDays(day), Slot = MealSlot.Dinner, RecipeId = lombo.Id, Servings = 2 });
+        }
+
+        string text = await service.GetShareTextAsync(MealWeekStart);
+
+        text.Should().Contain("*Lombo assado*")
+            .And.Contain("4 refeições · 8 pessoas · receita ×4")
+            .And.Contain("• 2 kg de lombo de porco")
+            .And.Contain("• 8 dentes de alho")
+            .And.Contain("• Sal")
+            .And.NotContain("http");
+    }
+
+    [Fact]
+    public async Task GetShareTextAsync_MealForFewerPeopleThanTheRecipe_ScalesDown()
+    {
+        (MealService service, _, Recipe bacalhau) = await MealPlanAsync();
+        await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = bacalhau.Id, Servings = 2 });
+
+        string text = await service.GetShareTextAsync(MealWeekStart);
+
+        text.Should().Contain("1 refeição · 2 pessoas · receita ×0,5")
+            .And.Contain("• 200 g de bacalhau")
+            .And.Contain("• 3 ovos");
+    }
+
+    [Fact]
+    public async Task MoveEntryAsync_EmptySlot_MovesTheMeal()
+    {
+        (MealService service, Recipe lombo, _) = await MealPlanAsync();
+        MealPlanEntry entry = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = lombo.Id });
+
+        await service.MoveEntryAsync(entry.Id, MealWeekStart.AddDays(3), MealSlot.Dinner);
+
+        MealPlanEntry moved = (await service.GetWeekAsync(MealWeekStart)).Entries.Should().ContainSingle().Subject;
+        moved.Id.Should().Be(entry.Id);
+        moved.Date.Should().Be(MealWeekStart.AddDays(3));
+        moved.Slot.Should().Be(MealSlot.Dinner);
+    }
+
+    [Fact]
+    public async Task MoveEntryAsync_OccupiedSlot_SwapsBothMeals()
+    {
+        (MealService service, Recipe lombo, Recipe bacalhau) = await MealPlanAsync();
+        MealPlanEntry first = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = lombo.Id });
+        MealPlanEntry second = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart.AddDays(2), Slot = MealSlot.Dinner, RecipeId = bacalhau.Id });
+
+        await service.MoveEntryAsync(first.Id, second.Date, second.Slot);
+
+        List<MealPlanEntry> entries = (await service.GetWeekAsync(MealWeekStart)).Entries;
+        entries.Should().HaveCount(2);
+        entries.Single(e => e.Id == first.Id).Should().Match<MealPlanEntry>(e => e.Date == MealWeekStart.AddDays(2) && e.Slot == MealSlot.Dinner);
+        entries.Single(e => e.Id == second.Id).Should().Match<MealPlanEntry>(e => e.Date == MealWeekStart && e.Slot == MealSlot.Lunch);
+    }
+
+    [Fact]
+    public async Task MoveEntryAsync_CookedMealMovedAwayFromItsLeftovers_LeftoversBecomeARegularMeal()
+    {
+        (MealService service, Recipe lombo, _) = await MealPlanAsync();
+        MealPlanEntry cooked = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = lombo.Id });
+        MealPlanEntry leftover = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Dinner, RecipeId = lombo.Id, IsLeftover = true });
+
+        await service.MoveEntryAsync(cooked.Id, MealWeekStart.AddDays(4), MealSlot.Lunch);
+
+        (await service.GetWeekAsync(MealWeekStart)).Entries.Single(e => e.Id == leftover.Id).IsLeftover.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task MoveEntryAsync_MainMealIntoDessertSlot_Throws()
+    {
+        (MealService service, Recipe lombo, _) = await MealPlanAsync();
+        MealPlanEntry entry = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = lombo.Id });
+
+        Func<Task> act = () => service.MoveEntryAsync(entry.Id, MealWeekStart, MealSlot.Dessert);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task MoveEntryAsync_MealOfAnotherHousehold_IsNotFound()
+    {
+        (MealService service, Recipe lombo, _) = await MealPlanAsync();
+        MealPlanEntry entry = await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = lombo.Id });
+        await Households(_eva).CreateAsync("Casa E");
+
+        Func<Task> act = () => Meals(_eva).MoveEntryAsync(entry.Id, MealWeekStart, MealSlot.Dinner);
 
         await act.Should().ThrowAsync<NotFoundException>();
     }

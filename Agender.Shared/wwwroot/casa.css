@@ -770,6 +770,31 @@ a.cs-pcard { flex-direction: column; gap: 6px; }
 .ml-slot.filled { border: 1px solid var(--border); background: var(--surface-2); }
 .ml-slot.filled:hover { background: var(--surface-hover); }
 .ml-slot:active { transform: scale(0.98); }
+.ml-slot.filled { touch-action: manipulation; -webkit-touch-callout: none; user-select: none; }
+.ml-slot.filled:hover { cursor: grab; }
+.ml-slot.filled img { -webkit-user-drag: none; }
+
+/* Drag & drop in the weekly plan (driven by CasaMeals.razor.js) */
+body.ml-drag-active, body.ml-drag-active * { cursor: grabbing !important; user-select: none; }
+.ml-drag-ghost { position: fixed; top: 0; left: 0; z-index: 1000; margin: 0; pointer-events: none; box-shadow: var(--shadow-lg); border-color: #F2994A !important; background: var(--surface) !important; opacity: 0.94; rotate: -1.5deg; scale: 1.03; transition: scale 0.16s var(--ease, ease), rotate 0.16s var(--ease, ease), opacity 0.15s, box-shadow 0.15s; will-change: transform; }
+.ml-drag-ghost.ml-ghost-trash { opacity: 0.6; rotate: 0deg; scale: 0.4; border-color: var(--danger) !important; }
+.ml-slot.ml-drag-source { opacity: 0.35; border-style: dashed; transform: none; }
+.ml-week[data-drag-kind="main"] .ml-slot[data-kind="dessert"],
+.ml-week[data-drag-kind="dessert"] .ml-slot[data-kind="main"] { opacity: 0.35; filter: grayscale(0.6); }
+.ml-week.ml-dragging .ml-slot { transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s, opacity 0.15s; }
+.ml-slot.ml-drop-over { border: 1.5px solid #F2994A; background: color-mix(in srgb, #F2994A 12%, var(--surface-2)); box-shadow: 0 0 0 3px color-mix(in srgb, #F2994A 28%, transparent); transform: scale(1.02); }
+.ml-slot.ml-drop-over.empty::after { content: "Largar aqui"; font-size: 12px; font-weight: 700; color: color-mix(in srgb, #F2994A 70%, var(--text)); }
+.ml-slot.ml-drop-over.empty .ml-add { display: none; }
+.ml-slot.ml-drop-swap { position: relative; }
+.ml-slot.ml-drop-swap::after { content: "⇄ Trocar"; position: absolute; top: 6px; right: 6px; padding: 2px 8px; border-radius: 999px; background: #F2994A; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.02em; box-shadow: var(--shadow-sm); }
+.ml-trash { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 999; display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px 12px 14px; border: 1.5px dashed color-mix(in srgb, var(--danger) 55%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); font-size: 14px; font-weight: 700; white-space: nowrap; box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transform: translate(-50%, 24px) scale(0.96); transition: opacity 0.18s var(--ease, ease), transform 0.18s var(--ease, ease), background 0.15s, border-color 0.15s; }
+.ml-trash-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: color-mix(in srgb, var(--danger) 16%, transparent); transition: transform 0.15s, background 0.15s, color 0.15s; }
+.ml-week.ml-dragging .ml-trash { opacity: 1; pointer-events: auto; transform: translate(-50%, 0) scale(1); }
+.ml-trash.ml-drop-over { border-style: solid; border-color: var(--danger); background: var(--danger); color: #fff; transform: translate(-50%, 0) scale(1.08); }
+.ml-trash.ml-drop-over .ml-trash-icon { background: rgb(255 255 255 / 0.2); transform: rotate(-12deg); }
+@media (prefers-reduced-motion: reduce) {
+    .ml-trash, .ml-trash-icon, .ml-drag-ghost, .ml-week.ml-dragging .ml-slot { transition: none; }
+}
 .ml-slot-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .ml-add { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
 .ml-slot-body { display: grid; gap: 2px; min-width: 0; flex: 1; }

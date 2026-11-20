@@ -100,6 +100,8 @@ public interface IMealService
 
     Task DeleteEntryAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task MoveEntryAsync(Guid id, DateOnly date, MealSlot slot, CancellationToken cancellationToken = default);
+
     Task<List<Recipe>> GetRecipesAsync(CancellationToken cancellationToken = default);
 
     Task<Recipe> SaveRecipeAsync(Recipe recipe, CancellationToken cancellationToken = default);

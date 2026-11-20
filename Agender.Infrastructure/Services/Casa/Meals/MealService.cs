@@ -5,6 +5,7 @@ using Agender.Shared.Domain;
 using Agender.Shared.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Agender.Infrastructure.Services;
 
@@ -117,6 +118,66 @@ public class MealService(
         await RemoveLeftoversAsync(context, householdId, entry, cancellationToken);
         context.MealPlanEntries.Remove(entry);
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MoveEntryAsync(Guid id, DateOnly date, MealSlot slot, CancellationToken cancellationToken = default)
+    {
+        await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
+        Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
+
+        MealPlanEntry source = await context.MealPlanEntries.FirstOrDefaultAsync(e => e.Id == id && e.HouseholdId == householdId, cancellationToken)
+            ?? throw new NotFoundException($"Meal {id} was not found.");
+
+        if (!Enum.IsDefined(slot) || !MealCatalog.CanMove(source.Slot, slot))
+        {
+            throw new ArgumentException("As sobremesas só podem trocar com sobremesas.");
+        }
+
+        if (source.Date == date && source.Slot == slot)
+        {
+            return;
+        }
+
+        (DateOnly fromDate, MealSlot fromSlot) = (source.Date, source.Slot);
+        MealPlanEntry? target = await context.MealPlanEntries.FirstOrDefaultAsync(e => e.HouseholdId == householdId && e.Date == date && e.Slot == slot, cancellationToken);
+
+        await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        if (target is not null)
+        {
+            target.Date = DateOnly.MinValue;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        source.Date = date;
+        source.Slot = slot;
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (target is not null)
+        {
+            target.Date = fromDate;
+            target.Slot = fromSlot;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        DateOnly first = (fromDate < date ? fromDate : date).AddDays(-1);
+        DateOnly last = (fromDate > date ? fromDate : date).AddDays(1);
+        List<MealPlanEntry> nearby = await context.MealPlanEntries
+            .Where(e => e.HouseholdId == householdId && e.Date >= first && e.Date <= last)
+            .ToListAsync(cancellationToken);
+
+        foreach (MealPlanEntry leftover in nearby.Where(e => e.IsLeftover))
+        {
+            if (MealCatalog.PreviousMeal(leftover.Date, leftover.Slot) is not var (previousDate, previousSlot) || previousDate < first)
+            {
+                continue;
+            }
+
+            leftover.IsLeftover = nearby.Any(e => e.Date == previousDate && e.Slot == previousSlot && !e.IsLeftover && e.RecipeId == leftover.RecipeId);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static async Task RemoveLeftoversAsync(AgenderDbContext context, Guid householdId, MealPlanEntry cooked, CancellationToken cancellationToken)
@@ -511,9 +572,9 @@ public class MealService(
 
         try
         {
-            string? partial = await MealMessages.SendWeekAsync(whatsApp, dataProtection, settings!, context, householdId, weekStart, cancellationToken);
+            await MealMessages.SendWeekAsync(whatsApp, dataProtection, settings!, context, householdId, weekStart, cancellationToken);
             week.SentAt = DateTime.UtcNow;
-            week.LastError = partial is null ? null : Truncate(partial, MealWeek.ErrorMaxLength);
+            week.LastError = null;
         }
         catch (ArgumentException ex)
         {

@@ -1,7 +1,9 @@
 @page "/casa/refeicoes"
 @attribute [Authorize]
+@using System.Globalization
 @inherits CasaPageBase
 @inject IMealService Meals
+@inject IJSRuntime JS
 
 <PageTitle>Refeições · Agender</PageTitle>
 
@@ -122,7 +124,7 @@
             {
                 <p class="cs-hint ml-error">@(_overview.SentAt is null ? "O envio falhou: " : "Atenção: ")@_overview.SendError</p>
             }
-            <div class="ml-week">
+            <div class="ml-week" @ref="_weekGrid">
                 @for (int offset = 0; offset < 7; offset++)
                 {
                     DateOnly day = _weekStart.AddDays(offset);
@@ -135,10 +137,12 @@
                         @foreach (MealSlot slot in MealCatalog.Slots)
                         {
                             MealPlanEntry? entry = EntryAt(day, slot);
+                            string dropDate = day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                            string dropKind = slot == MealSlot.Dessert ? "dessert" : "main";
 
                             @if (entry is null)
                             {
-                                <button type="button" class="ml-slot empty" @onclick="() => OpenPicker(day, slot, null)">
+                                <button type="button" class="ml-slot empty" data-date="@dropDate" data-slot="@((int)slot)" data-kind="@dropKind" @onclick="() => OpenPicker(day, slot, null)">
                                     <span class="ml-slot-label">@MealCatalog.SlotEmoji(slot) @MealCatalog.SlotLabel(slot)</span>
                                     <span class="ml-add"><Icon Name="IconName.Plus" Size="14" /> Escolher</span>
                                 </button>
@@ -148,7 +152,8 @@
                                 Recipe? recipe = RecipeOf(entry);
                                 MealProtein? protein = slot == MealSlot.Dessert ? null : ProteinOf(entry);
 
-                                <button type="button" class="ml-slot filled @(entry.IsLeftover ? "leftover" : string.Empty)" @onclick="() => OpenPicker(day, slot, entry)">
+                                <button type="button" class="ml-slot filled @(entry.IsLeftover ? "leftover" : string.Empty)" title="Arrasta para mover, trocar ou remover"
+                                        data-entry="@entry.Id" data-date="@dropDate" data-slot="@((int)slot)" data-kind="@dropKind" @onclick="() => OpenPicker(day, slot, entry)">
                                     @Thumb(recipe?.ImageUrl, recipe is null ? "🥡" : "🍲", "ml-thumb")
                                     <span class="ml-slot-body">
                                         <span class="ml-slot-label">@MealCatalog.SlotEmoji(slot) @MealCatalog.SlotLabel(slot)</span>
@@ -167,6 +172,10 @@
                         }
                     </article>
                 }
+                <div class="ml-trash" aria-hidden="true">
+                    <span class="ml-trash-icon"><Icon Name="IconName.Trash" Size="18" /></span>
+                    <span>Largar aqui para remover</span>
+                </div>
             </div>
         }
         else if (_view == MealView.Recipes)
@@ -705,6 +714,10 @@
     private bool _atHome;
     private List<string> _pantryKeys = [];
     private List<(string Key, InventoryItem Item)> _stock = [];
+    private ElementReference _weekGrid;
+    private string? _dragGridId;
+    private IJSObjectReference? _dragModule;
+    private DotNetObjectReference<CasaMeals>? _dragRef;
 
     [SupplyParameterFromQuery(Name = "emcasa")]
     public bool OpenAtHome { get; set; }
@@ -1501,10 +1514,99 @@
         IsFavorite = recipe.IsFavorite
     };
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        bool gridShown = !Loading && Current is not null && _view == MealView.Week;
+
+        if (!gridShown || _weekGrid.Id is null || _weekGrid.Id == _dragGridId)
+        {
+            return;
+        }
+
+        _dragGridId = _weekGrid.Id;
+
+        try
+        {
+            _dragModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/Agender.Shared/Pages/CasaMeals.razor.js");
+            _dragRef ??= DotNetObjectReference.Create(this);
+            await _dragModule.InvokeVoidAsync("init", _weekGrid, _dragRef);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or TaskCanceledException)
+        {
+        }
+    }
+
+    [JSInvokable("MoveDropped")]
+    public async Task MoveDroppedAsync(string entryId, string date, int slot)
+    {
+        if (_busy || !Guid.TryParse(entryId, out Guid id) || !Enum.IsDefined((MealSlot)slot)
+            || !DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly day)
+            || _overview.Entries.FirstOrDefault(e => e.Id == id) is not MealPlanEntry moved)
+        {
+            return;
+        }
+
+        MealSlot target = (MealSlot)slot;
+        MealPlanEntry? occupant = EntryAt(day, target);
+        string message = occupant is null
+            ? $"Movida para {MealCatalog.SlotWithArticle(target)} de {DayName(day).ToLowerInvariant()}."
+            : "Refeições trocadas.";
+
+        if (occupant is not null)
+        {
+            occupant.Date = moved.Date;
+            occupant.Slot = moved.Slot;
+        }
+
+        moved.Date = day;
+        moved.Slot = target;
+        StateHasChanged();
+
+        await BusyAsync(() => Meals.MoveEntryAsync(id, day, target), message);
+        await RefreshAsync();
+        StateHasChanged();
+    }
+
+    [JSInvokable("RemoveDropped")]
+    public async Task RemoveDroppedAsync(string entryId)
+    {
+        if (_busy || !Guid.TryParse(entryId, out Guid id) || _overview.Entries.FirstOrDefault(e => e.Id == id) is not MealPlanEntry removed)
+        {
+            return;
+        }
+
+        _overview.Entries.Remove(removed);
+        StateHasChanged();
+
+        await BusyAsync(() => Meals.DeleteEntryAsync(id), "Refeição removida.");
+        await RefreshAsync();
+        StateHasChanged();
+    }
+
     public override void Dispose()
     {
         _searchDelay?.Cancel();
         _searchDelay?.Dispose();
+        _ = DisposeDragAsync();
         base.Dispose();
+    }
+
+    private async Task DisposeDragAsync()
+    {
+        try
+        {
+            if (_dragModule is not null)
+            {
+                await _dragModule.InvokeVoidAsync("dispose");
+                await _dragModule.DisposeAsync();
+            }
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            _dragRef?.Dispose();
+        }
     }
 }
