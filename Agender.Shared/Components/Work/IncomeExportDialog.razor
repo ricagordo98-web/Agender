@@ -168,7 +168,8 @@
             IReadOnlyList<IncomeEntryDto> entries = sources.Any(s => !s.IsTrades) ? await IncomeService.GetEntriesAsync(from, to) : [];
             List<TraderTradeDto> trades = withTrades ? await LoadTradesAsync(from, to) : [];
 
-            IncomeReportInput input = new(from, to, sources, IncomeLedger.Build(entries, trades), trades, _includeDetail, DateTime.Now);
+            List<IncomeEntryDto> pending = [.. entries.Where(e => e.Status == IncomeEntryStatus.Pending && _selected.Contains(IncomeLedger.SourceKey(e.SourceId)))];
+            IncomeReportInput input = new(from, to, sources, IncomeLedger.Build(entries, trades), trades, _includeDetail, DateTime.Now, pending);
             string fileName = $"rendimentos-{from:yyyy-MM-dd}_{to:yyyy-MM-dd}.pdf";
             await DownloadAsync(fileName, IncomePdf.Build(input));
             await OnClose.InvokeAsync();

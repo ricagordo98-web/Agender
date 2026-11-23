@@ -1,4 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace Agender.Shared.Domain;
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum IncomeEntryStatus
+{
+    Earned,
+    Pending,
+    Rejected
+}
 
 public class IncomeSource
 {
@@ -33,6 +43,8 @@ public class IncomeEntry
     public DateOnly Date { get; set; }
 
     public decimal Amount { get; set; }
+
+    public IncomeEntryStatus Status { get; set; } = IncomeEntryStatus.Earned;
 
     public string Platform { get; set; } = string.Empty;
 

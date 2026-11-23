@@ -119,4 +119,26 @@ public sealed class IncomeServiceTests : IDisposable
         Func<Task> act = () => other.CreateEntryAsync(new IncomeEntryInput(source.Id, new DateOnly(2026, 11, 2), 3, string.Empty, string.Empty));
         await act.Should().ThrowAsync<NotFoundException>();
     }
+
+    [Fact]
+    public async Task UpdateEntryAsync_PendingApproved_BecomesEarnedOnTheSameDate()
+    {
+        IncomeSourceDto source = await SurveysAsync();
+        IncomeEntryDto pending = await _sut.CreateEntryAsync(new IncomeEntryInput(source.Id, new DateOnly(2026, 11, 2), 15, "Prolific", string.Empty, IncomeEntryStatus.Pending));
+
+        IncomeEntryDto approved = await _sut.UpdateEntryAsync(pending.Id, new IncomeEntryInput(source.Id, pending.Date, pending.Amount, pending.Platform, pending.Note, IncomeEntryStatus.Earned));
+
+        pending.Status.Should().Be(IncomeEntryStatus.Pending);
+        approved.Should().Match<IncomeEntryDto>(e => e.Status == IncomeEntryStatus.Earned && e.Date == new DateOnly(2026, 11, 2));
+    }
+
+    [Fact]
+    public async Task CreateEntryAsync_WithoutStatus_IsEarned()
+    {
+        IncomeSourceDto source = await SurveysAsync();
+
+        IncomeEntryDto entry = await _sut.CreateEntryAsync(new IncomeEntryInput(source.Id, new DateOnly(2026, 11, 2), 5, "Prolific", string.Empty));
+
+        entry.Status.Should().Be(IncomeEntryStatus.Earned);
+    }
 }

@@ -34,15 +34,20 @@
             }
 
             LedgerTotals week = IncomeLedger.Totals(Items.Where(i => i.Date >= weekStart && i.Date <= weekStart.AddDays(6)));
+            string? weekNote = WeekNote?.Invoke(weekStart);
             <div class="wk-cal-week @(week.Count == 0 ? string.Empty : WorkFormat.Tone(week.Net))">
                 @if (week.Count > 0)
                 {
                     <strong>@WorkFormat.Money(week.Net)</strong>
                     <span>@WorkFormat.Count(week.Count, Singular, Plural)</span>
                 }
-                else
+                else if (weekNote is null)
                 {
                     <span>—</span>
+                }
+                @if (weekNote is not null)
+                {
+                    <span class="wk-cal-note">@weekNote</span>
                 }
             </div>
         }
@@ -64,6 +69,9 @@
 
     [Parameter]
     public Func<DateOnly, string?>? DayNote { get; set; }
+
+    [Parameter]
+    public Func<DateOnly, string?>? WeekNote { get; set; }
 
     [Parameter]
     public string Singular { get; set; } = "registo";

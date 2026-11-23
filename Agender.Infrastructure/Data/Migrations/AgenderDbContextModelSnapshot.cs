@@ -917,6 +917,13 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.Property<Guid>("SourceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Earned");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 

@@ -1,5 +1,6 @@
 using Agender.Shared.Components;
 using Agender.Shared.Contracts;
+using Agender.Shared.Domain;
 
 namespace Agender.Shared.Reports;
 
@@ -12,6 +13,11 @@ public sealed record LedgerTotals(decimal Gains, decimal Losses, int Count)
     public static readonly LedgerTotals Empty = new(0, 0, 0);
 
     public decimal Net => Gains - Losses;
+}
+
+public sealed record PendingTotals(decimal Amount, int Count)
+{
+    public static readonly PendingTotals Empty = new(0, 0);
 }
 
 public static class IncomeLedger
@@ -28,7 +34,7 @@ public static class IncomeLedger
 
     public static IReadOnlyList<LedgerItem> Build(IEnumerable<IncomeEntryDto> entries, IEnumerable<TraderTradeDto> trades)
     {
-        IEnumerable<LedgerItem> manual = entries.Select(e => new LedgerItem(e.Date, SourceKey(e.SourceId), e.Amount, e.Platform, e.Platform, e.Note));
+        IEnumerable<LedgerItem> manual = entries.Where(e => e.Status == IncomeEntryStatus.Earned).Select(e => new LedgerItem(e.Date, SourceKey(e.SourceId), e.Amount, e.Platform, e.Platform, e.Note));
 
         IEnumerable<LedgerItem> closed = trades
             .Where(t => t.IsClosed && t.ExitDate is not null && t.NetPnl is not null)
@@ -41,6 +47,12 @@ public static class IncomeLedger
                 t.Name));
 
         return [.. manual.Concat(closed).OrderBy(i => i.Date)];
+    }
+
+    public static PendingTotals Pending(IEnumerable<IncomeEntryDto> entries)
+    {
+        List<IncomeEntryDto> pending = [.. entries.Where(e => e.Status == IncomeEntryStatus.Pending)];
+        return new PendingTotals(pending.Sum(e => e.Amount), pending.Count);
     }
 
     public static LedgerTotals Totals(IEnumerable<LedgerItem> items)

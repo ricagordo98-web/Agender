@@ -280,6 +280,7 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Platform).HasMaxLength(IncomeEntry.PlatformMaxLength);
             entity.Property(e => e.Note).HasMaxLength(IncomeEntry.NoteMaxLength);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).HasDefaultValue(IncomeEntryStatus.Earned).HasSentinel(IncomeEntryStatus.Earned);
             entity.HasOne<IncomeSource>().WithMany().HasForeignKey(e => e.SourceId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(UserIdProperty, nameof(IncomeEntry.SourceId), nameof(IncomeEntry.Date));
         });

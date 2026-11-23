@@ -31,6 +31,7 @@
                 <div><small>Perdas</small><strong class="@(_monthTotals.Losses > 0 ? "loss" : "flat")">@WorkFormat.Money(_monthTotals.Losses, signed: false)</strong></div>
                 <div><small>Média por semana</small><strong>@WorkFormat.Money(_weeklyAverage)</strong></div>
                 <div><small>Este ano</small><strong class="@WorkFormat.Tone(_yearTotals.Net)">@WorkFormat.Money(_yearTotals.Net)</strong></div>
+                <div><small>Pendente de aprovação</small><strong class="@(_pendingTotals.Count > 0 ? "pending" : "flat")">@WorkFormat.Money(_pendingTotals.Amount, signed: false)</strong></div>
             </div>
             <div class="wk-month-nav">
                 <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => ShiftMonth(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
@@ -158,6 +159,7 @@
     private LedgerTotals _previousTotals = LedgerTotals.Empty;
     private LedgerTotals _yearTotals = LedgerTotals.Empty;
     private decimal _weeklyAverage;
+    private PendingTotals _pendingTotals = PendingTotals.Empty;
 
     private IReadOnlyList<LedgerSource> AllSources =>
         [IncomeLedger.TradesSource, .. Sources.Where(s => !s.IsArchived || _items.Any(i => i.SourceKey == IncomeLedger.SourceKey(s.Id))).Select(IncomeLedger.ToSource)];
@@ -190,7 +192,9 @@
                 trades.AddRange(await TradeService.GetRangeAsync(start, end));
             }
 
-            _items = IncomeLedger.Build(await entries, trades.Where(t => t.IsClosed).DistinctBy(t => t.Id));
+            IReadOnlyList<IncomeEntryDto> loaded = await entries;
+            _pendingTotals = IncomeLedger.Pending(loaded);
+            _items = IncomeLedger.Build(loaded, trades.Where(t => t.IsClosed).DistinctBy(t => t.Id));
             Recalculate();
         }
         catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)

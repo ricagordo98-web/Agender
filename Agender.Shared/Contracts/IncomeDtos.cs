@@ -6,9 +6,9 @@ public record IncomeSourceDto(Guid Id, string Name, string Emoji, EntryColor Col
 
 public record IncomeSourceInput(string Name, string Emoji, EntryColor Color, bool IsArchived);
 
-public record IncomeEntryDto(Guid Id, Guid SourceId, DateOnly Date, decimal Amount, string Platform, string Note);
+public record IncomeEntryDto(Guid Id, Guid SourceId, DateOnly Date, decimal Amount, string Platform, string Note, IncomeEntryStatus Status = IncomeEntryStatus.Earned);
 
-public record IncomeEntryInput(Guid SourceId, DateOnly Date, decimal Amount, string Platform, string Note);
+public record IncomeEntryInput(Guid SourceId, DateOnly Date, decimal Amount, string Platform, string Note, IncomeEntryStatus Status = IncomeEntryStatus.Earned);
 
 public static class IncomeMappings
 {
@@ -16,5 +16,5 @@ public static class IncomeMappings
         new(source.Id, source.Name, source.Emoji, source.Color, source.IsArchived, source.SortOrder);
 
     public static IncomeEntryDto ToDto(this IncomeEntry entry) =>
-        new(entry.Id, entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note);
+        new(entry.Id, entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note, entry.Status);
 }

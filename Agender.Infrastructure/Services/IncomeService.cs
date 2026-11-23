@@ -171,6 +171,11 @@ public class IncomeService(IUserDbContextFactory contextFactory, TimeProvider ti
             throw new ArgumentException("The amount must be different from zero and within limits.");
         }
 
+        if (!Enum.IsDefined(input.Status))
+        {
+            throw new ArgumentException("The status is not valid.");
+        }
+
         if (platform.Length > IncomeEntry.PlatformMaxLength)
         {
             throw new ArgumentException($"The platform exceeds {IncomeEntry.PlatformMaxLength} characters.");
@@ -191,6 +196,7 @@ public class IncomeService(IUserDbContextFactory contextFactory, TimeProvider ti
         entry.Amount = Math.Round(input.Amount, 2);
         entry.Platform = platform;
         entry.Note = note;
+        entry.Status = input.Status;
         entry.UpdatedAt = now;
     }
 }

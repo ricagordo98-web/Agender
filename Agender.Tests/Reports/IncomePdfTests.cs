@@ -35,7 +35,8 @@ public sealed class IncomePdfTests
     private static byte[] Build(IReadOnlyList<LedgerSource> sources, bool detail)
     {
         (List<IncomeEntryDto> entries, List<TraderTradeDto> trades) = Sample();
-        IncomeReportInput input = new(new DateOnly(2026, 9, 1), new DateOnly(2026, 11, 30), sources, IncomeLedger.Build(entries, trades), trades, detail, new DateTime(2026, 11, 23, 18, 0, 0));
+        List<IncomeEntryDto> pending = [new(Guid.NewGuid(), Surveys.Id, new DateOnly(2026, 11, 20), 15, "Prolific", string.Empty, IncomeEntryStatus.Pending)];
+        IncomeReportInput input = new(new DateOnly(2026, 9, 1), new DateOnly(2026, 11, 30), sources, IncomeLedger.Build(entries, trades), trades, detail, new DateTime(2026, 11, 23, 18, 0, 0), pending);
 
         return IncomePdf.Build(input);
     }

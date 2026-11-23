@@ -13,7 +13,8 @@ public sealed record IncomeReportInput(
     IReadOnlyList<LedgerItem> Items,
     IReadOnlyList<TraderTradeDto> Trades,
     bool IncludeDetail,
-    DateTime GeneratedAt);
+    DateTime GeneratedAt,
+    IReadOnlyList<IncomeEntryDto>? PendingEntries = null);
 
 public static class IncomePdf
 {
@@ -69,7 +70,8 @@ public static class IncomePdf
                     }
                     else
                     {
-                        column.Item().Element(item => ComposeManual(item, source, own));
+                        PendingTotals sourcePending = IncomeLedger.Pending((input.PendingEntries ?? []).Where(e => IncomeLedger.SourceKey(e.SourceId) == source.Key));
+                    column.Item().Element(item => ComposeManual(item, source, own, sourcePending));
                     }
                 }
 
@@ -103,7 +105,9 @@ public static class IncomePdf
             column.Item().Row(row =>
             {
                 row.Spacing(10);
-                Kpi(row.RelativeItem(), "Resultado líquido", Money(totals.Net), Tone(totals.Net), highlight: true);
+                PendingTotals pending = IncomeLedger.Pending(input.PendingEntries ?? []);
+                Kpi(row.RelativeItem(), "Resultado líquido", Money(totals.Net), Tone(totals.Net),
+                    pending.Count > 0 ? $"+ {Money(pending.Amount, signed: false)} pendente de aprovação" : null, highlight: true);
                 Kpi(row.RelativeItem(), "Ganhos", Money(totals.Gains, signed: false), Gain);
                 Kpi(row.RelativeItem(), "Perdas", Money(totals.Losses, signed: false), totals.Losses > 0 ? Loss : BrandDark);
             });
@@ -292,7 +296,7 @@ public static class IncomePdf
             }
         });
 
-    private static void ComposeManual(IContainer container, LedgerSource source, List<LedgerItem> items)
+    private static void ComposeManual(IContainer container, LedgerSource source, List<LedgerItem> items, PendingTotals pending)
     {
         LedgerTotals totals = IncomeLedger.Totals(items);
         IReadOnlyList<(string Platform, LedgerTotals Totals)> platforms = IncomeLedger.ByPlatform(items);
@@ -301,13 +305,15 @@ public static class IncomePdf
         {
             column.Item().Element(item => SectionTitle(item, source.Name, source.Color));
 
+            string pendingText = pending.Count > 0 ? $" · {Money(pending.Amount, signed: false)} pendente de aprovação ({pending.Count})" : string.Empty;
+
             if (items.Count == 0)
             {
-                column.Item().Text("Sem registos neste período.").FontColor(Muted);
+                column.Item().Text($"Sem ganhos confirmados neste período{pendingText}.").FontColor(Muted);
                 return;
             }
 
-            column.Item().PaddingBottom(8).Text($"{totals.Count} registos · resultado {Money(totals.Net)} · média por registo {Money(Math.Round(totals.Net / totals.Count, 2))}").FontColor(Muted);
+            column.Item().PaddingBottom(8).Text($"{totals.Count} registos · resultado {Money(totals.Net)} · média por registo {Money(Math.Round(totals.Net / totals.Count, 2))}{pendingText}").FontColor(Muted);
             column.Item().Table(table =>
             {
                 table.ColumnsDefinition(columns =>

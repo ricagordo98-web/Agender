@@ -114,5 +114,6 @@ public class IncomeEntryInputValidator : AbstractValidator<IncomeEntryInput>
         RuleFor(e => e.Amount).NotEqual(0).InclusiveBetween(-IncomeEntry.MaxAmount, IncomeEntry.MaxAmount);
         RuleFor(e => e.Platform).NotNull().MaximumLength(IncomeEntry.PlatformMaxLength);
         RuleFor(e => e.Note).NotNull().MaximumLength(IncomeEntry.NoteMaxLength);
+        RuleFor(e => e.Status).IsInEnum();
     }
 }

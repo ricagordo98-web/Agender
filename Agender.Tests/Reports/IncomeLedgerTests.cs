@@ -1,4 +1,5 @@
 using Agender.Shared.Contracts;
+using Agender.Shared.Domain;
 using Agender.Shared.Reports;
 using FluentAssertions;
 
@@ -81,5 +82,19 @@ public sealed class IncomeLedgerTests
     {
         TraderStats.ProfitFactor([Trade("2026-11-02", 30), Trade("2026-11-02", -10)]).Should().Be(3);
         TraderStats.ProfitFactor([Trade("2026-11-02", 30)]).Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_PendingAndRejectedEntries_DoNotCount()
+    {
+        IncomeEntryDto[] entries =
+        [
+            Entry("2026-11-03", 5),
+            Entry("2026-11-03", 15) with { Status = IncomeEntryStatus.Pending },
+            Entry("2026-11-03", 7) with { Status = IncomeEntryStatus.Rejected }
+        ];
+
+        IncomeLedger.Totals(IncomeLedger.Build(entries, [])).Net.Should().Be(5);
+        IncomeLedger.Pending(entries).Should().Be(new PendingTotals(15, 1));
     }
 }
