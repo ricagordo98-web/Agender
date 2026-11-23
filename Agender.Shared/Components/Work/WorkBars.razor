@@ -1,0 +1,97 @@
+@using System.Globalization
+
+<div class="wk-bars">
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="@Caption">
+        @{
+            decimal maxValue = Points.Count == 0 ? 0 : Points.Max(p => Math.Max(p.Value, 0));
+            decimal minValue = Points.Count == 0 ? 0 : Points.Min(p => Math.Min(p.Value, 0));
+            List<decimal> running = [];
+            decimal sum = 0;
+
+            foreach (Point point in Points)
+            {
+                sum += point.Value;
+                running.Add(sum);
+            }
+
+            if (ShowCumulative && running.Count > 0)
+            {
+                maxValue = Math.Max(maxValue, running.Max());
+                minValue = Math.Min(minValue, running.Min());
+            }
+
+            double top = (double)maxValue;
+            double bottom = (double)minValue;
+            double span = Math.Max(top - bottom, 1);
+            double plot = Height - 26;
+            double zero = 6 + plot * top / span;
+            int count = Math.Max(1, Points.Count);
+            double slot = (Width - 8) / count;
+            double barWidth = Math.Max(3, Math.Min(26, slot * 0.6));
+
+            double Y(decimal value) => 6 + plot * (top - (double)value) / span;
+        }
+
+        <line x1="4" x2="@Format(Width - 4)" y1="@Format(zero)" y2="@Format(zero)" stroke="var(--border-strong)" />
+
+        @for (int index = 0; index < Points.Count; index++)
+        {
+            Point point = Points[index];
+            double x = 4 + slot * index + (slot - barWidth) / 2;
+            double y = Y(point.Value);
+            double height = Math.Abs(zero - y);
+            bool isLast = index == Points.Count - 1;
+
+            <rect x="@Format(x)" y="@Format(Math.Min(y, zero))" width="@Format(barWidth)" height="@Format(Math.Max(height, point.Value == 0 ? 0 : 1.5))" rx="3"
+                  class="@(point.Value < 0 ? "neg" : "pos")" opacity="@(isLast || !FadeOlder ? "1" : ".7")">
+                <title>@point.Label: @WorkFormat.Money(point.Value)</title>
+            </rect>
+
+            @if (ShowLabel(index))
+            {
+                @((MarkupString)$"<text x=\"{Format(4 + slot * index + slot / 2)}\" y=\"{Format(Height - 6)}\" text-anchor=\"middle\">{System.Net.WebUtility.HtmlEncode(point.Short)}</text>")
+            }
+        }
+
+        @if (ShowCumulative && running.Count > 1)
+        {
+            string line = string.Join(' ', running.Select((value, index) => $"{Format(4 + slot * index + slot / 2)},{Format(Y(value))}"));
+
+            <polyline points="@line" fill="none" class="cum" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round" />
+            <circle cx="@Format(4 + slot * (running.Count - 1) + slot / 2)" cy="@Format(Y(running[^1]))" r="3.5" class="cum-dot" />
+        }
+    </svg>
+
+    @if (ShowCumulative)
+    {
+        <div class="cs-legend">
+            <span><i class="wk-legend-pos"></i>Por dia</span>
+            <span><i class="wk-legend-cum"></i>Acumulado</span>
+        </div>
+    }
+</div>
+
+@code {
+    private const double Height = 170;
+
+    public sealed record Point(string Label, string Short, decimal Value);
+
+    [Parameter]
+    public IReadOnlyList<Point> Points { get; set; } = [];
+
+    [Parameter]
+    public double Width { get; set; } = 560;
+
+    [Parameter]
+    public string Caption { get; set; } = "Evolução";
+
+    [Parameter]
+    public bool ShowCumulative { get; set; }
+
+    [Parameter]
+    public bool FadeOlder { get; set; } = true;
+
+    private bool ShowLabel(int index) => Points.Count <= 14 || index % (int)Math.Ceiling(Points.Count / 10.0) == 0 || index == Points.Count - 1;
+
+    private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

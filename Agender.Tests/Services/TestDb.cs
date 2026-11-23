@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agender.Tests.Services;
 
-public sealed class TestDb : IAgendaDbContextFactory, IDisposable
+public sealed class TestDb : IAgendaDbContextFactory, IUserDbContextFactory, IDisposable
 {
     public const string DefaultUserId = "user-a";
 
@@ -30,7 +30,7 @@ public sealed class TestDb : IAgendaDbContextFactory, IDisposable
 
     public void Dispose() => _connection.Dispose();
 
-    private sealed class UserScopedFactory(TestDb db, string userId) : IAgendaDbContextFactory
+    private sealed class UserScopedFactory(TestDb db, string userId) : IAgendaDbContextFactory, IUserDbContextFactory
     {
         public Task<AgenderDbContext> CreateAsync(CancellationToken cancellationToken = default) => Task.FromResult(db.Create(userId));
     }

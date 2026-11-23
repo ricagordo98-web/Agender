@@ -1,0 +1,147 @@
+@inject IIncomeService IncomeService
+@inject IToastService Toasts
+
+<Modal Title="@(Source is null ? "Nova fonte de rendimento" : $"Editar {Source.Name}")" OnClose="OnClose" OnSubmit="SaveAsync">
+    <ChildContent>
+        <div class="wk-source-preview" style="--src:@EntryColorStyle.Hex(_color)">
+            <span class="wk-source-badge">@(string.IsNullOrEmpty(_emoji) ? "💼" : _emoji)</span>
+            <span>
+                <strong>@(string.IsNullOrWhiteSpace(_name) ? "Nome da fonte" : _name.Trim())</strong>
+                <small>Registos manuais com data, valor e plataforma</small>
+            </span>
+        </div>
+
+        <label class="cs-field">Nome
+            <input class="field" maxlength="@IncomeSource.NameMaxLength" placeholder="Ex.: Surveys, Freelance, Vendas" @bind="_name" @bind:event="oninput" autofocus />
+        </label>
+
+        <div class="cs-field">
+            <span>Ícone</span>
+            <div class="cs-emojis" role="radiogroup" aria-label="Ícone">
+                @foreach (string emoji in WorkFormat.Emojis)
+                {
+                    <button type="button" role="radio" aria-checked="@(_emoji == emoji ? "true" : "false")" class="@(_emoji == emoji ? "on" : string.Empty)" @onclick="() => _emoji = emoji">@emoji</button>
+                }
+            </div>
+        </div>
+
+        <div class="cs-field">
+            <span>Cor</span>
+            <div class="cs-swatches" role="radiogroup" aria-label="Cor">
+                @foreach (EntryColor color in EntryColorStyle.Palette)
+                {
+                    <button type="button" role="radio" aria-checked="@(_color == color ? "true" : "false")" aria-label="@EntryColorStyle.Label(color)"
+                            class="cs-swatch @(_color == color ? "on" : string.Empty)" style="background:@EntryColorStyle.Hex(color)" @onclick="() => _color = color"></button>
+                }
+            </div>
+        </div>
+
+        @if (Source is not null)
+        {
+            <label class="cs-check">
+                <input type="checkbox" @bind="_archived" />
+                Arquivar (deixa de aparecer nos separadores, mas os registos continuam a contar nos relatórios)
+            </label>
+        }
+    </ChildContent>
+    <Footer>
+        @if (Source is not null)
+        {
+            <button type="button" class="btn btn-danger" @onclick="() => _confirmDelete = true"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+        }
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-ghost" @onclick="OnClose">Cancelar</button>
+        <button type="button" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" @onclick="SaveAsync">@(Source is null ? "Criar fonte" : "Guardar")</button>
+    </Footer>
+</Modal>
+
+@if (_confirmDelete && Source is not null)
+{
+    <ConfirmDialog Title="Eliminar fonte" Danger="true" ConfirmLabel="Eliminar"
+                   Message="@($"A fonte «{Source.Name}» e todos os seus registos vão ser eliminados. Se só queres escondê-la, arquiva-a.")"
+                   OnConfirm="DeleteAsync" OnCancel="() => _confirmDelete = false" />
+}
+
+@code {
+    private string _name = string.Empty;
+    private string _emoji = WorkFormat.Emojis[0];
+    private EntryColor _color = EntryColor.Teal;
+    private bool _archived;
+    private bool _busy;
+    private bool _confirmDelete;
+
+    [Parameter]
+    public IncomeSourceDto? Source { get; set; }
+
+    [Parameter]
+    public EventCallback<IncomeSourceDto> OnSaved { get; set; }
+
+    [Parameter]
+    public EventCallback<IncomeSourceDto> OnDeleted { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Source is not null)
+        {
+            _name = Source.Name;
+            _emoji = Source.Emoji;
+            _color = Source.Color;
+            _archived = Source.IsArchived;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            IncomeSourceInput input = new(_name.Trim(), _emoji, _color, _archived);
+            IncomeSourceDto saved = Source is null
+                ? await IncomeService.CreateSourceAsync(input)
+                : await IncomeService.UpdateSourceAsync(Source.Id, input);
+
+            await OnSaved.InvokeAsync(saved);
+        }
+        catch (ArgumentException)
+        {
+            Toasts.Show("Já existe uma fonte com esse nome.", ToastKind.Error);
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível guardar a fonte.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmDelete = false;
+
+        if (Source is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await IncomeService.DeleteSourceAsync(Source.Id);
+            await OnDeleted.InvokeAsync(Source);
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível eliminar a fonte.", ToastKind.Error);
+        }
+    }
+}

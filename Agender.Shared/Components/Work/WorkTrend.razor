@@ -1,0 +1,131 @@
+@using System.Globalization
+@using Agender.Shared.Reports
+
+<div class="wk-trend">
+    <svg viewBox="0 0 @Width @Height" role="img" aria-label="Evolução mensal por fonte">
+        @{
+            List<(DateOnly Month, Dictionary<string, decimal> Values, decimal Net)> data = [.. Months.Select(month =>
+            {
+                Dictionary<string, decimal> values = IncomeLedger.BySource(IncomeLedger.Between(Items, month, IncomeLedger.MonthEnd(month))).ToDictionary(s => s.Key, s => s.Totals.Net);
+                return (month, values, values.Values.Sum());
+            })];
+
+            double top = (double)Math.Max(1, data.Select(d => d.Values.Values.Where(v => v > 0).Sum()).DefaultIfEmpty(0).Max());
+            double bottom = (double)data.Select(d => d.Values.Values.Where(v => v < 0).Sum()).DefaultIfEmpty(0).Min();
+            top = Nice(Math.Max(top, (double)data.Select(d => d.Net).DefaultIfEmpty(0).Max()));
+            bottom = bottom < 0 ? -Nice(-bottom) : 0;
+            double span = top - bottom;
+            double plot = Height - 34;
+            double zero = 8 + plot * top / span;
+            int count = Math.Max(1, data.Count);
+            double slot = (Width - 64) / count;
+            double barWidth = Math.Min(28, slot * 0.55);
+
+            double Y(double value) => 8 + plot * (top - value) / span;
+        }
+
+        @for (int step = 0; step <= 3; step++)
+        {
+            double value = top - (top - bottom) * step / 3.0;
+            double y = Y(value);
+
+            <line x1="64" x2="@Width" y1="@Format(y)" y2="@Format(y)" stroke="var(--grid-line)" stroke-dasharray="3 4" />
+            @((MarkupString)$"<text x=\"58\" y=\"{Format(y + 4)}\" text-anchor=\"end\">{Short(value)}</text>")
+        }
+
+        <line x1="64" x2="@Width" y1="@Format(zero)" y2="@Format(zero)" stroke="var(--border-strong)" />
+
+        @for (int index = 0; index < data.Count; index++)
+        {
+            (DateOnly month, Dictionary<string, decimal> values, decimal net) = data[index];
+            double x = 64 + slot * index + (slot - barWidth) / 2;
+            double up = 0;
+            double down = 0;
+            bool isLast = index == data.Count - 1;
+
+            @foreach (LedgerSource source in Sources)
+            {
+                if (!values.TryGetValue(source.Key, out decimal value) || value == 0)
+                {
+                    continue;
+                }
+
+                double amount = (double)value;
+                double from = amount > 0 ? up : down;
+                double to = from + amount;
+
+                if (amount > 0)
+                {
+                    up = to;
+                }
+                else
+                {
+                    down = to;
+                }
+
+                double y1 = Y(Math.Max(from, to));
+                double y2 = Y(Math.Min(from, to));
+
+                <rect x="@Format(x)" y="@Format(y1)" width="@Format(barWidth)" height="@Format(Math.Max(1, y2 - y1))" rx="3" fill="@source.Color" opacity="@(isLast ? "1" : ".78")">
+                    <title>@WorkFormat.Month(month) · @source.Name: @WorkFormat.Money(value)</title>
+                </rect>
+            }
+
+            @((MarkupString)$"<text x=\"{Format(64 + slot * index + slot / 2)}\" y=\"{Format(Height - 6)}\" text-anchor=\"middle\" class=\"{(isLast ? "now" : string.Empty)}\">{WorkFormat.Capitalize(month.ToString("MMM", WorkFormat.Culture)).TrimEnd('.')}</text>")
+        }
+
+        @if (data.Count > 1)
+        {
+            string points = string.Join(' ', data.Select((d, i) => $"{Format(64 + slot * i + slot / 2)},{Format(Y((double)d.Net))}"));
+
+            <polyline points="@points" fill="none" class="net" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" />
+
+            @for (int index = 0; index < data.Count; index++)
+            {
+                <circle cx="@Format(64 + slot * index + slot / 2)" cy="@Format(Y((double)data[index].Net))" r="3.5" class="net-dot">
+                    <title>@WorkFormat.Month(data[index].Month): @WorkFormat.Money(data[index].Net)</title>
+                </circle>
+            }
+        }
+    </svg>
+
+    <div class="cs-legend">
+        @foreach (LedgerSource source in Sources)
+        {
+            <span><i style="background:@source.Color"></i>@source.Name</span>
+        }
+        <span><i class="wk-legend-net"></i>Resultado líquido</span>
+    </div>
+</div>
+
+@code {
+    private const double Width = 620;
+    private const double Height = 240;
+
+    [Parameter]
+    public IReadOnlyList<DateOnly> Months { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<LedgerSource> Sources { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<LedgerItem> Items { get; set; } = [];
+
+    private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private static string Short(double value) =>
+        Math.Abs(value) >= 1000 ? $"{(value / 1000).ToString("0.#", WorkFormat.Culture)}k €" : $"{value.ToString("0", WorkFormat.Culture)} €";
+
+    private static double Nice(double value)
+    {
+        if (value <= 0)
+        {
+            return 1;
+        }
+
+        double power = Math.Pow(10, Math.Floor(Math.Log10(value)));
+        double mantissa = value / power;
+
+        return (mantissa <= 1.5 ? 1.5 : mantissa <= 2 ? 2 : mantissa <= 3 ? 3 : mantissa <= 5 ? 5 : 10) * power;
+    }
+}

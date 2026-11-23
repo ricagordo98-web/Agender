@@ -1,0 +1,232 @@
+@page "/trabalho"
+@attribute [Authorize]
+@using Agender.Shared.Reports
+@inherits WorkPageBase
+@inject ITraderTradeService TradeService
+
+<PageTitle>Trabalho · Agender</PageTitle>
+
+<div class="page wk-page">
+    <PageHeader Title="Trabalho" Subtitle="Onde estás a ganhar (e a perder) dinheiro fora do salário.">
+        <button type="button" class="btn btn-primary" @onclick="() => OpenExport()">
+            <Icon Name="IconName.Download" Size="16" /> Exportar PDF
+        </button>
+    </PageHeader>
+    <WorkTabs Sources="Sources" OnAddSource="OpenNewSource" />
+
+    @if (_loading)
+    {
+        <div class="card wk-skeleton" aria-busy="true"></div>
+    }
+    else
+    {
+        <section class="wk-overview card">
+            <div class="wk-overview-main">
+                <small>Resultado líquido · @WorkFormat.Month(_month0).ToLower(WorkFormat.Culture)</small>
+                <strong class="@WorkFormat.Tone(_monthTotals.Net)">@WorkFormat.Money(_monthTotals.Net)</strong>
+                <span>@WorkFormat.Change(_monthTotals.Net, _previousTotals.Net)</span>
+            </div>
+            <div class="wk-overview-split">
+                <div><small>Ganhos</small><strong class="win">@WorkFormat.Money(_monthTotals.Gains, signed: false)</strong></div>
+                <div><small>Perdas</small><strong class="@(_monthTotals.Losses > 0 ? "loss" : "flat")">@WorkFormat.Money(_monthTotals.Losses, signed: false)</strong></div>
+                <div><small>Média por semana</small><strong>@WorkFormat.Money(_weeklyAverage)</strong></div>
+                <div><small>Este ano</small><strong class="@WorkFormat.Tone(_yearTotals.Net)">@WorkFormat.Money(_yearTotals.Net)</strong></div>
+            </div>
+            <div class="wk-month-nav">
+                <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => ShiftMonth(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+                <strong>@WorkFormat.Month(_month0)</strong>
+                <button type="button" class="icon-btn" aria-label="Mês seguinte" disabled="@(_month0 >= IncomeLedger.MonthStart(Store.Today))" @onclick="() => ShiftMonth(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+            </div>
+        </section>
+
+        <section class="wk-sources" aria-label="Fontes">
+            @foreach (LedgerSource source in AllSources)
+            {
+                LedgerTotals month = SourceTotals(source.Key, _month0, IncomeLedger.MonthEnd(_month0));
+                LedgerTotals previous = SourceTotals(source.Key, _month0.AddMonths(-1), _month0.AddDays(-1));
+
+                <a class="card wk-source-card" href="@SourceHref(source)" style="--src:@source.Color">
+                    <span class="wk-source-badge">@source.Emoji</span>
+                    <span class="wk-source-info">
+                        <span class="wk-source-name">@source.Name</span>
+                        <span class="wk-source-meta">@WorkFormat.Count(month.Count, source.IsTrades ? "trade" : "registo", source.IsTrades ? "trades" : "registos")</span>
+                    </span>
+                    <span class="wk-source-figures">
+                        <strong class="wk-source-value @WorkFormat.Tone(month.Net)">@WorkFormat.Money(month.Net)</strong>
+                        <small>@WorkFormat.ChangeShort(month.Net, previous.Net)</small>
+                    </span>
+                </a>
+            }
+            <button type="button" class="card wk-source-card wk-source-new" @onclick="OpenNewSource">
+                <span class="wk-source-badge"><Icon Name="IconName.Plus" Size="18" /></span>
+                <span class="wk-source-info">
+                    <span class="wk-source-name">Nova fonte</span>
+                    <span class="wk-source-meta">Surveys, freelance, vendas…</span>
+                </span>
+            </button>
+        </section>
+
+        <div class="wk-two wide-left">
+            <section class="card wk-panel" aria-label="Evolução">
+                <header class="cs-card-head"><h2>Últimos 12 meses</h2><span class="wk-head-note">resultado por fonte</span></header>
+                <WorkTrend Months="TrendMonths" Sources="AllSources" Items="_items" />
+            </section>
+
+            <section class="card wk-panel" aria-label="Peso de cada fonte">
+                <header class="cs-card-head"><h2>De onde vem o dinheiro</h2></header>
+                @{
+                    List<(LedgerSource Source, LedgerTotals Totals)> shares = [.. AllSources
+                        .Select(s => (s, SourceTotals(s.Key, _month0, IncomeLedger.MonthEnd(_month0))))
+                        .Where(x => x.Item2.Gains > 0)
+                        .OrderByDescending(x => x.Item2.Gains)];
+                }
+                @if (shares.Count == 0)
+                {
+                    <p class="cs-hint">Sem ganhos em @WorkFormat.Month(_month0).ToLower(WorkFormat.Culture).</p>
+                }
+                else
+                {
+                    <div class="wk-donut">
+                        <CasaDonut Items="@([.. shares.Select(x => new CasaDonut.Slice(x.Source.Name, x.Totals.Gains, x.Source.Color))])"
+                                   Caption="Ganhos" Center="@WorkFormat.Money(_monthTotals.Gains, signed: false)" Size="180" />
+                    </div>
+                    <ul class="wk-rank">
+                        @foreach ((LedgerSource source, LedgerTotals totals) in shares)
+                        {
+                            <li>
+                                <span class="wk-rank-name"><i class="wk-dot" style="background:@source.Color"></i>@source.Name</span>
+                                <span class="wk-rank-count">@Share(totals.Gains, _monthTotals.Gains)</span>
+                                <strong class="win">@WorkFormat.Money(totals.Gains, signed: false)</strong>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+
+        <section class="card wk-panel" aria-label="Atividade recente">
+            <header class="cs-card-head"><h2>Atividade recente</h2></header>
+            @{
+                List<LedgerItem> recent = [.. _items.Where(i => i.Date <= Store.Today).OrderByDescending(i => i.Date).Take(RecentCount)];
+            }
+            @if (recent.Count == 0)
+            {
+                <EmptyState Symbol="IconName.Wallet" Title="Ainda sem movimentos" Description="Cria uma fonte de rendimento (por exemplo «Surveys») e regista o que ganhas. As trades do Trader aparecem aqui automaticamente.">
+                    <button type="button" class="btn btn-primary" @onclick="OpenNewSource"><Icon Name="IconName.Plus" Size="16" /> Nova fonte</button>
+                </EmptyState>
+            }
+            else
+            {
+                <ul class="wk-activity">
+                    @foreach (LedgerItem item in recent)
+                    {
+                        LedgerSource source = SourceOf(item.SourceKey);
+
+                        <li style="--src:@source.Color">
+                            <span class="wk-activity-badge">@source.Emoji</span>
+                            <span class="wk-activity-main">
+                                <strong>@(string.IsNullOrWhiteSpace(item.Label) ? source.Name : item.Label)</strong>
+                                <small>@source.Name · @item.Date.ToString("ddd, d MMM", WorkFormat.Culture)@(string.IsNullOrWhiteSpace(item.Detail) ? string.Empty : $" · {item.Detail}")</small>
+                            </span>
+                            <strong class="@WorkFormat.Tone(item.Amount)">@WorkFormat.Money(item.Amount)</strong>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</div>
+
+@if (EditorOpen)
+{
+    <IncomeSourceEditor Source="EditingSource" OnSaved="OnSourceSavedAsync" OnDeleted="OnSourceDeletedAsync" OnClose="CloseEditor" />
+}
+
+@if (ExportOpen)
+{
+    <IncomeExportDialog Sources="Sources" Preselected="ExportPreselected" Today="Store.Today" OnClose="CloseExport" />
+}
+
+@code {
+    private const int RecentCount = 12;
+    private const int AverageWeeks = 8;
+
+    private IReadOnlyList<LedgerItem> _items = [];
+    private DateOnly _month0;
+    private bool _loading = true;
+    private LedgerTotals _monthTotals = LedgerTotals.Empty;
+    private LedgerTotals _previousTotals = LedgerTotals.Empty;
+    private LedgerTotals _yearTotals = LedgerTotals.Empty;
+    private decimal _weeklyAverage;
+
+    private IReadOnlyList<LedgerSource> AllSources =>
+        [IncomeLedger.TradesSource, .. Sources.Where(s => !s.IsArchived || _items.Any(i => i.SourceKey == IncomeLedger.SourceKey(s.Id))).Select(IncomeLedger.ToSource)];
+
+    private IReadOnlyList<DateOnly> TrendMonths => IncomeLedger.Months(_month0.AddMonths(-11), _month0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _month0 = IncomeLedger.MonthStart(Store.Today);
+        await LoadSourcesAsync();
+        await LoadAsync();
+    }
+
+    protected override Task OnSourcesChangedAsync(IncomeSourceDto changed) => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            DateOnly today = Store.Today;
+            DateOnly from = new[] { IncomeLedger.MonthStart(today).AddMonths(-23), new DateOnly(today.Year, 1, 1) }.Min();
+            DateOnly to = IncomeLedger.MonthEnd(today);
+
+            Task<IReadOnlyList<IncomeEntryDto>> entries = IncomeService.GetEntriesAsync(from, to);
+            List<TraderTradeDto> trades = [];
+
+            for (DateOnly start = from; start <= to; start = start.AddDays(365))
+            {
+                DateOnly end = start.AddDays(364) < to ? start.AddDays(364) : to;
+                trades.AddRange(await TradeService.GetRangeAsync(start, end));
+            }
+
+            _items = IncomeLedger.Build(await entries, trades.Where(t => t.IsClosed).DistinctBy(t => t.Id));
+            Recalculate();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível carregar o resumo.", ToastKind.Error);
+        }
+
+        _loading = false;
+    }
+
+    private void ShiftMonth(int months)
+    {
+        _month0 = _month0.AddMonths(months);
+        Recalculate();
+    }
+
+    private void Recalculate()
+    {
+        DateOnly monthEnd = IncomeLedger.MonthEnd(_month0);
+        DateOnly averageEnd = monthEnd < Store.Today ? monthEnd : Store.Today;
+
+        _monthTotals = IncomeLedger.Totals(IncomeLedger.Between(_items, _month0, monthEnd));
+        _previousTotals = IncomeLedger.Totals(IncomeLedger.Between(_items, _month0.AddMonths(-1), _month0.AddDays(-1)));
+        _yearTotals = IncomeLedger.Totals(IncomeLedger.Between(_items, new DateOnly(_month0.Year, 1, 1), new DateOnly(_month0.Year, 12, 31)));
+        _weeklyAverage = IncomeLedger.WeeklyAverage(_items, TraderStats.WeekStart(averageEnd).AddDays(-7 * (AverageWeeks - 1)), averageEnd);
+    }
+
+    private LedgerTotals SourceTotals(string key, DateOnly from, DateOnly to) =>
+        IncomeLedger.Totals(IncomeLedger.Between(_items, from, to).Where(i => i.SourceKey == key));
+
+    private LedgerSource SourceOf(string key) =>
+        AllSources.FirstOrDefault(s => s.Key == key) ?? new LedgerSource(key, "Fonte", "💼", "#94a3b8", false);
+
+    private string SourceHref(LedgerSource source) =>
+        source.IsTrades ? "trabalho/trades" : $"trabalho/fonte/{Sources.First(s => IncomeLedger.SourceKey(s.Id) == source.Key).Id}";
+
+    private static string Share(decimal value, decimal total) =>
+        total == 0 ? "0%" : (value / total).ToString("0%", WorkFormat.Culture);
+}

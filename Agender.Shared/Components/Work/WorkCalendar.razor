@@ -1,0 +1,115 @@
+@using Agender.Shared.Reports
+
+<section class="card wk-calendar" aria-label="Calendário do mês">
+    <div class="wk-cal-grid">
+        @foreach (string weekday in WorkFormat.Weekdays)
+        {
+            <div class="wk-cal-head">@weekday</div>
+        }
+        <div class="wk-cal-head">Semana</div>
+
+        @foreach (DateOnly weekStart in WeekStarts)
+        {
+            @for (int offset = 0; offset < 7; offset++)
+            {
+                DateOnly day = weekStart.AddDays(offset);
+                Days.TryGetValue(day, out LedgerTotals? totals);
+                string? note = DayNote?.Invoke(day);
+                bool inMonth = day.Month == Month.Month;
+
+                <button type="button" class="wk-cal-day @(inMonth ? string.Empty : "outside") @(day == Today ? "today" : string.Empty) @(day == Selected ? "selected" : string.Empty) @(totals is null ? string.Empty : WorkFormat.Tone(totals.Net))"
+                        style="--heat:@Heat(totals)" aria-pressed="@(day == Selected ? "true" : "false")"
+                        aria-label="@Label(day, totals, note)" @onclick="() => OnSelect.InvokeAsync(day)">
+                    <span class="wk-cal-num">@day.Day</span>
+                    @if (totals is not null)
+                    {
+                        <span class="wk-cal-value">@WorkFormat.Money(totals.Net)</span>
+                        <span class="wk-cal-count">@WorkFormat.Count(totals.Count, Singular, Plural)</span>
+                    }
+                    @if (note is not null)
+                    {
+                        <span class="wk-cal-note">@note</span>
+                    }
+                </button>
+            }
+
+            LedgerTotals week = IncomeLedger.Totals(Items.Where(i => i.Date >= weekStart && i.Date <= weekStart.AddDays(6)));
+            <div class="wk-cal-week @(week.Count == 0 ? string.Empty : WorkFormat.Tone(week.Net))">
+                @if (week.Count > 0)
+                {
+                    <strong>@WorkFormat.Money(week.Net)</strong>
+                    <span>@WorkFormat.Count(week.Count, Singular, Plural)</span>
+                }
+                else
+                {
+                    <span>—</span>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public DateOnly Month { get; set; }
+
+    [Parameter]
+    public DateOnly Today { get; set; }
+
+    [Parameter]
+    public DateOnly? Selected { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<LedgerItem> Items { get; set; } = [];
+
+    [Parameter]
+    public Func<DateOnly, string?>? DayNote { get; set; }
+
+    [Parameter]
+    public string Singular { get; set; } = "registo";
+
+    [Parameter]
+    public string Plural { get; set; } = "registos";
+
+    [Parameter]
+    public EventCallback<DateOnly> OnSelect { get; set; }
+
+    private IReadOnlyDictionary<DateOnly, LedgerTotals> Days { get; set; } = new Dictionary<DateOnly, LedgerTotals>();
+
+    private decimal _maxAbs;
+
+    protected override void OnParametersSet()
+    {
+        Days = IncomeLedger.ByDay(Items);
+        _maxAbs = Days.Where(d => d.Key.Month == Month.Month && d.Key.Year == Month.Year).Select(d => Math.Abs(d.Value.Net)).DefaultIfEmpty(0).Max();
+    }
+
+    private IEnumerable<DateOnly> WeekStarts
+    {
+        get
+        {
+            DateOnly end = IncomeLedger.MonthEnd(Month);
+
+            for (DateOnly start = TraderStats.WeekStart(Month); start <= end; start = start.AddDays(7))
+            {
+                yield return start;
+            }
+        }
+    }
+
+    private string Heat(LedgerTotals? totals)
+    {
+        if (totals is null || _maxAbs == 0)
+        {
+            return "0";
+        }
+
+        decimal ratio = 0.25m + 0.75m * Math.Abs(totals.Net) / _maxAbs;
+        return Math.Round(ratio, 2).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private string Label(DateOnly day, LedgerTotals? totals, string? note) =>
+        $"{day.ToString("d 'de' MMMM", WorkFormat.Culture)}: "
+        + (totals is null ? "sem registos" : $"{WorkFormat.Count(totals.Count, Singular, Plural)}, {WorkFormat.Money(totals.Net)}")
+        + (note is null ? string.Empty : $", {note}");
+}

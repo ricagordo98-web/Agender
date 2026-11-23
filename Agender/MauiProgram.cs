@@ -62,6 +62,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IGoogleCalendarService, ApiGoogleCalendarService>();
         builder.Services.AddScoped<ITraderTradeService, ApiTraderTradeService>();
         builder.Services.AddScoped<ITraderIntegrationService, ApiTraderIntegrationService>();
+        builder.Services.AddScoped<IIncomeService, ApiIncomeService>();
         builder.Services.AddScoped<ApiAgendaSharingService>();
         builder.Services.AddScoped<IAgendaSharingService>(services => services.GetRequiredService<ApiAgendaSharingService>());
         builder.Services.AddScoped<IShareLinkBuilder>(services => services.GetRequiredService<ApiAgendaSharingService>());

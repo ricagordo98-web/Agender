@@ -1,0 +1,496 @@
+@page "/trabalho/fonte/{Id:guid}"
+@attribute [Authorize]
+@using Agender.Shared.Reports
+@inherits WorkPageBase
+
+<PageTitle>@(_source?.Name ?? "Fonte") · Trabalho · Agender</PageTitle>
+
+<div class="page wk-page" style="--src:@(_source is null ? "var(--accent)" : EntryColorStyle.Hex(_source.Color))">
+    <PageHeader Title="Trabalho" Subtitle="Onde estás a ganhar (e a perder) dinheiro fora do salário.">
+        <button type="button" class="btn btn-ghost" @onclick="() => OpenExport(_source is null ? null : IncomeLedger.SourceKey(_source.Id))">
+            <Icon Name="IconName.Download" Size="16" /> PDF
+        </button>
+    </PageHeader>
+    <WorkTabs Sources="Sources" OnAddSource="OpenNewSource" />
+
+    @if (_loading && _source is null)
+    {
+        <div class="card wk-skeleton" aria-busy="true"></div>
+    }
+    else if (_source is null)
+    {
+        <EmptyState Symbol="IconName.Wallet" Title="Fonte não encontrada" Description="Esta fonte de rendimento já não existe." />
+    }
+    else
+    {
+        <section class="wk-hero card">
+            <span class="wk-source-badge">@(string.IsNullOrEmpty(_source.Emoji) ? "💼" : _source.Emoji)</span>
+            <div class="wk-hero-main">
+                <h2>@_source.Name</h2>
+                <p>@WorkFormat.Count(_monthTotals.Count, "registo", "registos") em @WorkFormat.Month(_month0).ToLower(WorkFormat.Culture)</p>
+            </div>
+            <div class="wk-month-nav">
+                <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => ShiftMonthAsync(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+                <strong>@WorkFormat.Month(_month0)</strong>
+                <button type="button" class="icon-btn" aria-label="Mês seguinte" @onclick="() => ShiftMonthAsync(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="GoToTodayAsync">Hoje</button>
+            </div>
+            <button type="button" class="icon-btn wk-hero-edit" aria-label="Editar fonte" title="Editar fonte" @onclick="() => OpenEditSource(_source)"><Icon Name="IconName.Pencil" Size="18" /></button>
+        </section>
+
+        <section class="wk-kpis" aria-label="Resumo">
+            <div class="card wk-kpi feature">
+                <small>Ganho do mês</small>
+                <strong class="@WorkFormat.Tone(_monthTotals.Net)">@WorkFormat.Money(_monthTotals.Net)</strong>
+                <span>@WorkFormat.Change(_monthTotals.Net, _previousMonth.Net)</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Esta semana</small>
+                <strong class="@WorkFormat.Tone(_thisWeek.Net)">@WorkFormat.Money(_thisWeek.Net)</strong>
+                <span>@WorkFormat.Count(_thisWeek.Count, "registo", "registos")</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Média por semana</small>
+                <strong>@WorkFormat.Money(_weeklyAverage)</strong>
+                <span>últimas 8 semanas</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Plataforma do mês</small>
+                <strong class="wk-kpi-text">@(_topPlatform?.Platform ?? "—")</strong>
+                <span>@(_topPlatform is { } top ? WorkFormat.Money(top.Totals.Net) : "ainda sem registos")</span>
+            </div>
+        </section>
+
+        <form class="wk-quick-add" @onsubmit="AddAsync" @onsubmit:preventDefault>
+            <span class="wk-quick-icon" aria-hidden="true"><Icon Name="IconName.Plus" Size="18" /></span>
+            <input class="field wk-qa-date" type="date" aria-label="Data" @bind="_newDate" />
+            <label class="wk-qa-amount">
+                <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor em euros"
+                       @ref="_amountInput" @bind="_newAmount" @bind:event="oninput" />
+                <span aria-hidden="true">€</span>
+            </label>
+            <input class="field wk-qa-platform" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_newPlatform" />
+            <datalist id="wk-platforms">
+                @foreach (string platform in _platforms)
+                {
+                    <option value="@platform"></option>
+                }
+            </datalist>
+            <input class="field wk-qa-note" maxlength="@IncomeEntry.NoteMaxLength" placeholder="Nota (opcional)" aria-label="Nota" @bind="_newNote" />
+            <button type="submit" class="btn btn-primary" disabled="@(_busy || _newAmount is null or 0)">Adicionar</button>
+        </form>
+        @if (_platforms.Count > 0)
+        {
+            <div class="cs-chips scroll wk-platform-chips" aria-label="Plataformas recentes">
+                @foreach (string platform in _platforms.Take(8))
+                {
+                    <button type="button" class="cs-chip @(string.Equals(_newPlatform, platform, StringComparison.CurrentCultureIgnoreCase) ? "on" : string.Empty)" @onclick="() => PickPlatformAsync(platform)">@platform</button>
+                }
+            </div>
+        }
+
+        <WorkCalendar Month="_month0" Today="Store.Today" Selected="_selected" Items="_items" OnSelect="Select" />
+
+        @if (_selected is { } selected)
+        {
+            List<IncomeEntryDto> dayEntries = DayEntries(selected);
+            LedgerTotals dayTotals = IncomeLedger.Totals(_items.Where(i => i.Date == selected));
+
+            <section class="card wk-day" aria-label="Detalhe do dia">
+                <header class="wk-day-head">
+                    <h2>@WorkFormat.Day(selected)</h2>
+                    @if (dayTotals.Count > 0)
+                    {
+                        <span class="wk-day-total @WorkFormat.Tone(dayTotals.Net)">@WorkFormat.Money(dayTotals.Net)</span>
+                    }
+                    <button type="button" class="btn btn-ghost btn-sm" @onclick="() => UseDateAsync(selected)"><Icon Name="IconName.Plus" Size="14" /> Registar neste dia</button>
+                </header>
+
+                @if (dayEntries.Count == 0)
+                {
+                    <p class="cs-hint">Sem registos neste dia.</p>
+                }
+                else
+                {
+                    <ul class="wk-entries">
+                        @foreach (IncomeEntryDto entry in dayEntries)
+                        {
+                            @if (_editing?.Id == entry.Id)
+                            {
+                                <li class="wk-entry editing">
+                                    <form class="wk-entry-form" @onsubmit="SaveEditAsync" @onsubmit:preventDefault>
+                                        <input class="field" type="date" aria-label="Data" @bind="_editDate" />
+                                        <input class="field" type="number" step="0.01" aria-label="Valor" @bind="_editAmount" />
+                                        <input class="field" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_editPlatform" />
+                                        <input class="field" maxlength="@IncomeEntry.NoteMaxLength" placeholder="Nota" aria-label="Nota" @bind="_editNote" />
+                                        <button type="submit" class="btn btn-primary btn-sm" disabled="@(_busy || _editAmount is null or 0)">Guardar</button>
+                                        <button type="button" class="btn btn-ghost btn-sm" @onclick="() => _editing = null">Cancelar</button>
+                                    </form>
+                                </li>
+                            }
+                            else
+                            {
+                                <li class="wk-entry">
+                                    <span class="wk-entry-platform">@(string.IsNullOrEmpty(entry.Platform) ? "Sem plataforma" : entry.Platform)</span>
+                                    <span class="wk-entry-note">@entry.Note</span>
+                                    <strong class="wk-entry-amount @WorkFormat.Tone(entry.Amount)">@WorkFormat.Money(entry.Amount)</strong>
+                                    <span class="wk-entry-actions">
+                                        <button type="button" class="icon-btn" aria-label="Editar registo" @onclick="() => StartEdit(entry)"><Icon Name="IconName.Pencil" Size="16" /></button>
+                                        <button type="button" class="icon-btn" aria-label="Eliminar registo" @onclick="() => DeleteAsync(entry)"><Icon Name="IconName.Trash" Size="16" /></button>
+                                    </span>
+                                </li>
+                            }
+                        }
+                    </ul>
+                }
+            </section>
+        }
+
+        <div class="wk-two">
+            <section class="card wk-panel" aria-label="Últimas 12 semanas">
+                <header class="cs-card-head"><h2>Últimas 12 semanas</h2></header>
+                <WorkBars Points="WeekPoints" Caption="Ganho por semana nas últimas 12 semanas" />
+                <table class="wk-table">
+                    <thead><tr><th>Semana</th><th class="num">Registos</th><th class="num">Total</th></tr></thead>
+                    <tbody>
+                        @foreach ((DateOnly start, LedgerTotals totals) in IncomeLedger.ByWeek(_items).Take(6))
+                        {
+                            <tr>
+                                <td>@WorkFormat.Week(start)</td>
+                                <td class="num muted">@totals.Count</td>
+                                <td class="num @WorkFormat.Tone(totals.Net)">@WorkFormat.Money(totals.Net)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="card wk-panel" aria-label="Por plataforma">
+                <header class="cs-card-head"><h2>Por plataforma</h2><span class="wk-head-note">últimos 12 meses</span></header>
+                @{
+                    IReadOnlyList<(string Platform, LedgerTotals Totals)> platforms = IncomeLedger.ByPlatform(_items);
+                    decimal platformMax = platforms.Select(p => Math.Abs(p.Totals.Net)).DefaultIfEmpty(0).Max();
+                }
+                @if (platforms.Count == 0)
+                {
+                    <p class="cs-hint">Ainda sem registos.</p>
+                }
+                else
+                {
+                    <ul class="wk-rank">
+                        @foreach ((string platform, LedgerTotals totals) in platforms)
+                        {
+                            <li>
+                                <span class="wk-rank-name">@platform</span>
+                                <span class="wk-rank-bar"><i style="width:@Percent(totals.Net, platformMax)"></i></span>
+                                <span class="wk-rank-count">@totals.Count</span>
+                                <strong class="@WorkFormat.Tone(totals.Net)">@WorkFormat.Money(totals.Net)</strong>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@if (EditorOpen)
+{
+    <IncomeSourceEditor Source="EditingSource" OnSaved="OnSourceSavedAsync" OnDeleted="OnSourceDeletedAsync" OnClose="CloseEditor" />
+}
+
+@if (ExportOpen)
+{
+    <IncomeExportDialog Sources="Sources" Preselected="ExportPreselected" Today="Store.Today" OnClose="CloseExport" />
+}
+
+@code {
+    private const int WeeksShown = 12;
+    private const int AverageWeeks = 8;
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private IncomeSourceDto? _source;
+    private List<IncomeEntryDto> _entries = [];
+    private IReadOnlyList<LedgerItem> _items = [];
+    private IReadOnlyList<string> _platforms = [];
+    private DateOnly _month0;
+    private DateOnly? _selected;
+    private bool _loading = true;
+    private bool _busy;
+    private Guid _loadedId;
+
+    private LedgerTotals _monthTotals = LedgerTotals.Empty;
+    private LedgerTotals _previousMonth = LedgerTotals.Empty;
+    private LedgerTotals _thisWeek = LedgerTotals.Empty;
+    private decimal _weeklyAverage;
+    private (string Platform, LedgerTotals Totals)? _topPlatform;
+
+    private DateOnly _newDate;
+    private decimal? _newAmount;
+    private string _newPlatform = string.Empty;
+    private string _newNote = string.Empty;
+    private ElementReference _amountInput;
+
+    private IncomeEntryDto? _editing;
+    private DateOnly _editDate;
+    private decimal? _editAmount;
+    private string _editPlatform = string.Empty;
+    private string _editNote = string.Empty;
+
+    private IReadOnlyList<WorkBars.Point> WeekPoints
+    {
+        get
+        {
+            DateOnly current = TraderStats.WeekStart(Store.Today);
+            Dictionary<DateOnly, LedgerTotals> weeks = IncomeLedger.ByWeek(_items).ToDictionary(w => w.Start, w => w.Totals);
+
+            return [.. Enumerable.Range(0, WeeksShown).Reverse().Select(back =>
+            {
+                DateOnly start = current.AddDays(-7 * back);
+                return new WorkBars.Point(WorkFormat.Week(start), start.ToString("d/M", WorkFormat.Culture), weeks.GetValueOrDefault(start, LedgerTotals.Empty).Net);
+            })];
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id && _source is not null)
+        {
+            return;
+        }
+
+        _loadedId = Id;
+        _month0 = IncomeLedger.MonthStart(Store.Today);
+        _selected = Store.Today;
+        _newDate = Store.Today;
+        _editing = null;
+        _loading = true;
+        await LoadSourcesAsync();
+        _source = Sources.FirstOrDefault(s => s.Id == Id);
+        await LoadEntriesAsync();
+        await LoadPlatformsAsync();
+        _newPlatform = _platforms.FirstOrDefault() ?? string.Empty;
+        _loading = false;
+    }
+
+    protected override Task OnSourcesChangedAsync(IncomeSourceDto changed)
+    {
+        if (changed.Id == Id)
+        {
+            _source = Sources.FirstOrDefault(s => s.Id == Id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadEntriesAsync()
+    {
+        if (_source is null)
+        {
+            return;
+        }
+
+        try
+        {
+            DateOnly from = new[] { _month0.AddMonths(-11), TraderStats.WeekStart(Store.Today).AddDays(-7 * WeeksShown) }.Min();
+            DateOnly to = new[] { IncomeLedger.MonthEnd(_month0).AddDays(6), Store.Today }.Max();
+            _entries = [.. await IncomeService.GetEntriesAsync(from, to, _source.Id)];
+            Recalculate();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível carregar os registos.", ToastKind.Error);
+        }
+    }
+
+    private async Task LoadPlatformsAsync()
+    {
+        if (_source is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _platforms = await IncomeService.GetPlatformsAsync(_source.Id);
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            _platforms = [];
+        }
+    }
+
+    private void Recalculate()
+    {
+        _items = IncomeLedger.Build(_entries, []);
+        DateOnly monthEnd = IncomeLedger.MonthEnd(_month0);
+        DateOnly weekStart = TraderStats.WeekStart(Store.Today);
+        List<LedgerItem> month = [.. IncomeLedger.Between(_items, _month0, monthEnd)];
+
+        _monthTotals = IncomeLedger.Totals(month);
+        _previousMonth = IncomeLedger.Totals(IncomeLedger.Between(_items, _month0.AddMonths(-1), _month0.AddDays(-1)));
+        _thisWeek = IncomeLedger.Totals(IncomeLedger.Between(_items, weekStart, weekStart.AddDays(6)));
+        _weeklyAverage = IncomeLedger.WeeklyAverage(_items, weekStart.AddDays(-7 * (AverageWeeks - 1)), weekStart.AddDays(6));
+        _topPlatform = IncomeLedger.ByPlatform(month).Where(p => p.Totals.Net > 0).Select(p => ((string, LedgerTotals)?)p).FirstOrDefault();
+    }
+
+    private async Task ShiftMonthAsync(int months)
+    {
+        _month0 = _month0.AddMonths(months);
+        _selected = null;
+        await LoadEntriesAsync();
+    }
+
+    private async Task GoToTodayAsync()
+    {
+        _month0 = IncomeLedger.MonthStart(Store.Today);
+        _selected = Store.Today;
+        await LoadEntriesAsync();
+    }
+
+    private void Select(DateOnly day)
+    {
+        _selected = _selected == day ? null : day;
+        _editing = null;
+    }
+
+    private List<IncomeEntryDto> DayEntries(DateOnly day) => [.. _entries.Where(e => e.Date == day)];
+
+    private async Task UseDateAsync(DateOnly day)
+    {
+        _newDate = day;
+        await FocusAmountAsync();
+    }
+
+    private async Task PickPlatformAsync(string platform)
+    {
+        _newPlatform = platform;
+        await FocusAmountAsync();
+    }
+
+    private async Task FocusAmountAsync()
+    {
+        try
+        {
+            await _amountInput.FocusAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JSException)
+        {
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (_source is null || _busy || _newAmount is not { } amount || amount == 0)
+        {
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            IncomeEntryDto created = await IncomeService.CreateEntryAsync(new IncomeEntryInput(_source.Id, _newDate, amount, _newPlatform, _newNote));
+            _entries.Add(created);
+            Recalculate();
+            _selected = created.Date;
+            _newAmount = null;
+            _newNote = string.Empty;
+            Toasts.Show($"{WorkFormat.Money(created.Amount)} registado{(string.IsNullOrEmpty(created.Platform) ? string.Empty : $" em {created.Platform}")}.", ToastKind.Success);
+            await LoadPlatformsAsync();
+        }
+        catch (ArgumentException)
+        {
+            Toasts.Show("Verifica o valor e os campos do registo.", ToastKind.Error);
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível guardar o registo.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await FocusAmountAsync();
+    }
+
+    private void StartEdit(IncomeEntryDto entry)
+    {
+        _editing = entry;
+        _editDate = entry.Date;
+        _editAmount = entry.Amount;
+        _editPlatform = entry.Platform;
+        _editNote = entry.Note;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (_editing is null || _busy || _editAmount is not { } amount || amount == 0)
+        {
+            return;
+        }
+
+        _busy = true;
+
+        try
+        {
+            IncomeEntryDto updated = await IncomeService.UpdateEntryAsync(_editing.Id, new IncomeEntryInput(_editing.SourceId, _editDate, amount, _editPlatform, _editNote));
+            _entries[_entries.FindIndex(e => e.Id == updated.Id)] = updated;
+            _editing = null;
+            Recalculate();
+            await LoadPlatformsAsync();
+        }
+        catch (ArgumentException)
+        {
+            Toasts.Show("Verifica o valor e os campos do registo.", ToastKind.Error);
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível guardar o registo.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync(IncomeEntryDto entry)
+    {
+        try
+        {
+            await IncomeService.DeleteEntryAsync(entry.Id);
+            _entries.RemoveAll(e => e.Id == entry.Id);
+            Recalculate();
+            Toasts.Show($"Registo de {WorkFormat.Money(entry.Amount)} eliminado.", ToastKind.Info, new ToastAction("Anular", () => RestoreAsync(entry)));
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível eliminar o registo.", ToastKind.Error);
+        }
+    }
+
+    private async Task RestoreAsync(IncomeEntryDto entry)
+    {
+        try
+        {
+            IncomeEntryDto restored = await IncomeService.CreateEntryAsync(new IncomeEntryInput(entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note));
+
+            if (_source?.Id == restored.SourceId)
+            {
+                _entries.Add(restored);
+                Recalculate();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível repor o registo.", ToastKind.Error);
+        }
+    }
+
+    private static string Percent(decimal value, decimal max) =>
+        max == 0 ? "0%" : $"{Math.Round(Math.Abs(value) / max * 100, 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}%";
+}

@@ -95,3 +95,24 @@ public class AgendaDtoValidator : AbstractValidator<AgendaDto>
         RuleFor(a => a.CustomColor).Must(ColorHex.IsValid).WithMessage("The color must be in the #RRGGBB format.");
     }
 }
+
+public class IncomeSourceInputValidator : AbstractValidator<IncomeSourceInput>
+{
+    public IncomeSourceInputValidator()
+    {
+        RuleFor(s => s.Name).NotEmpty().MaximumLength(IncomeSource.NameMaxLength);
+        RuleFor(s => s.Emoji).NotNull().MaximumLength(IncomeSource.EmojiMaxLength);
+        RuleFor(s => s.Color).IsInEnum();
+    }
+}
+
+public class IncomeEntryInputValidator : AbstractValidator<IncomeEntryInput>
+{
+    public IncomeEntryInputValidator()
+    {
+        RuleFor(e => e.SourceId).NotEmpty();
+        RuleFor(e => e.Amount).NotEqual(0).InclusiveBetween(-IncomeEntry.MaxAmount, IncomeEntry.MaxAmount);
+        RuleFor(e => e.Platform).NotNull().MaximumLength(IncomeEntry.PlatformMaxLength);
+        RuleFor(e => e.Note).NotNull().MaximumLength(IncomeEntry.NoteMaxLength);
+    }
+}

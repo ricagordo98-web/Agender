@@ -1,0 +1,33 @@
+@using Agender.Shared.Contracts
+
+<ScrollArrows Class="cs-tabs-wrap">
+<nav class="cs-tabs" aria-label="Secções do trabalho">
+    <NavLink class="cs-tab" href="trabalho" Match="NavLinkMatch.All">
+        <Icon Name="IconName.BarChart" Size="16" />
+        <span>Resumo</span>
+    </NavLink>
+    <NavLink class="cs-tab" href="trabalho/trades" Match="NavLinkMatch.Prefix">
+        <span aria-hidden="true">📈</span>
+        <span>Trades</span>
+    </NavLink>
+    @foreach (IncomeSourceDto source in Sources.Where(s => !s.IsArchived))
+    {
+        <NavLink class="cs-tab" href="@($"trabalho/fonte/{source.Id}")" Match="NavLinkMatch.Prefix">
+            <span aria-hidden="true">@(string.IsNullOrEmpty(source.Emoji) ? "💼" : source.Emoji)</span>
+            <span>@source.Name</span>
+        </NavLink>
+    }
+    <button type="button" class="cs-tab wk-tab-add" @onclick="OnAddSource">
+        <Icon Name="IconName.Plus" Size="16" />
+        <span>Nova fonte</span>
+    </button>
+</nav>
+</ScrollArrows>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<IncomeSourceDto> Sources { get; set; } = [];
+
+    [Parameter]
+    public EventCallback OnAddSource { get; set; }
+}

@@ -59,6 +59,32 @@ public static class TraderStats
             .Select(g => (g.Key, Summarize(g)))
             .ToList();
 
+    public static double? ProfitFactor(IEnumerable<TraderTradeDto> trades)
+    {
+        double wins = 0;
+        double losses = 0;
+
+        foreach (TraderTradeDto trade in Closed(trades))
+        {
+            if (trade.NetPnl > 0)
+            {
+                wins += trade.NetPnl.Value;
+            }
+            else
+            {
+                losses -= trade.NetPnl!.Value;
+            }
+        }
+
+        return losses == 0 ? null : wins / losses;
+    }
+
+    public static TraderTradeDto? Best(IEnumerable<TraderTradeDto> trades) =>
+        Closed(trades).Where(t => t.NetPnl > 0).MaxBy(t => t.NetPnl);
+
+    public static TraderTradeDto? Worst(IEnumerable<TraderTradeDto> trades) =>
+        Closed(trades).Where(t => t.NetPnl < 0).MinBy(t => t.NetPnl);
+
     private static IEnumerable<TraderTradeDto> Closed(IEnumerable<TraderTradeDto> trades) =>
         trades.Where(t => t.IsClosed && t.ExitDate is not null && t.NetPnl is not null);
 }

@@ -72,6 +72,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITraderTradeService, TraderTradeService>();
         services.AddScoped<ITraderIntegrationService, TraderIntegrationService>();
         services.AddScoped<ITraderIngestService, TraderIngestService>();
+        services.AddScoped<IIncomeService, IncomeService>();
 
         services.AddDataProtection();
         services.TryAddSingleton(TimeProvider.System);

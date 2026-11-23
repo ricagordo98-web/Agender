@@ -1,0 +1,316 @@
+@page "/trabalho/trades"
+@attribute [Authorize]
+@using Agender.Shared.Reports
+@inherits WorkPageBase
+@inject ITraderTradeService TradeService
+
+<PageTitle>Trades · Trabalho · Agender</PageTitle>
+
+<div class="page wk-page" style="--src:@IncomeLedger.TradesColor">
+    <PageHeader Title="Trabalho" Subtitle="Onde estás a ganhar (e a perder) dinheiro fora do salário.">
+        <button type="button" class="btn btn-ghost" @onclick="() => OpenExport(IncomeLedger.TradesKey)">
+            <Icon Name="IconName.Download" Size="16" /> PDF
+        </button>
+    </PageHeader>
+    <WorkTabs Sources="Sources" OnAddSource="OpenNewSource" />
+
+    <section class="wk-hero card">
+        <span class="wk-source-badge">📈</span>
+        <div class="wk-hero-main">
+            <h2>Trades</h2>
+            <p>Sincronizadas do Trader. Os ganhos e perdas contam no dia em que a trade fechou.</p>
+        </div>
+        <div class="wk-month-nav">
+            <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => ShiftMonthAsync(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+            <strong>@WorkFormat.Month(_month0)</strong>
+            <button type="button" class="icon-btn" aria-label="Mês seguinte" @onclick="() => ShiftMonthAsync(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+            <button type="button" class="btn btn-ghost btn-sm" @onclick="GoToTodayAsync">Hoje</button>
+        </div>
+    </section>
+
+    @if (_loading && _trades.Count == 0)
+    {
+        <div class="card wk-skeleton" aria-busy="true"></div>
+    }
+    else if (_trades.Count == 0)
+    {
+        <EmptyState Symbol="IconName.Wallet" Title="Ainda não há trades"
+                    Description="Liga o Trader em Definições → Trader. As trades aparecem aqui assim que forem criadas ou fechadas." />
+    }
+    else
+    {
+        <section class="wk-kpis" aria-label="Resumo do mês">
+            <div class="card wk-kpi feature">
+                <small>Resultado do mês</small>
+                <strong class="@WorkFormat.Tone(_month.NetPnl)">@WorkFormat.Money(_month.NetPnl)</strong>
+                <span>@WorkFormat.Change((decimal)_month.NetPnl, (decimal)_previousMonth.NetPnl)</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Esta semana</small>
+                <strong class="@WorkFormat.Tone(_thisWeek.NetPnl)">@WorkFormat.Money(_thisWeek.NetPnl)</strong>
+                <span>@WorkFormat.Count(_thisWeek.Closed, "trade fechada", "trades fechadas")</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Taxa de acerto</small>
+                <strong>@(_month.Closed == 0 ? "—" : _month.WinRate.ToString("0%", WorkFormat.Culture))</strong>
+                <span>@_month.Wins ganhos · @_month.Losses perdas</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Fator de lucro</small>
+                <strong>@(_profitFactor is { } factor ? factor.ToString("0.00", WorkFormat.Culture) : "—")</strong>
+                <span>ganhos ÷ perdas</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Melhor / pior trade</small>
+                <strong class="wk-kpi-split">
+                    <span class="win">@(_best?.NetPnl is { } best ? WorkFormat.Money(best) : "—")</span>
+                    <span class="loss">@(_worst?.NetPnl is { } worst ? WorkFormat.Money(worst) : "—")</span>
+                </strong>
+                <span>@(_best?.Symbol ?? "—") · @(_worst?.Symbol ?? "—")</span>
+            </div>
+            <div class="card wk-kpi">
+                <small>Investido</small>
+                <strong>@WorkFormat.Money(_month.Invested, signed: false)</strong>
+                <span>@WorkFormat.Count(_month.Closed, "trade fechada", "trades fechadas")</span>
+            </div>
+        </section>
+
+        <WorkCalendar Month="_month0" Today="Store.Today" Selected="_selected" Items="_items" DayNote="OpenNote" Singular="trade" Plural="trades" OnSelect="Select" />
+
+        @if (_selected is { } selected)
+        {
+            List<TraderTradeDto> dayTrades = DayTrades(selected);
+            LedgerTotals dayTotals = IncomeLedger.Totals(_items.Where(i => i.Date == selected));
+
+            <section class="card wk-day" aria-label="Detalhe do dia">
+                <header class="wk-day-head">
+                    <h2>@WorkFormat.Day(selected)</h2>
+                    @if (dayTotals.Count > 0)
+                    {
+                        <span class="wk-day-total @WorkFormat.Tone(dayTotals.Net)">@WorkFormat.Money(dayTotals.Net)</span>
+                    }
+                </header>
+
+                @if (dayTrades.Count == 0)
+                {
+                    <p class="cs-hint">Sem trades neste dia.</p>
+                }
+                else
+                {
+                    <ul class="wk-trades">
+                        @foreach (TraderTradeDto trade in dayTrades)
+                        {
+                            bool open = _expanded.Contains(trade.Id);
+                            string tone = trade.IsClosed ? WorkFormat.Tone(trade.NetPnl ?? 0) : "open";
+
+                            <li class="wk-trade @tone @(open ? "expanded" : string.Empty)">
+                                <button type="button" class="wk-trade-top" aria-expanded="@(open ? "true" : "false")" @onclick="() => ToggleTrade(trade.Id)">
+                                    <strong class="wk-trade-symbol">@trade.Symbol</strong>
+                                    <span class="wk-trade-name">@trade.Name</span>
+                                    <span class="wk-chip @(trade.IsBuy ? "buy" : "sell")">@(trade.IsBuy ? "Compra" : "Venda")</span>
+                                    @if (!trade.IsClosed)
+                                    {
+                                        <span class="wk-chip open-chip">Aberta</span>
+                                    }
+                                    <span class="wk-trade-time">@((trade.ExitTime ?? trade.EntryTime).ToLocalTime().ToString("HH:mm", WorkFormat.Culture))</span>
+                                    <span class="wk-trade-result @(trade.IsClosed ? WorkFormat.Tone(trade.NetPnl ?? 0) : string.Empty)">
+                                        @(trade.NetPnl is { } pnl ? WorkFormat.Money(pnl) : "em curso")
+                                    </span>
+                                    <span class="wk-trade-chevron" aria-hidden="true"><Icon Name="IconName.ChevronRight" Size="16" /></span>
+                                </button>
+                                @if (open)
+                                {
+                                    <dl class="wk-trade-facts">
+                                        <div><dt>Entrada</dt><dd>@Price(trade.EntryPrice) · @trade.EntryTime.ToLocalTime().ToString("dd/MM HH:mm", WorkFormat.Culture)</dd></div>
+                                        <div><dt>Saída</dt><dd>@(trade.ExitPrice is { } exit ? Price(exit) : "—")@(trade.ExitTime is { } exitTime ? " · " + exitTime.ToLocalTime().ToString("dd/MM HH:mm", WorkFormat.Culture) : string.Empty)</dd></div>
+                                        <div><dt>Quantidade</dt><dd>@Price(trade.Quantity)</dd></div>
+                                        <div><dt>Investido</dt><dd>@WorkFormat.Money(trade.Invested, signed: false)</dd></div>
+                                        <div><dt>Stop loss</dt><dd>@(trade.StopLoss is { } sl ? Price(sl) : "—")</dd></div>
+                                        <div><dt>Take profit</dt><dd>@(trade.TakeProfit is { } tp ? Price(tp) : "—")</dd></div>
+                                        <div><dt>Risco</dt><dd>@(trade.RiskAmount is { } risk ? WorkFormat.Money(risk, signed: false) : "—")</dd></div>
+                                        <div><dt>Resultado em R</dt><dd>@(trade.RMultiple is { } r ? r.ToString("+0.00;-0.00;0.00", WorkFormat.Culture) + " R" : "—")</dd></div>
+                                        <div><dt>Comissões</dt><dd>@WorkFormat.Money(trade.Fees, signed: false)</dd></div>
+                                        <div><dt>Plataforma</dt><dd>@(string.IsNullOrWhiteSpace(trade.Platform) ? "—" : trade.Platform)</dd></div>
+                                    </dl>
+                                    @if (!string.IsNullOrWhiteSpace(trade.Setup) || !string.IsNullOrWhiteSpace(trade.Emotion) || !string.IsNullOrWhiteSpace(trade.Tags))
+                                    {
+                                        <p class="wk-trade-meta">@string.Join(" · ", new[] { trade.Setup, trade.Emotion, trade.Tags }.Where(x => !string.IsNullOrWhiteSpace(x)))</p>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(trade.Notes))
+                                    {
+                                        <p class="wk-trade-notes">@trade.Notes</p>
+                                    }
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        }
+
+        <section class="card wk-panel" aria-label="Evolução do mês">
+            <header class="cs-card-head"><h2>Evolução de @WorkFormat.Month(_month0).ToLower(WorkFormat.Culture)</h2></header>
+            <WorkBars Points="MonthPoints" Width="1200" ShowCumulative="true" FadeOlder="false" Caption="Resultado por dia e acumulado no mês" />
+        </section>
+
+        <div class="wk-two">
+            <section class="card wk-panel" aria-label="Por semana">
+                <header class="cs-card-head"><h2>Por semana</h2></header>
+                <table class="wk-table">
+                    <thead><tr><th>Semana</th><th class="num">Trades</th><th class="num">Acerto</th><th class="num">Resultado</th></tr></thead>
+                    <tbody>
+                        @foreach ((DateOnly start, TraderPeriodStats stats) in _weeks.Take(12))
+                        {
+                            <tr>
+                                <td>@WorkFormat.Week(start)</td>
+                                <td class="num muted">@stats.Closed</td>
+                                <td class="num muted">@stats.WinRate.ToString("0%", WorkFormat.Culture)</td>
+                                <td class="num @WorkFormat.Tone(stats.NetPnl)">@WorkFormat.Money(stats.NetPnl)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="card wk-panel" aria-label="Por mês">
+                <header class="cs-card-head"><h2>Por mês</h2></header>
+                <table class="wk-table">
+                    <thead><tr><th>Mês</th><th class="num">Trades</th><th class="num">Acerto</th><th class="num">Investido</th><th class="num">Resultado</th></tr></thead>
+                    <tbody>
+                        @foreach ((DateOnly start, TraderPeriodStats stats) in _months.Take(12))
+                        {
+                            <tr>
+                                <td>@WorkFormat.Month(start)</td>
+                                <td class="num muted">@stats.Closed</td>
+                                <td class="num muted">@stats.WinRate.ToString("0%", WorkFormat.Culture)</td>
+                                <td class="num muted">@WorkFormat.Money(stats.Invested, signed: false)</td>
+                                <td class="num @WorkFormat.Tone(stats.NetPnl)">@WorkFormat.Money(stats.NetPnl)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    }
+</div>
+
+@if (EditorOpen)
+{
+    <IncomeSourceEditor Source="EditingSource" OnSaved="OnSourceSavedAsync" OnDeleted="OnSourceDeletedAsync" OnClose="CloseEditor" />
+}
+
+@if (ExportOpen)
+{
+    <IncomeExportDialog Sources="Sources" Preselected="ExportPreselected" Today="Store.Today" OnClose="CloseExport" />
+}
+
+@code {
+    private IReadOnlyList<TraderTradeDto> _trades = [];
+    private IReadOnlyList<LedgerItem> _items = [];
+    private IReadOnlyList<(DateOnly Start, TraderPeriodStats Stats)> _weeks = [];
+    private IReadOnlyList<(DateOnly Start, TraderPeriodStats Stats)> _months = [];
+    private TraderPeriodStats _month = TraderPeriodStats.Empty;
+    private TraderPeriodStats _previousMonth = TraderPeriodStats.Empty;
+    private TraderPeriodStats _thisWeek = TraderPeriodStats.Empty;
+    private double? _profitFactor;
+    private TraderTradeDto? _best;
+    private TraderTradeDto? _worst;
+    private readonly HashSet<Guid> _expanded = [];
+    private DateOnly _month0;
+    private DateOnly? _selected;
+    private bool _loading = true;
+
+    private IReadOnlyList<WorkBars.Point> MonthPoints
+    {
+        get
+        {
+            IReadOnlyDictionary<DateOnly, LedgerTotals> days = IncomeLedger.ByDay(_items);
+            int length = DateTime.DaysInMonth(_month0.Year, _month0.Month);
+            DateOnly last = _month0.Year == Store.Today.Year && _month0.Month == Store.Today.Month ? Store.Today : IncomeLedger.MonthEnd(_month0);
+
+            return [.. Enumerable.Range(0, length)
+                .Select(_month0.AddDays)
+                .Where(day => day <= last)
+                .Select(day => new WorkBars.Point(day.ToString("d MMM", WorkFormat.Culture), day.Day.ToString(WorkFormat.Culture), days.GetValueOrDefault(day, LedgerTotals.Empty).Net))];
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _month0 = IncomeLedger.MonthStart(Store.Today);
+        _selected = Store.Today;
+        await LoadSourcesAsync();
+        await LoadAsync();
+    }
+
+    private Task ShiftMonthAsync(int months)
+    {
+        _month0 = _month0.AddMonths(months);
+        _selected = null;
+        return LoadAsync();
+    }
+
+    private Task GoToTodayAsync()
+    {
+        _month0 = IncomeLedger.MonthStart(Store.Today);
+        _selected = Store.Today;
+        return LoadAsync();
+    }
+
+    private void Select(DateOnly day) => _selected = _selected == day ? null : day;
+
+    private void ToggleTrade(Guid id)
+    {
+        if (!_expanded.Remove(id))
+        {
+            _expanded.Add(id);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            DateOnly from = _month0.AddMonths(-11);
+            DateOnly to = IncomeLedger.MonthEnd(_month0).AddDays(6);
+            _trades = await TradeService.GetRangeAsync(from, to);
+            Recalculate();
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível carregar as trades.", ToastKind.Error);
+        }
+
+        _loading = false;
+    }
+
+    private void Recalculate()
+    {
+        DateOnly monthEnd = IncomeLedger.MonthEnd(_month0);
+        DateOnly weekStart = TraderStats.WeekStart(Store.Today);
+        List<TraderTradeDto> month = [.. _trades.Where(t => t.ExitDate is { } d && d >= _month0 && d <= monthEnd)];
+
+        _items = IncomeLedger.Build([], _trades);
+        _weeks = TraderStats.ByWeek(_trades);
+        _months = TraderStats.ByMonth(_trades);
+        _month = TraderStats.Summarize(month);
+        _previousMonth = TraderStats.Summarize(_trades.Where(t => t.ExitDate is { } d && d >= _month0.AddMonths(-1) && d < _month0));
+        _thisWeek = TraderStats.Summarize(_trades.Where(t => t.ExitDate is { } d && d >= weekStart && d <= weekStart.AddDays(6)));
+        _profitFactor = TraderStats.ProfitFactor(month);
+        _best = TraderStats.Best(month);
+        _worst = TraderStats.Worst(month);
+    }
+
+    private string? OpenNote(DateOnly day)
+    {
+        int open = _trades.Count(t => !t.IsClosed && t.EntryDate == day);
+        return open == 0 ? null : WorkFormat.Count(open, "aberta", "abertas");
+    }
+
+    private List<TraderTradeDto> DayTrades(DateOnly day) =>
+        [.. _trades.Where(t => t.IsClosed ? t.ExitDate == day : t.EntryDate == day).OrderBy(t => t.ExitTime ?? t.EntryTime)];
+
+    private static string Price(double value) => value.ToString("#,##0.#####", WorkFormat.Culture);
+}

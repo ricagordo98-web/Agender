@@ -127,6 +127,10 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<TraderKey> TraderKeys => Set<TraderKey>();
 
+    public DbSet<IncomeSource> IncomeSources => Set<IncomeSource>();
+
+    public DbSet<IncomeEntry> IncomeEntries => Set<IncomeEntry>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -259,6 +263,25 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.Property(k => k.KeyHash).IsRequired().HasMaxLength(TraderKey.HashLength);
             entity.HasIndex(k => k.KeyHash).IsUnique();
             entity.HasIndex(k => k.UserId).IsUnique();
+        });
+
+        modelBuilder.Entity<IncomeSource>(entity =>
+        {
+            ConfigureOwnership(entity);
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Name).HasMaxLength(IncomeSource.NameMaxLength);
+            entity.Property(s => s.Emoji).HasMaxLength(IncomeSource.EmojiMaxLength);
+            entity.Property(s => s.Color).HasConversion<string>().HasMaxLength(20);
+        });
+
+        modelBuilder.Entity<IncomeEntry>(entity =>
+        {
+            ConfigureOwnership(entity);
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Platform).HasMaxLength(IncomeEntry.PlatformMaxLength);
+            entity.Property(e => e.Note).HasMaxLength(IncomeEntry.NoteMaxLength);
+            entity.HasOne<IncomeSource>().WithMany().HasForeignKey(e => e.SourceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(UserIdProperty, nameof(IncomeEntry.SourceId), nameof(IncomeEntry.Date));
         });
 
         modelBuilder.Entity<DayNote>(entity =>

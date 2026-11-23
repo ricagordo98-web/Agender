@@ -34,17 +34,16 @@ public sealed class TraderIngestServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SyncAsync_NewTrades_StoresThemAndCreatesTheTraderAgendaWithEntries()
+    public async Task SyncAsync_NewTrades_StoresThemWithoutTouchingTheAgenda()
     {
         TraderSyncResult result = await _sut.SyncAsync(new TraderSyncRequest([Closed(1, "2026-11-02T09:00:00Z", "2026-11-02T10:30:00Z", 25), Open(2, "2026-11-02T11:00:00Z")]));
 
         result.Should().Be(new TraderSyncResult(2, 0, 0));
         (List<TraderTrade> trades, List<TimeEntry> entries, List<Agenda> agendas, List<Project> projects) = await ReadAsync();
         trades.Should().HaveCount(2);
-        agendas.Should().ContainSingle(a => a.Name == TraderIngestService.AgendaName);
-        projects.Select(p => p.Name).Should().BeEquivalentTo(TraderIngestService.WinProject, TraderIngestService.LossProject, TraderIngestService.OpenProject);
-        entries.Should().HaveCount(2);
-        entries.Should().OnlyContain(e => e.AgendaId == agendas.Single().Id);
+        entries.Should().BeEmpty();
+        agendas.Should().BeEmpty();
+        projects.Should().BeEmpty();
     }
 
     [Fact]
@@ -55,22 +54,20 @@ public sealed class TraderIngestServiceTests : IDisposable
         TraderSyncResult result = await _sut.SyncAsync(new TraderSyncRequest([Closed(1, "2026-11-02T09:00:00Z", "2026-11-02T10:30:00Z", -30)]));
 
         result.Should().Be(new TraderSyncResult(0, 1, 0));
-        (List<TraderTrade> trades, List<TimeEntry> entries, _, List<Project> projects) = await ReadAsync();
-        trades.Should().ContainSingle().Which.IsClosed.Should().BeTrue();
-        entries.Should().ContainSingle().Which.ProjectId.Should().Be(projects.Single(p => p.Name == TraderIngestService.LossProject).Id);
+        (List<TraderTrade> trades, _, _, _) = await ReadAsync();
+        trades.Should().ContainSingle().Which.NetPnl.Should().Be(-30);
     }
 
     [Fact]
-    public async Task SyncAsync_TradeMissingFromTheSnapshot_IsRemovedWithItsEntry()
+    public async Task SyncAsync_TradeMissingFromTheSnapshot_IsRemoved()
     {
         await _sut.SyncAsync(new TraderSyncRequest([Open(1, "2026-11-02T09:00:00Z"), Open(2, "2026-11-02T09:30:00Z")]));
 
         TraderSyncResult result = await _sut.SyncAsync(new TraderSyncRequest([Open(2, "2026-11-02T09:30:00Z")]));
 
         result.Removed.Should().Be(1);
-        (List<TraderTrade> trades, List<TimeEntry> entries, _, _) = await ReadAsync();
+        (List<TraderTrade> trades, _, _, _) = await ReadAsync();
         trades.Should().ContainSingle().Which.ExternalId.Should().Be(2);
-        entries.Should().ContainSingle();
     }
 
     [Fact]
@@ -92,21 +89,6 @@ public sealed class TraderIngestServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SyncAsync_ManualDeletionOfTheEntry_IsRecreatedOnNextSync()
-    {
-        await _sut.SyncAsync(new TraderSyncRequest([Open(1, "2026-11-02T09:00:00Z")]));
-        await using (AgenderDbContext context = _db.Create(TestDb.DefaultUserId))
-        {
-            await context.TimeEntries.ExecuteDeleteAsync();
-        }
-
-        await _sut.SyncAsync(new TraderSyncRequest([Open(1, "2026-11-02T09:00:00Z")]));
-
-        (_, List<TimeEntry> entries, _, _) = await ReadAsync();
-        entries.Should().ContainSingle();
-    }
-
-    [Fact]
     public async Task SyncAsync_OtherUsersData_IsNotTouched()
     {
         await _sut.SyncAsync(new TraderSyncRequest([Open(1, "2026-11-02T09:00:00Z")]));
@@ -116,47 +98,6 @@ public sealed class TraderIngestServiceTests : IDisposable
 
         (List<TraderTrade> trades, _, _, _) = await ReadAsync();
         trades.Should().ContainSingle();
-    }
-
-    [Fact]
-    public void Place_ClosedSameDayTrade_SpansEntryToExit()
-    {
-        TraderTrade trade = new() { IsClosed = true, EntryTime = DateTime.Parse("2026-11-02T09:00:00Z").ToUniversalTime(), ExitTime = DateTime.Parse("2026-11-02T10:30:00Z").ToUniversalTime() };
-
-        (DateOnly date, int start, int end) = TraderIngestService.Place(trade, Lisbon);
-
-        date.Should().Be(new DateOnly(2026, 11, 2));
-        (start, end).Should().Be((9 * 60, 10 * 60 + 30));
-    }
-
-    [Fact]
-    public void Place_ClosedMultiDayTrade_UsesAMarkerEndingAtTheExit()
-    {
-        TraderTrade trade = new() { IsClosed = true, EntryTime = DateTime.Parse("2026-11-01T09:00:00Z").ToUniversalTime(), ExitTime = DateTime.Parse("2026-11-02T10:30:00Z").ToUniversalTime() };
-
-        (DateOnly date, int start, int end) = TraderIngestService.Place(trade, Lisbon);
-
-        date.Should().Be(new DateOnly(2026, 11, 2));
-        (start, end).Should().Be((10 * 60, 10 * 60 + 30));
-    }
-
-    [Fact]
-    public void Place_OpenTradeLateInTheDay_StaysInsideTheDay()
-    {
-        TraderTrade trade = new() { EntryTime = DateTime.Parse("2026-11-02T23:50:00Z").ToUniversalTime() };
-
-        (_, int start, int end) = TraderIngestService.Place(trade, Lisbon);
-
-        end.Should().BeLessThanOrEqualTo(TimeSlot.MinutesPerDay);
-        (end - start).Should().Be(30);
-    }
-
-    [Fact]
-    public void Describe_ClosedTrade_ShowsDirectionAndSignedResult()
-    {
-        TraderTrade trade = new() { Symbol = "AAPL", IsBuy = true, IsClosed = true, NetPnl = -12.5, Currency = "EUR" };
-
-        TraderIngestService.Describe(trade).Should().Be("AAPL ▲ Compra · -12,50 EUR");
     }
 
     private sealed class LisbonTime : TimeProvider

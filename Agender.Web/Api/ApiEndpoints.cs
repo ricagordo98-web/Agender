@@ -56,6 +56,7 @@ public static class ApiEndpoints
         MapAgendas(api.MapGroup("/agendas"));
         api.MapGroup("/casa").MapCasa();
         MapTrader(api.MapGroup("/trader"));
+        MapIncome(api.MapGroup("/income"));
 
         app.MapGroup("/api/integrations/trader")
             .RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = TraderKeyAuthenticationHandler.Scheme })
@@ -293,6 +294,40 @@ public static class ApiEndpoints
         group.MapDelete("/integration/key", async (ITraderIntegrationService service, CancellationToken ct) =>
         {
             await service.RevokeKeyAsync(ct);
+            return Results.NoContent();
+        });
+    }
+
+    private static void MapIncome(RouteGroupBuilder group)
+    {
+        group.MapGet("/sources", async (IIncomeService service, CancellationToken ct) => await service.GetSourcesAsync(ct));
+
+        group.MapPost("/sources", async (IncomeSourceInput input, IIncomeService service, CancellationToken ct) =>
+            await service.CreateSourceAsync(input, ct)).AddEndpointFilter<ValidationFilter<IncomeSourceInput>>();
+
+        group.MapPut("/sources/{id:guid}", async (Guid id, IncomeSourceInput input, IIncomeService service, CancellationToken ct) =>
+            await service.UpdateSourceAsync(id, input, ct)).AddEndpointFilter<ValidationFilter<IncomeSourceInput>>();
+
+        group.MapDelete("/sources/{id:guid}", async (Guid id, IIncomeService service, CancellationToken ct) =>
+        {
+            await service.DeleteSourceAsync(id, ct);
+            return Results.NoContent();
+        });
+
+        group.MapGet("/sources/{id:guid}/platforms", async (Guid id, IIncomeService service, CancellationToken ct) => await service.GetPlatformsAsync(id, ct));
+
+        group.MapGet("/entries", async (DateOnly from, DateOnly to, Guid? sourceId, IIncomeService service, CancellationToken ct) =>
+            await service.GetEntriesAsync(from, to, sourceId, ct));
+
+        group.MapPost("/entries", async (IncomeEntryInput input, IIncomeService service, CancellationToken ct) =>
+            await service.CreateEntryAsync(input, ct)).AddEndpointFilter<ValidationFilter<IncomeEntryInput>>();
+
+        group.MapPut("/entries/{id:guid}", async (Guid id, IncomeEntryInput input, IIncomeService service, CancellationToken ct) =>
+            await service.UpdateEntryAsync(id, input, ct)).AddEndpointFilter<ValidationFilter<IncomeEntryInput>>();
+
+        group.MapDelete("/entries/{id:guid}", async (Guid id, IIncomeService service, CancellationToken ct) =>
+        {
+            await service.DeleteEntryAsync(id, ct);
             return Results.NoContent();
         });
     }

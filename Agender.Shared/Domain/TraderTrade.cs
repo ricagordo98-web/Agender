@@ -58,7 +58,5 @@ public class TraderTrade
 
     public string Emotion { get; set; } = string.Empty;
 
-    public Guid? TimeEntryId { get; set; }
-
     public DateTime UpdatedAt { get; set; }
 }
