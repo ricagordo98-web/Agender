@@ -66,38 +66,6 @@
             </div>
         </section>
 
-        <form class="wk-quick-add" @onsubmit="AddAsync" @onsubmit:preventDefault>
-            <span class="wk-quick-icon" aria-hidden="true"><Icon Name="IconName.Plus" Size="18" /></span>
-            <input class="field wk-qa-date" type="date" aria-label="Data" @bind="_newDate" />
-            <label class="wk-qa-amount">
-                <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor em euros"
-                       @ref="_amountInput" @bind="_newAmount" @bind:event="oninput" />
-                <span aria-hidden="true">€</span>
-            </label>
-            <input class="field wk-qa-platform" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_newPlatform" />
-            <datalist id="wk-platforms">
-                @foreach (string platform in _platforms)
-                {
-                    <option value="@platform"></option>
-                }
-            </datalist>
-            <input class="field wk-qa-note" maxlength="@IncomeEntry.NoteMaxLength" placeholder="Nota (opcional)" aria-label="Nota" @bind="_newNote" />
-            <span class="wk-qa-status" role="radiogroup" aria-label="Estado">
-                <button type="button" role="radio" aria-checked="@(_newStatus == IncomeEntryStatus.Earned ? "true" : "false")" class="@(_newStatus == IncomeEntryStatus.Earned ? "on" : string.Empty)" @onclick="() => _newStatus = IncomeEntryStatus.Earned">Ganho</button>
-                <button type="button" role="radio" aria-checked="@(_newStatus == IncomeEntryStatus.Pending ? "true" : "false")" class="pending @(_newStatus == IncomeEntryStatus.Pending ? "on" : string.Empty)" @onclick="() => _newStatus = IncomeEntryStatus.Pending" title="Ainda à espera de aprovação: não conta nos totais">Pendente</button>
-            </span>
-            <button type="submit" class="btn btn-primary" disabled="@(_busy || _newAmount is null or 0)">@(_newStatus == IncomeEntryStatus.Pending ? "Adicionar pendente" : "Adicionar")</button>
-        </form>
-        @if (_platforms.Count > 0)
-        {
-            <div class="cs-chips scroll wk-platform-chips" aria-label="Plataformas recentes">
-                @foreach (string platform in _platforms.Take(8))
-                {
-                    <button type="button" class="cs-chip @(string.Equals(_newPlatform, platform, StringComparison.CurrentCultureIgnoreCase) ? "on" : string.Empty)" @onclick="() => PickPlatformAsync(platform)">@platform</button>
-                }
-            </div>
-        }
-
         <WorkCalendar Month="_month0" Today="Store.Today" Selected="_selected" Items="_items" DayNote="PendingDayNote" WeekNote="PendingWeekNote" OnSelect="Select" />
 
         @if (_selected is { } selected)
@@ -116,8 +84,39 @@
                     {
                         <span class="wk-pending-pill">@WorkFormat.Money(dayPending.Amount, signed: false) pendente</span>
                     }
-                    <button type="button" class="btn btn-ghost btn-sm" @onclick="() => UseDateAsync(selected)"><Icon Name="IconName.Plus" Size="14" /> Registar neste dia</button>
                 </header>
+
+                <form class="wk-quick-add" @onsubmit="AddAsync" @onsubmit:preventDefault>
+                    <span class="wk-quick-icon" aria-hidden="true"><Icon Name="IconName.Plus" Size="18" /></span>
+                    <span class="wk-qa-day" title="O registo fica neste dia. Para outro dia, escolhe-o no calendário.">@selected.ToString("ddd, d MMM", WorkFormat.Culture)</span>
+                    <label class="wk-qa-amount">
+                        <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor em euros"
+                               @ref="_amountInput" @bind="_newAmount" @bind:event="oninput" />
+                        <span aria-hidden="true">€</span>
+                    </label>
+                    <input class="field wk-qa-platform" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_newPlatform" />
+                    <datalist id="wk-platforms">
+                        @foreach (string platform in _platforms)
+                        {
+                            <option value="@platform"></option>
+                        }
+                    </datalist>
+                    <input class="field wk-qa-note" maxlength="@IncomeEntry.NoteMaxLength" placeholder="Nota (opcional)" aria-label="Nota" @bind="_newNote" />
+                    <span class="wk-qa-status" role="radiogroup" aria-label="Estado">
+                        <button type="button" role="radio" aria-checked="@(_newStatus == IncomeEntryStatus.Earned ? "true" : "false")" class="@(_newStatus == IncomeEntryStatus.Earned ? "on" : string.Empty)" @onclick="() => _newStatus = IncomeEntryStatus.Earned">Ganho</button>
+                        <button type="button" role="radio" aria-checked="@(_newStatus == IncomeEntryStatus.Pending ? "true" : "false")" class="pending @(_newStatus == IncomeEntryStatus.Pending ? "on" : string.Empty)" @onclick="() => _newStatus = IncomeEntryStatus.Pending" title="Ainda à espera de aprovação: não conta nos totais">Pendente</button>
+                    </span>
+                    <button type="submit" class="btn btn-primary" disabled="@(_busy || _newAmount is null or 0)">@(_newStatus == IncomeEntryStatus.Pending ? "Adicionar pendente" : "Adicionar")</button>
+                </form>
+                @if (_platforms.Count > 0)
+                {
+                    <div class="cs-chips scroll wk-platform-chips" aria-label="Plataformas recentes">
+                        @foreach (string platform in _platforms.Take(8))
+                        {
+                            <button type="button" class="cs-chip @(string.Equals(_newPlatform, platform, StringComparison.CurrentCultureIgnoreCase) ? "on" : string.Empty)" @onclick="() => PickPlatformAsync(platform)">@platform</button>
+                        }
+                    </div>
+                }
 
                 @if (dayEntries.Count == 0)
                 {
@@ -263,7 +262,6 @@
     private IncomeEntryStatus _editStatus = IncomeEntryStatus.Earned;
     private (string Platform, LedgerTotals Totals)? _topPlatform;
 
-    private DateOnly _newDate;
     private decimal? _newAmount;
     private string _newPlatform = string.Empty;
     private string _newNote = string.Empty;
@@ -300,7 +298,6 @@
         _loadedId = Id;
         _month0 = IncomeLedger.MonthStart(Store.Today);
         _selected = Store.Today;
-        _newDate = Store.Today;
         _editing = null;
         _loading = true;
         await LoadSourcesAsync();
@@ -376,7 +373,7 @@
     private async Task ShiftMonthAsync(int months)
     {
         _month0 = _month0.AddMonths(months);
-        _selected = null;
+        _selected = _month0.Year == Store.Today.Year && _month0.Month == Store.Today.Month ? Store.Today : _month0;
         await LoadEntriesAsync();
     }
 
@@ -387,19 +384,14 @@
         await LoadEntriesAsync();
     }
 
-    private void Select(DateOnly day)
+    private async Task Select(DateOnly day)
     {
-        _selected = _selected == day ? null : day;
+        _selected = day;
         _editing = null;
+        await FocusAmountAsync();
     }
 
     private List<IncomeEntryDto> DayEntries(DateOnly day) => [.. _entries.Where(e => e.Date == day)];
-
-    private async Task UseDateAsync(DateOnly day)
-    {
-        _newDate = day;
-        await FocusAmountAsync();
-    }
 
     private async Task PickPlatformAsync(string platform)
     {
@@ -420,7 +412,7 @@
 
     private async Task AddAsync()
     {
-        if (_source is null || _busy || _newAmount is not { } amount || amount == 0)
+        if (_source is null || _busy || _selected is not { } day || _newAmount is not { } amount || amount == 0)
         {
             return;
         }
@@ -429,10 +421,9 @@
 
         try
         {
-            IncomeEntryDto created = await IncomeService.CreateEntryAsync(new IncomeEntryInput(_source.Id, _newDate, amount, _newPlatform, _newNote, _newStatus));
+            IncomeEntryDto created = await IncomeService.CreateEntryAsync(new IncomeEntryInput(_source.Id, day, amount, _newPlatform, _newNote, _newStatus));
             _entries.Add(created);
             Recalculate();
-            _selected = created.Date;
             _newAmount = null;
             _newNote = string.Empty;
             string where = string.IsNullOrEmpty(created.Platform) ? string.Empty : $" em {created.Platform}";

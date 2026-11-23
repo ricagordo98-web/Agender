@@ -69,7 +69,7 @@
 
         @if (_list.CanEdit)
         {
-            <form class="cs-quick-add" @onsubmit="QuickAddAsync" @onsubmit:preventDefault>
+            <form class="cs-quick-add" @onsubmit="QuickAdd" @onsubmit:preventDefault>
                 <Icon Name="IconName.Plus" Size="18" />
                 <input class="bare" aria-label="Adicionar artigo" placeholder="Adicionar artigo…  ex.: 2 leite, 1 kg maçãs" maxlength="@ShoppingItem.NameMaxLength"
                        value="@_newText" @oninput="e => _newText = e.Value?.ToString() ?? string.Empty" />
@@ -142,7 +142,7 @@
 
 @if (_editItem is not null)
 {
-    <Modal Title="Editar artigo" OnClose="() => _editItem = null" OnSubmit="SaveItemAsync">
+    <Modal Title="@(_isNewItem ? "Novo artigo" : "Editar artigo")" OnClose="CloseItem" OnSubmit="SaveItemAsync">
         <ChildContent>
             <label class="cs-field">Artigo
                 <input class="field" maxlength="@ShoppingItem.NameMaxLength" @bind="_editItem.Name" @bind:event="oninput" />
@@ -178,7 +178,7 @@
             </div>
             <div class="cs-two">
                 <label class="cs-field">@CasaCatalog.PriceLabel(_editItem.Unit)
-                    <input class="field" type="number" step="0.01" min="0" placeholder="Opcional" @bind="_editItem.Price" />
+                    <input class="field" type="number" step="0.01" min="0" placeholder="Opcional" @bind="_editItem.Price" autofocus="@_isNewItem" />
                 </label>
                 <label class="cs-field">Nota
                     <input class="field" maxlength="@ShoppingItem.NoteMaxLength" placeholder="Marca, tamanho…" @bind="_editItem.Note" />
@@ -190,10 +190,13 @@
             }
         </ChildContent>
         <Footer>
-            <button type="button" class="btn btn-danger" @onclick="DeleteItemAsync"><Icon Name="IconName.Trash" Size="16" /> Remover</button>
+            @if (!_isNewItem)
+            {
+                <button type="button" class="btn btn-danger" @onclick="DeleteItemAsync"><Icon Name="IconName.Trash" Size="16" /> Remover</button>
+            }
             <span class="spacer"></span>
-            <button type="button" class="btn btn-ghost" @onclick="() => _editItem = null">Cancelar</button>
-            <button type="button" class="btn btn-primary" @onclick="SaveItemAsync">Guardar</button>
+            <button type="button" class="btn btn-ghost" @onclick="CloseItem">Cancelar</button>
+            <button type="button" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_editItem.Name)" @onclick="SaveItemAsync">@(_isNewItem ? "Adicionar à lista" : "Guardar")</button>
         </Footer>
     </Modal>
 }
@@ -282,6 +285,7 @@
     private bool _confirmDelete;
     private bool _shareCanEdit = true;
     private bool _sending;
+    private bool _isNewItem;
 
     [Parameter]
     public Guid Id { get; set; }
@@ -322,20 +326,17 @@
             </button>
             <button type="button" class="cs-item-main" disabled="@(!_list!.CanEdit)" @onclick="() => OpenItem(item)">
                 <span class="cs-row-title">@item.Name</span>
-                @if (!string.IsNullOrEmpty(item.Note) || item.Price.HasValue)
+                @if (!string.IsNullOrEmpty(item.Note))
                 {
                     <span class="cs-row-meta">
-                        @if (!string.IsNullOrEmpty(item.Note))
-                        {
-                            <span>@item.Note</span>
-                        }
-                        @if (item.Price is decimal price)
-                        {
-                            <span>@CasaCatalog.Money(CasaCatalog.LineCost(price, item.Quantity, item.Unit))</span>
-                        }
+                        <span class="cs-row-note">@item.Note</span>
                     </span>
                 }
             </button>
+            @if (item.Price is decimal price)
+            {
+                <span class="cs-price">@CasaCatalog.Money(CasaCatalog.LineCost(price, item.Quantity, item.Unit))</span>
+            }
             @if (item.Quantity != 1 || !string.IsNullOrEmpty(item.Unit))
             {
                 <span class="cs-qty">@CasaCatalog.Quantity(item.Quantity)@(string.IsNullOrEmpty(item.Unit) ? "×" : " " + item.Unit)</span>
@@ -343,7 +344,7 @@
         </div>
     };
 
-    private async Task QuickAddAsync()
+    private void QuickAdd()
     {
         if (string.IsNullOrWhiteSpace(_newText))
         {
@@ -351,13 +352,22 @@
         }
 
         QuickAddParser.Parsed parsed = QuickAddParser.Parse(_newText);
-        string text = _newText;
         _newText = string.Empty;
-
-        if (!await RunAsync(() => Shopping.AddItemAsync(Id, new ShoppingItem { Name = parsed.Name, Quantity = parsed.Quantity, Unit = parsed.Unit }, Cancellation)))
+        _isNewItem = true;
+        _editItem = new ShoppingItem
         {
-            _newText = text;
-        }
+            ListId = Id,
+            Name = parsed.Name,
+            Quantity = parsed.Quantity,
+            Unit = parsed.Unit,
+            Category = CasaCatalog.ShoppingCategory(CasaCatalog.GuessCategory(parsed.Name)).Name
+        };
+    }
+
+    private void CloseItem()
+    {
+        _editItem = null;
+        _isNewItem = false;
     }
 
     private async Task ToggleAsync(ShoppingItem item)
@@ -384,6 +394,7 @@
             return;
         }
 
+        _isNewItem = false;
         _editItem = new ShoppingItem
         {
             Id = item.Id,
@@ -407,8 +418,17 @@
         }
 
         ShoppingItem item = _editItem;
-        _editItem = null;
-        await RunAsync(() => Shopping.UpdateItemAsync(item, Cancellation));
+        bool isNew = _isNewItem;
+        CloseItem();
+
+        if (isNew)
+        {
+            await RunAsync(() => Shopping.AddItemAsync(Id, item, Cancellation));
+        }
+        else
+        {
+            await RunAsync(() => Shopping.UpdateItemAsync(item, Cancellation));
+        }
     }
 
     private async Task DeleteItemAsync()

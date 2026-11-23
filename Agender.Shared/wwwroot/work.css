@@ -68,6 +68,9 @@
 .wk-quick-add:focus-within { border-color: var(--src); box-shadow: 0 0 0 3px color-mix(in srgb, var(--src) 22%, transparent); }
 .wk-quick-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--src); background: color-mix(in srgb, var(--src) 14%, transparent); flex: 0 0 auto; }
 .wk-qa-date { flex: 0 0 150px; }
+.wk-day .wk-quick-add { margin-bottom: 4px; box-shadow: none; background: var(--surface-2); }
+.wk-qa-day { flex: 0 0 auto; padding: 6px 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--src) 16%, var(--surface)); color: var(--text); font-size: 13px; font-weight: 800; white-space: nowrap; text-transform: capitalize; }
+.wk-day .wk-platform-chips { margin: 8px 0 12px; }
 .wk-qa-amount { position: relative; flex: 0 0 130px; }
 .wk-qa-amount .field { width: 100%; padding-right: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .wk-qa-amount span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 700; }

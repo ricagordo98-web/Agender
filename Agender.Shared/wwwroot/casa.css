@@ -159,6 +159,9 @@ a.card, button.card { text-decoration: none; color: inherit; text-align: left; }
 .cs-row-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cs-row-title.strong { font-size: 16px; font-weight: 800; }
 .cs-row-meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--text-muted); font-size: 12.5px; }
+.cs-row-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.cs-price { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--accent-text); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.cs-item.done .cs-price { opacity: 0.55; }
 
 .cs-tile {
     display: inline-grid;
