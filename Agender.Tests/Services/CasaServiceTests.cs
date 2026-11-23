@@ -1092,11 +1092,11 @@ public sealed class CasaServiceTests : IDisposable
 
         string text = await service.GetShareTextAsync(MealWeekStart);
 
-        text.Should().Contain("*Lombo assado*")
-            .And.Contain("4 refeições · 8 pessoas · receita ×4")
+        text.Should().StartWith("*🛒 Lista de compras")
             .And.Contain("• 2 kg de lombo de porco")
             .And.Contain("• 8 dentes de alho")
-            .And.Contain("• Sal")
+            .And.NotContain("Lombo assado")
+            .And.NotContain("Sal")
             .And.NotContain("http");
     }
 
@@ -1108,9 +1108,45 @@ public sealed class CasaServiceTests : IDisposable
 
         string text = await service.GetShareTextAsync(MealWeekStart);
 
-        text.Should().Contain("1 refeição · 2 pessoas · receita ×0,5")
-            .And.Contain("• 200 g de bacalhau")
-            .And.Contain("• 3 ovos");
+        text.Should().Contain("• 200 g de bacalhau").And.Contain("• 3 ovos");
+    }
+
+    [Fact]
+    public async Task GetShareTextAsync_IngredientUsedByTwoRecipes_IsSummedIntoOneLine()
+    {
+        (MealService service, Recipe lombo, _) = await MealPlanAsync();
+        Recipe frango = await service.SaveRecipeAsync(new Recipe { Title = "Frango no forno", Servings = 2, Ingredients = "1 kg de frango\n4 dentes de alho" });
+        await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Lunch, RecipeId = lombo.Id, Servings = 2 });
+        await service.SaveEntryAsync(new MealPlanEntry { Date = MealWeekStart, Slot = MealSlot.Dinner, RecipeId = frango.Id, Servings = 2 });
+
+        string text = await service.GetShareTextAsync(MealWeekStart);
+
+        text.Should().Contain("• 6 dentes de alho").And.NotContain("Frango no forno");
+        text.Split('\n').Count(l => l.StartsWith("• ", StringComparison.Ordinal) && l.Contains("alho")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendShoppingListAsync_WhatsAppNotConfigured_ThrowsAReadableMessage()
+    {
+        (MealService service, _, _) = await MealPlanAsync();
+        ShoppingList list = await new ShoppingService(_ana).CreateListAsync(new ShoppingList { Name = "Semana" });
+        await new ShoppingService(_ana).AddItemAsync(list.Id, new ShoppingItem { Name = "Leite" });
+
+        Func<Task> act = () => service.SendShoppingListAsync(list.Id);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*WhatsApp*");
+    }
+
+    [Fact]
+    public async Task SendShoppingListAsync_ListOfAnotherHousehold_IsNotFound()
+    {
+        await MealPlanAsync();
+        ShoppingList list = await new ShoppingService(_ana).CreateListAsync(new ShoppingList { Name = "Semana" });
+        await Households(_eva).CreateAsync("Casa E");
+
+        Func<Task> act = () => Meals(_eva).SendShoppingListAsync(list.Id);
+
+        await act.Should().ThrowAsync<NotFoundException>();
     }
 
     [Fact]

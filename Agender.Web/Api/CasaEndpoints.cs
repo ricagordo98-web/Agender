@@ -125,6 +125,12 @@ public static class CasaEndpoints
             await service.SendWhatsAppAsync(start, ct);
             return Results.NoContent();
         });
+
+        group.MapPost("/shopping/{id:guid}/send", async (Guid id, IMealService service, CancellationToken ct) =>
+        {
+            await service.SendShoppingListAsync(id, ct);
+            return Results.NoContent();
+        });
     }
 
     private static void MapInventory(RouteGroupBuilder group)

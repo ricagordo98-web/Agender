@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inherits CasaPageBase
 @inject IShoppingService Shopping
+@inject IMealService Meals
 @inject IJSRuntime JS
 
 <PageTitle>@(_list?.Name ?? "Lista") · Agender</PageTitle>
@@ -40,6 +41,12 @@
                 @if (!_list.IsSharedWithMe)
                 {
                     <button type="button" class="btn btn-ghost" @onclick="() => _showShare = true"><Icon Name="IconName.Mail" Size="16" /> Partilhar</button>
+                }
+                @if (!_list.IsSharedWithMe)
+                {
+                    <button type="button" class="btn btn-ghost" disabled="@(_sending || _pending.Count == 0)" title="Enviar os artigos por comprar para o grupo do WhatsApp" @onclick="SendWhatsAppAsync">
+                        <Icon Name="IconName.Share" Size="16" /> @(_sending ? "A enviar…" : "Enviar para WhatsApp")
+                    </button>
                 }
                 <button type="button" class="btn btn-ghost" @onclick="CopyTextAsync" title="Copiar como texto"><Icon Name="IconName.Copy" Size="16" /> Copiar</button>
                 @if (!_list.IsSharedWithMe)
@@ -274,6 +281,7 @@
     private bool _showEditList;
     private bool _confirmDelete;
     private bool _shareCanEdit = true;
+    private bool _sending;
 
     [Parameter]
     public Guid Id { get; set; }
@@ -430,6 +438,29 @@
     }
 
     private Task RemoveShareAsync(ListShare share) => RunAsync(() => Shopping.UnshareAsync(Id, share.Id, Cancellation), "Acesso removido.");
+
+    private async Task SendWhatsAppAsync()
+    {
+        _sending = true;
+
+        try
+        {
+            await Meals.SendShoppingListAsync(Id, Cancellation);
+            Toasts.Show("Lista enviada para o WhatsApp. ✅", ToastKind.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Toasts.Show(ex.Message, ToastKind.Error);
+        }
+        catch (Exception ex) when (IsExpected(ex))
+        {
+            Toasts.Show("Não foi possível enviar a lista. Tenta novamente.", ToastKind.Error);
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
 
     private async Task CopyTextAsync()
     {

@@ -123,6 +123,8 @@ public interface IMealService
     Task<string> GetShareTextAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
 
     Task SendWhatsAppAsync(DateOnly weekStart, CancellationToken cancellationToken = default);
+
+    Task SendShoppingListAsync(Guid listId, CancellationToken cancellationToken = default);
 }
 
 public interface IMealSettingsService

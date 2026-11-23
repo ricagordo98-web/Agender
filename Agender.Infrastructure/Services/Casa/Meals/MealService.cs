@@ -586,6 +586,31 @@ public class MealService(
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task SendShoppingListAsync(Guid listId, CancellationToken cancellationToken = default)
+    {
+        await using AgenderDbContext context = await contextFactory.CreateAsync(cancellationToken);
+        Guid householdId = await HouseholdAccess.RequireHouseholdIdAsync(context, cancellationToken);
+
+        ShoppingList list = await context.ShoppingLists.AsNoTracking().FirstOrDefaultAsync(l => l.Id == listId && l.HouseholdId == householdId, cancellationToken)
+            ?? throw new NotFoundException($"List {listId} was not found.");
+
+        MealSettings? settings = await context.MealPreferences.AsNoTracking().FirstOrDefaultAsync(s => s.HouseholdId == householdId, cancellationToken);
+
+        if (!MealMessages.IsReady(settings))
+        {
+            throw new ArgumentException("Configura primeiro o WhatsApp em Definições → Refeições.");
+        }
+
+        List<ShoppingItem> items = await context.ShoppingItems.AsNoTracking().Where(i => i.ListId == listId && !i.IsChecked).ToListAsync(cancellationToken);
+
+        if (items.Count == 0)
+        {
+            throw new ArgumentException("A lista não tem artigos por comprar.");
+        }
+
+        await MealMessages.SendAsync(whatsApp, dataProtection, settings!, MealMessages.BuildShoppingList(list, items), cancellationToken);
+    }
+
     private async Task<CatalogRecipe> ReadyCatalogItemAsync(AgenderDbContext context, Guid householdId, Guid catalogId, CancellationToken cancellationToken)
     {
         CatalogRecipe item = await context.CatalogRecipes.FirstOrDefaultAsync(c => c.Id == catalogId && c.HouseholdId == householdId, cancellationToken)

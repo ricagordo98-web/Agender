@@ -57,6 +57,9 @@ public sealed class ApiMealService(IHttpClientFactory httpClientFactory, AuthSes
 
     public Task SendWhatsAppAsync(DateOnly weekStart, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Post, $"{Root}/send?start={Date(weekStart)}", null, cancellationToken, RemoteTimeout);
+
+    public Task SendShoppingListAsync(Guid listId, CancellationToken cancellationToken = default) =>
+        SendAsync(HttpMethod.Post, $"{Root}/shopping/{listId}/send", null, cancellationToken, RemoteTimeout);
 }
 
 public sealed class ApiMealSettingsService(IHttpClientFactory httpClientFactory, AuthSession session)

@@ -82,38 +82,46 @@ internal static class MealMessages
 
     public static async Task<string> BuildAsync(AgenderDbContext context, Guid householdId, DateOnly weekStart, CancellationToken cancellationToken)
     {
-        (List<MealPlanEntry> entries, Dictionary<Guid, Recipe> recipes) = await LoadWeekAsync(context, householdId, weekStart, cancellationToken);
-        List<MealCatalog.RecipeBatch> batches = [.. MealCatalog.Batches(entries, recipes).Where(b => b.Recipe.IngredientLines.Any())];
+        List<MealIngredientLine> lines = [.. (await PreviewAsync(context, householdId, weekStart, cancellationToken)).Where(l => l.Include)];
         StringBuilder text = new();
 
-        text.Append("*🛒 Ingredientes · ").Append(MealCatalog.WeekLabel(weekStart)).Append('*').Append('\n');
+        text.Append("*🛒 Lista de compras · ").Append(MealCatalog.WeekLabel(weekStart)).Append('*').Append('\n');
 
-        if (batches.Count == 0)
+        if (lines.Count == 0)
         {
-            text.Append('\n').Append("_Ainda não há receitas com ingredientes nesta semana._");
+            text.Append('\n').Append("_Não há ingredientes para comprar nesta semana._");
             return text.ToString();
         }
 
-        foreach (MealCatalog.RecipeBatch batch in batches)
-        {
-            text.Append('\n').Append('*').Append(batch.Recipe.Title).Append('*').Append('\n');
-            text.Append("🍽️ ").Append(batch.Meals).Append(batch.Meals == 1 ? " refeição" : " refeições")
-                .Append(" · ").Append(batch.People).Append(batch.People == 1 ? " pessoa" : " pessoas");
-
-            if (batch.Factor != 1)
-            {
-                text.Append(" · receita ×").Append(CasaCatalog.Quantity(Math.Round(batch.Factor, 2)));
-            }
-
-            text.Append('\n');
-
-            foreach (MealIngredientLine line in IngredientParser.Aggregate(batch.Recipe.IngredientLines.Select(l => (l, batch.Factor, batch.Recipe.Title)), []))
-            {
-                text.Append("• ").Append(Describe(line.Quantity, line.Unit, line.Name)).Append('\n');
-            }
-        }
+        AppendByCategory(text, lines.Select(l => (l.Category, l.Name, Describe(l.Quantity, l.Unit, l.Name))));
 
         return text.ToString().TrimEnd();
+    }
+
+    public static string BuildShoppingList(ShoppingList list, IEnumerable<ShoppingItem> items)
+    {
+        StringBuilder text = new();
+        text.Append('*').Append(list.Emoji).Append(' ').Append(list.Name).Append('*').Append('\n');
+        AppendByCategory(text, items.Select(i => (i.Category, i.Name, Describe(i.Quantity, i.Unit, i.Name))));
+
+        return text.ToString().TrimEnd();
+    }
+
+    private static void AppendByCategory(StringBuilder text, IEnumerable<(string Category, string Name, string Line)> lines)
+    {
+        List<string> order = [.. CasaCatalog.ShoppingCategories.Select(c => c.Name)];
+        StringComparer byName = StringComparer.Create(CasaCatalog.Culture, true);
+
+        foreach (IGrouping<string, (string Category, string Name, string Line)> group in lines.OrderBy(l => order.IndexOf(l.Category)).ThenBy(l => l.Name, byName).GroupBy(l => l.Category))
+        {
+            CasaCatalog.Category category = CasaCatalog.ShoppingCategory(group.Key);
+            text.Append('\n').Append(category.Emoji).Append(" *").Append(category.Name).Append('*').Append('\n');
+
+            foreach ((_, _, string line) in group)
+            {
+                text.Append("• ").Append(line).Append('\n');
+            }
+        }
     }
 
     public static async Task SendWeekAsync(WhatsAppSender sender, IDataProtectionProvider dataProtection, MealSettings settings, AgenderDbContext context, Guid householdId, DateOnly weekStart, CancellationToken cancellationToken) =>
@@ -127,7 +135,7 @@ internal static class MealMessages
 
     public static string Describe(decimal? quantity, string? unit, string name)
     {
-        if (quantity is not decimal amount || name.Length == 0)
+        if (quantity is not decimal amount || name.Length == 0 || (amount == 1 && string.IsNullOrEmpty(unit)))
         {
             return name;
         }
