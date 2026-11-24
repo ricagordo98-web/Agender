@@ -4,7 +4,7 @@ using Agender.Shared.Domain;
 
 namespace Agender.Shared.Reports;
 
-public sealed record LedgerSource(string Key, string Name, string Emoji, string Color, bool IsTrades);
+public sealed record LedgerSource(string Key, string Name, string Emoji, string Color, bool IsTrades, IncomeCurrency Currency = IncomeCurrency.Eur);
 
 public sealed record LedgerItem(DateOnly Date, string SourceKey, decimal Amount, string Platform, string Label, string Detail);
 
@@ -28,9 +28,12 @@ public static class IncomeLedger
     public static LedgerSource TradesSource { get; } = new(TradesKey, "Trades", "📈", TradesColor, true);
 
     public static LedgerSource ToSource(IncomeSourceDto source) =>
-        new(SourceKey(source.Id), source.Name, string.IsNullOrEmpty(source.Emoji) ? "💼" : source.Emoji, EntryColorStyle.Hex(source.Color), false);
+        new(SourceKey(source.Id), source.Name, string.IsNullOrEmpty(source.Emoji) ? "💼" : source.Emoji, EntryColorStyle.Hex(source.Color), false, source.Currency);
 
     public static string SourceKey(Guid sourceId) => sourceId.ToString("N");
+
+    public static IReadOnlyList<IncomeCurrency> Currencies(IEnumerable<LedgerSource> sources) =>
+        [.. sources.Select(s => s.Currency).Distinct().Order()];
 
     public static IReadOnlyList<LedgerItem> Build(IEnumerable<IncomeEntryDto> entries, IEnumerable<TraderTradeDto> trades)
     {

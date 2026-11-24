@@ -272,6 +272,7 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.Property(s => s.Name).HasMaxLength(IncomeSource.NameMaxLength);
             entity.Property(s => s.Emoji).HasMaxLength(IncomeSource.EmojiMaxLength);
             entity.Property(s => s.Color).HasConversion<string>().HasMaxLength(20);
+            entity.Property(s => s.Currency).HasConversion<string>().HasMaxLength(8).HasDefaultValue(IncomeCurrency.Eur).HasSentinel(IncomeCurrency.Eur);
         });
 
         modelBuilder.Entity<IncomeEntry>(entity =>

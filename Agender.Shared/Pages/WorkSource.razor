@@ -41,32 +41,32 @@
         <section class="wk-kpis" aria-label="Resumo">
             <div class="card wk-kpi feature">
                 <small>Ganho do mês</small>
-                <strong class="@WorkFormat.Tone(_monthTotals.Net)">@WorkFormat.Money(_monthTotals.Net)</strong>
+                <strong class="@WorkFormat.Tone(_monthTotals.Net)">@Money(_monthTotals.Net)</strong>
                 <span>@WorkFormat.Change(_monthTotals.Net, _previousMonth.Net)</span>
             </div>
             <div class="card wk-kpi">
                 <small>Esta semana</small>
-                <strong class="@WorkFormat.Tone(_thisWeek.Net)">@WorkFormat.Money(_thisWeek.Net)</strong>
+                <strong class="@WorkFormat.Tone(_thisWeek.Net)">@Money(_thisWeek.Net)</strong>
                 <span>@WorkFormat.Count(_thisWeek.Count, "registo", "registos")</span>
             </div>
             <div class="card wk-kpi">
                 <small>Média por semana</small>
-                <strong>@WorkFormat.Money(_weeklyAverage)</strong>
+                <strong>@Money(_weeklyAverage)</strong>
                 <span>últimas 8 semanas</span>
             </div>
             <div class="card wk-kpi">
                 <small>Plataforma do mês</small>
                 <strong class="wk-kpi-text">@(_topPlatform?.Platform ?? "—")</strong>
-                <span>@(_topPlatform is { } top ? WorkFormat.Money(top.Totals.Net) : "ainda sem registos")</span>
+                <span>@(_topPlatform is { } top ? Money(top.Totals.Net) : "ainda sem registos")</span>
             </div>
             <div class="card wk-kpi @(_pending.Count > 0 ? "pending" : string.Empty)">
                 <small>Pendente de aprovação</small>
-                <strong>@WorkFormat.Money(_pending.Amount, signed: false)</strong>
+                <strong>@Money(_pending.Amount, signed: false)</strong>
                 <span>@(_pending.Count == 0 ? "nada à espera" : $"{WorkFormat.Count(_pending.Count, "registo", "registos")} à espera")</span>
             </div>
         </section>
 
-        <WorkCalendar Month="_month0" Today="Store.Today" Selected="_selected" Items="_items" DayNote="PendingDayNote" WeekNote="PendingWeekNote" OnSelect="Select" />
+        <WorkCalendar Currency="Currency" Month="_month0" Today="Store.Today" Selected="_selected" Items="_items" DayNote="PendingDayNote" WeekNote="PendingWeekNote" OnSelect="Select" />
 
         @if (_selected is { } selected)
         {
@@ -78,11 +78,11 @@
                     <h2>@WorkFormat.Day(selected)</h2>
                     @if (dayTotals.Count > 0)
                     {
-                        <span class="wk-day-total @WorkFormat.Tone(dayTotals.Net)">@WorkFormat.Money(dayTotals.Net)</span>
+                        <span class="wk-day-total @WorkFormat.Tone(dayTotals.Net)">@Money(dayTotals.Net)</span>
                     }
                     @if (IncomeLedger.Pending(dayEntries) is { Count: > 0 } dayPending)
                     {
-                        <span class="wk-pending-pill">@WorkFormat.Money(dayPending.Amount, signed: false) pendente</span>
+                        <span class="wk-pending-pill">@Money(dayPending.Amount, signed: false) pendente</span>
                     }
                 </header>
 
@@ -92,7 +92,7 @@
                     <label class="wk-qa-amount">
                         <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor em euros"
                                @ref="_amountInput" @bind="_newAmount" @bind:event="oninput" />
-                        <span aria-hidden="true">€</span>
+                        <span aria-hidden="true">@WorkFormat.Symbol(Currency)</span>
                     </label>
                     <input class="field wk-qa-platform" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_newPlatform" />
                     <datalist id="wk-platforms">
@@ -160,7 +160,7 @@
                                         }
                                     </span>
                                     <span class="wk-entry-note">@entry.Note</span>
-                                    <strong class="wk-entry-amount @(entry.Status == IncomeEntryStatus.Earned ? WorkFormat.Tone(entry.Amount) : string.Empty)">@WorkFormat.Money(entry.Amount, signed: entry.Status == IncomeEntryStatus.Earned)</strong>
+                                    <strong class="wk-entry-amount @(entry.Status == IncomeEntryStatus.Earned ? WorkFormat.Tone(entry.Amount) : string.Empty)">@Money(entry.Amount, signed: entry.Status == IncomeEntryStatus.Earned)</strong>
                                     <span class="wk-entry-actions">
                                         @if (entry.Status == IncomeEntryStatus.Pending)
                                         {
@@ -181,7 +181,7 @@
         <div class="wk-two">
             <section class="card wk-panel" aria-label="Últimas 12 semanas">
                 <header class="cs-card-head"><h2>Últimas 12 semanas</h2></header>
-                <WorkBars Points="WeekPoints" Caption="Ganho por semana nas últimas 12 semanas" />
+                <WorkBars Currency="Currency" Points="WeekPoints" Caption="Ganho por semana nas últimas 12 semanas" />
                 <table class="wk-table">
                     <thead><tr><th>Semana</th><th class="num">Registos</th><th class="num">Total</th></tr></thead>
                     <tbody>
@@ -190,7 +190,7 @@
                             <tr>
                                 <td>@WorkFormat.Week(start)</td>
                                 <td class="num muted">@totals.Count</td>
-                                <td class="num @WorkFormat.Tone(totals.Net)">@WorkFormat.Money(totals.Net)</td>
+                                <td class="num @WorkFormat.Tone(totals.Net)">@Money(totals.Net)</td>
                             </tr>
                         }
                     </tbody>
@@ -216,7 +216,7 @@
                                 <span class="wk-rank-name">@platform</span>
                                 <span class="wk-rank-bar"><i style="width:@Percent(totals.Net, platformMax)"></i></span>
                                 <span class="wk-rank-count">@totals.Count</span>
-                                <strong class="@WorkFormat.Tone(totals.Net)">@WorkFormat.Money(totals.Net)</strong>
+                                <strong class="@WorkFormat.Tone(totals.Net)">@Money(totals.Net)</strong>
                             </li>
                         }
                     </ul>
@@ -428,8 +428,8 @@
             _newNote = string.Empty;
             string where = string.IsNullOrEmpty(created.Platform) ? string.Empty : $" em {created.Platform}";
             Toasts.Show(created.Status == IncomeEntryStatus.Pending
-                ? $"{WorkFormat.Money(created.Amount, signed: false)} pendente{where}. Aprova-o no detalhe do dia quando for aceite."
-                : $"{WorkFormat.Money(created.Amount)} registado{where}.", ToastKind.Success);
+                ? $"{Money(created.Amount, signed: false)} pendente{where}. Aprova-o no detalhe do dia quando for aceite."
+                : $"{Money(created.Amount)} registado{where}.", ToastKind.Success);
             await LoadPlatformsAsync();
         }
         catch (ArgumentException)
@@ -496,7 +496,7 @@
             await IncomeService.DeleteEntryAsync(entry.Id);
             _entries.RemoveAll(e => e.Id == entry.Id);
             Recalculate();
-            Toasts.Show($"Registo de {WorkFormat.Money(entry.Amount)} eliminado.", ToastKind.Info, new ToastAction("Anular", () => RestoreAsync(entry)));
+            Toasts.Show($"Registo de {Money(entry.Amount)} eliminado.", ToastKind.Info, new ToastAction("Anular", () => RestoreAsync(entry)));
         }
         catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
         {
@@ -538,8 +538,8 @@
             _entries[_entries.FindIndex(e => e.Id == updated.Id)] = updated;
             Recalculate();
             string message = status == IncomeEntryStatus.Earned
-                ? $"Aprovado: {WorkFormat.Money(updated.Amount)} contam como ganho a {updated.Date.ToString("d 'de' MMMM", WorkFormat.Culture)}."
-                : $"{WorkFormat.Money(updated.Amount, signed: false)} marcado como rejeitado.";
+                ? $"Aprovado: {Money(updated.Amount)} contam como ganho a {updated.Date.ToString("d 'de' MMMM", WorkFormat.Culture)}."
+                : $"{Money(updated.Amount, signed: false)} marcado como rejeitado.";
             Toasts.Show(message, ToastKind.Success, new ToastAction("Anular", () => RevertStatusAsync(entry)));
         }
         catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
@@ -572,12 +572,16 @@
         }
     }
 
+    private IncomeCurrency Currency => _source?.Currency ?? IncomeCurrency.Eur;
+
+    private string Money(decimal value, bool signed = true) => WorkFormat.Money(value, signed, Currency);
+
     private string? PendingDayNote(DateOnly day) => PendingNote(_entries.Where(e => e.Date == day));
 
     private string? PendingWeekNote(DateOnly weekStart) => PendingNote(_entries.Where(e => e.Date >= weekStart && e.Date <= weekStart.AddDays(6)));
 
-    private static string? PendingNote(IEnumerable<IncomeEntryDto> entries) =>
-        IncomeLedger.Pending(entries) is { Count: > 0 } pending ? $"{WorkFormat.Money(pending.Amount, signed: false)} pendente" : null;
+    private string? PendingNote(IEnumerable<IncomeEntryDto> entries) =>
+        IncomeLedger.Pending(entries) is { Count: > 0 } pending ? $"{Money(pending.Amount, signed: false)} pendente" : null;
 
     private static string StatusClass(IncomeEntryStatus status) => status switch
     {

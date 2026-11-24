@@ -23,15 +23,18 @@
         <section class="wk-overview card">
             <div class="wk-overview-main">
                 <small>Resultado líquido · @WorkFormat.Month(_month0).ToLower(WorkFormat.Culture)</small>
-                <strong class="@WorkFormat.Tone(_monthTotals.Net)">@WorkFormat.Money(_monthTotals.Net)</strong>
-                <span>@WorkFormat.Change(_monthTotals.Net, _previousTotals.Net)</span>
+                @foreach (CurrencySummary summary in _summaries)
+                {
+                    <strong class="@WorkFormat.Tone(summary.Month.Net)">@WorkFormat.Money(summary.Month.Net, currency: summary.Currency)</strong>
+                    <span>@WorkFormat.Change(summary.Month.Net, summary.Previous.Net)</span>
+                }
             </div>
             <div class="wk-overview-split">
-                <div><small>Ganhos</small><strong class="win">@WorkFormat.Money(_monthTotals.Gains, signed: false)</strong></div>
-                <div><small>Perdas</small><strong class="@(_monthTotals.Losses > 0 ? "loss" : "flat")">@WorkFormat.Money(_monthTotals.Losses, signed: false)</strong></div>
-                <div><small>Média por semana</small><strong>@WorkFormat.Money(_weeklyAverage)</strong></div>
-                <div><small>Este ano</small><strong class="@WorkFormat.Tone(_yearTotals.Net)">@WorkFormat.Money(_yearTotals.Net)</strong></div>
-                <div><small>Pendente de aprovação</small><strong class="@(_pendingTotals.Count > 0 ? "pending" : "flat")">@WorkFormat.Money(_pendingTotals.Amount, signed: false)</strong></div>
+                <div><small>Ganhos</small><strong>@foreach (CurrencySummary summary in _summaries) { <span class="win">@WorkFormat.Money(summary.Month.Gains, false, summary.Currency)</span> }</strong></div>
+                <div><small>Perdas</small><strong>@foreach (CurrencySummary summary in _summaries) { <span class="@(summary.Month.Losses > 0 ? "loss" : "flat")">@WorkFormat.Money(summary.Month.Losses, false, summary.Currency)</span> }</strong></div>
+                <div><small>Média por semana</small><strong>@foreach (CurrencySummary summary in _summaries) { <span>@WorkFormat.Money(summary.WeeklyAverage, currency: summary.Currency)</span> }</strong></div>
+                <div><small>Este ano</small><strong>@foreach (CurrencySummary summary in _summaries) { <span class="@WorkFormat.Tone(summary.Year.Net)">@WorkFormat.Money(summary.Year.Net, currency: summary.Currency)</span> }</strong></div>
+                <div><small>Pendente de aprovação</small><strong>@foreach (CurrencySummary summary in _summaries) { <span class="@(summary.Pending.Count > 0 ? "pending" : "flat")">@WorkFormat.Money(summary.Pending.Amount, false, summary.Currency)</span> }</strong></div>
             </div>
             <div class="wk-month-nav">
                 <button type="button" class="icon-btn" aria-label="Mês anterior" @onclick="() => ShiftMonth(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
@@ -53,7 +56,7 @@
                         <span class="wk-source-meta">@WorkFormat.Count(month.Count, source.IsTrades ? "trade" : "registo", source.IsTrades ? "trades" : "registos")</span>
                     </span>
                     <span class="wk-source-figures">
-                        <strong class="wk-source-value @WorkFormat.Tone(month.Net)">@WorkFormat.Money(month.Net)</strong>
+                        <strong class="wk-source-value @WorkFormat.Tone(month.Net)">@WorkFormat.Money(month.Net, currency: source.Currency)</strong>
                         <small>@WorkFormat.ChangeShort(month.Net, previous.Net)</small>
                     </span>
                 </a>
@@ -69,17 +72,18 @@
 
         <div class="wk-two wide-left">
             <section class="card wk-panel" aria-label="Evolução">
-                <header class="cs-card-head"><h2>Últimos 12 meses</h2><span class="wk-head-note">resultado por fonte</span></header>
-                <WorkTrend Months="TrendMonths" Sources="AllSources" Items="_items" />
+                <header class="cs-card-head"><h2>Últimos 12 meses</h2>@CurrencyToggle<span class="wk-head-note">resultado por fonte</span></header>
+                <WorkTrend Currency="_chartCurrency" Months="TrendMonths" Sources="ChartSources" Items="ChartItems" />
             </section>
 
             <section class="card wk-panel" aria-label="Peso de cada fonte">
-                <header class="cs-card-head"><h2>De onde vem o dinheiro</h2></header>
+                <header class="cs-card-head"><h2>De onde vem o dinheiro</h2>@CurrencyToggle</header>
                 @{
-                    List<(LedgerSource Source, LedgerTotals Totals)> shares = [.. AllSources
+                    List<(LedgerSource Source, LedgerTotals Totals)> shares = [.. ChartSources
                         .Select(s => (s, SourceTotals(s.Key, _month0, IncomeLedger.MonthEnd(_month0))))
                         .Where(x => x.Item2.Gains > 0)
                         .OrderByDescending(x => x.Item2.Gains)];
+                    decimal totalGains = shares.Sum(x => x.Item2.Gains);
                 }
                 @if (shares.Count == 0)
                 {
@@ -89,15 +93,15 @@
                 {
                     <div class="wk-donut">
                         <CasaDonut Items="@([.. shares.Select(x => new CasaDonut.Slice(x.Source.Name, x.Totals.Gains, x.Source.Color))])"
-                                   Caption="Ganhos" Center="@WorkFormat.Money(_monthTotals.Gains, signed: false)" Size="180" />
+                                   Caption="Ganhos" Center="@WorkFormat.Money(totalGains, false, _chartCurrency)" Size="180" />
                     </div>
                     <ul class="wk-rank">
                         @foreach ((LedgerSource source, LedgerTotals totals) in shares)
                         {
                             <li>
                                 <span class="wk-rank-name"><i class="wk-dot" style="background:@source.Color"></i>@source.Name</span>
-                                <span class="wk-rank-count">@Share(totals.Gains, _monthTotals.Gains)</span>
-                                <strong class="win">@WorkFormat.Money(totals.Gains, signed: false)</strong>
+                                <span class="wk-rank-count">@Share(totals.Gains, totalGains)</span>
+                                <strong class="win">@WorkFormat.Money(totals.Gains, false, _chartCurrency)</strong>
                             </li>
                         }
                     </ul>
@@ -129,7 +133,7 @@
                                 <strong>@(string.IsNullOrWhiteSpace(item.Label) ? source.Name : item.Label)</strong>
                                 <small>@source.Name · @item.Date.ToString("ddd, d MMM", WorkFormat.Culture)@(string.IsNullOrWhiteSpace(item.Detail) ? string.Empty : $" · {item.Detail}")</small>
                             </span>
-                            <strong class="@WorkFormat.Tone(item.Amount)">@WorkFormat.Money(item.Amount)</strong>
+                            <strong class="@WorkFormat.Tone(item.Amount)">@WorkFormat.Money(item.Amount, currency: source.Currency)</strong>
                         </li>
                     }
                 </ul>
@@ -155,14 +159,23 @@
     private IReadOnlyList<LedgerItem> _items = [];
     private DateOnly _month0;
     private bool _loading = true;
-    private LedgerTotals _monthTotals = LedgerTotals.Empty;
-    private LedgerTotals _previousTotals = LedgerTotals.Empty;
-    private LedgerTotals _yearTotals = LedgerTotals.Empty;
-    private decimal _weeklyAverage;
-    private PendingTotals _pendingTotals = PendingTotals.Empty;
+    private IReadOnlyList<IncomeEntryDto> _entries = [];
+    private IReadOnlyList<CurrencySummary> _summaries = [];
+    private IncomeCurrency _chartCurrency = IncomeCurrency.Eur;
 
     private IReadOnlyList<LedgerSource> AllSources =>
         [IncomeLedger.TradesSource, .. Sources.Where(s => !s.IsArchived || _items.Any(i => i.SourceKey == IncomeLedger.SourceKey(s.Id))).Select(IncomeLedger.ToSource)];
+
+    private IReadOnlyList<LedgerSource> ChartSources => [.. AllSources.Where(s => s.Currency == _chartCurrency)];
+
+    private IReadOnlyList<LedgerItem> ChartItems
+    {
+        get
+        {
+            HashSet<string> keys = [.. ChartSources.Select(s => s.Key)];
+            return [.. _items.Where(i => keys.Contains(i.SourceKey))];
+        }
+    }
 
     private IReadOnlyList<DateOnly> TrendMonths => IncomeLedger.Months(_month0.AddMonths(-11), _month0);
 
@@ -193,7 +206,7 @@
             }
 
             IReadOnlyList<IncomeEntryDto> loaded = await entries;
-            _pendingTotals = IncomeLedger.Pending(loaded);
+            _entries = loaded;
             _items = IncomeLedger.Build(loaded, trades.Where(t => t.IsClosed).DistinctBy(t => t.Id));
             Recalculate();
         }
@@ -216,11 +229,42 @@
         DateOnly monthEnd = IncomeLedger.MonthEnd(_month0);
         DateOnly averageEnd = monthEnd < Store.Today ? monthEnd : Store.Today;
 
-        _monthTotals = IncomeLedger.Totals(IncomeLedger.Between(_items, _month0, monthEnd));
-        _previousTotals = IncomeLedger.Totals(IncomeLedger.Between(_items, _month0.AddMonths(-1), _month0.AddDays(-1)));
-        _yearTotals = IncomeLedger.Totals(IncomeLedger.Between(_items, new DateOnly(_month0.Year, 1, 1), new DateOnly(_month0.Year, 12, 31)));
-        _weeklyAverage = IncomeLedger.WeeklyAverage(_items, TraderStats.WeekStart(averageEnd).AddDays(-7 * (AverageWeeks - 1)), averageEnd);
+        IReadOnlyList<LedgerSource> sources = AllSources;
+        IReadOnlyList<IncomeCurrency> currencies = IncomeLedger.Currencies(sources);
+
+        _summaries = [.. currencies.Select(currency =>
+        {
+            HashSet<string> keys = [.. sources.Where(s => s.Currency == currency).Select(s => s.Key)];
+            List<LedgerItem> items = [.. _items.Where(i => keys.Contains(i.SourceKey))];
+
+            return new CurrencySummary(
+                currency,
+                IncomeLedger.Totals(IncomeLedger.Between(items, _month0, monthEnd)),
+                IncomeLedger.Totals(IncomeLedger.Between(items, _month0.AddMonths(-1), _month0.AddDays(-1))),
+                IncomeLedger.Totals(IncomeLedger.Between(items, new DateOnly(_month0.Year, 1, 1), new DateOnly(_month0.Year, 12, 31))),
+                IncomeLedger.WeeklyAverage(items, TraderStats.WeekStart(averageEnd).AddDays(-7 * (AverageWeeks - 1)), averageEnd),
+                IncomeLedger.Pending(_entries.Where(e => keys.Contains(IncomeLedger.SourceKey(e.SourceId)))));
+        })];
+
+        if (!currencies.Contains(_chartCurrency))
+        {
+            _chartCurrency = IncomeCurrency.Eur;
+        }
     }
+
+    private RenderFragment CurrencyToggle => __builder =>
+    {
+        if (_summaries.Count > 1)
+        {
+            <span class="wk-qa-status wk-currency wk-chart-currency" role="radiogroup" aria-label="Moeda dos gráficos">
+                @foreach (CurrencySummary summary in _summaries)
+                {
+                    IncomeCurrency currency = summary.Currency;
+                    <button type="button" role="radio" aria-checked="@(_chartCurrency == currency ? "true" : "false")" class="@(_chartCurrency == currency ? "on" : string.Empty)" @onclick="() => _chartCurrency = currency">@WorkFormat.Symbol(currency)</button>
+                }
+            </span>
+        }
+    };
 
     private LedgerTotals SourceTotals(string key, DateOnly from, DateOnly to) =>
         IncomeLedger.Totals(IncomeLedger.Between(_items, from, to).Where(i => i.SourceKey == key));
@@ -230,6 +274,8 @@
 
     private string SourceHref(LedgerSource source) =>
         source.IsTrades ? "trabalho/trades" : $"trabalho/fonte/{Sources.First(s => IncomeLedger.SourceKey(s.Id) == source.Key).Id}";
+
+    private sealed record CurrencySummary(IncomeCurrency Currency, LedgerTotals Month, LedgerTotals Previous, LedgerTotals Year, decimal WeeklyAverage, PendingTotals Pending);
 
     private static string Share(decimal value, decimal total) =>
         total == 0 ? "0%" : (value / total).ToString("0%", WorkFormat.Culture);

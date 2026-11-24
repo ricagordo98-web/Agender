@@ -1,5 +1,6 @@
 using System.Globalization;
 using Agender.Shared.Contracts;
+using Agender.Shared.Domain;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -54,10 +55,28 @@ public static class IncomePdf
             page.Content().PaddingHorizontal(36).PaddingVertical(18).Column(column =>
             {
                 column.Spacing(20);
-                column.Item().Element(item => ComposeKpis(item, items, input));
-                column.Item().Element(item => ComposeSources(item, items, input.Sources));
-                column.Item().Element(item => ComposeMonths(item, items, input));
-                column.Item().Element(item => ComposeWeeks(item, items));
+                IReadOnlyList<IncomeCurrency> currencies = IncomeLedger.Currencies(input.Sources);
+
+                foreach (IncomeCurrency currency in currencies)
+                {
+                    HashSet<string> keys = [.. input.Sources.Where(s => s.Currency == currency).Select(s => s.Key)];
+                    List<LedgerItem> own = [.. items.Where(i => keys.Contains(i.SourceKey))];
+                    IncomeReportInput scoped = input with
+                    {
+                        Sources = [.. input.Sources.Where(s => keys.Contains(s.Key))],
+                        PendingEntries = [.. (input.PendingEntries ?? []).Where(e => keys.Contains(IncomeLedger.SourceKey(e.SourceId)))]
+                    };
+
+                    if (currencies.Count > 1)
+                    {
+                        column.Item().Element(item => CurrencyBanner(item, currency));
+                    }
+
+                    column.Item().Element(item => ComposeKpis(item, own, scoped, currency));
+                    column.Item().Element(item => ComposeSources(item, own, scoped.Sources, currency));
+                    column.Item().Element(item => ComposeMonths(item, own, scoped, currency));
+                    column.Item().Element(item => ComposeWeeks(item, own, currency));
+                }
 
                 foreach (LedgerSource source in input.Sources)
                 {
@@ -71,7 +90,7 @@ public static class IncomePdf
                     else
                     {
                         PendingTotals sourcePending = IncomeLedger.Pending((input.PendingEntries ?? []).Where(e => IncomeLedger.SourceKey(e.SourceId) == source.Key));
-                    column.Item().Element(item => ComposeManual(item, source, own, sourcePending));
+                        column.Item().Element(item => ComposeManual(item, source, own, sourcePending));
                     }
                 }
 
@@ -94,7 +113,7 @@ public static class IncomePdf
             column.Item().PaddingTop(4).Text($"Fontes: {string.Join(", ", input.Sources.Select(s => s.Name))}").FontSize(9).FontColor("#99F6E4");
         });
 
-    private static void ComposeKpis(IContainer container, List<LedgerItem> items, IncomeReportInput input)
+    private static void ComposeKpis(IContainer container, List<LedgerItem> items, IncomeReportInput input, IncomeCurrency currency)
     {
         LedgerTotals totals = IncomeLedger.Totals(items);
         (DateOnly Start, LedgerTotals Totals)? best = IncomeLedger.ByWeek(items).OrderByDescending(w => w.Totals.Net).Select(w => ((DateOnly, LedgerTotals)?)w).FirstOrDefault();
@@ -106,17 +125,17 @@ public static class IncomePdf
             {
                 row.Spacing(10);
                 PendingTotals pending = IncomeLedger.Pending(input.PendingEntries ?? []);
-                Kpi(row.RelativeItem(), "Resultado líquido", Money(totals.Net), Tone(totals.Net),
-                    pending.Count > 0 ? $"+ {Money(pending.Amount, signed: false)} pendente de aprovação" : null, highlight: true);
-                Kpi(row.RelativeItem(), "Ganhos", Money(totals.Gains, signed: false), Gain);
-                Kpi(row.RelativeItem(), "Perdas", Money(totals.Losses, signed: false), totals.Losses > 0 ? Loss : BrandDark);
+                Kpi(row.RelativeItem(), "Resultado líquido", Money(totals.Net, currency: currency), Tone(totals.Net),
+                    pending.Count > 0 ? $"+ {Money(pending.Amount, false, currency)} pendente de aprovação" : null, highlight: true);
+                Kpi(row.RelativeItem(), "Ganhos", Money(totals.Gains, false, currency), Gain);
+                Kpi(row.RelativeItem(), "Perdas", Money(totals.Losses, false, currency), totals.Losses > 0 ? Loss : BrandDark);
             });
             column.Item().Row(row =>
             {
                 row.Spacing(10);
-                Kpi(row.RelativeItem(), "Média por semana", Money(IncomeLedger.WeeklyAverage(items, input.From, input.To)), BrandDark);
+                Kpi(row.RelativeItem(), "Média por semana", Money(IncomeLedger.WeeklyAverage(items, input.From, input.To), currency: currency), BrandDark);
                 Kpi(row.RelativeItem(), "Registos e trades", totals.Count.ToString(Culture), BrandDark);
-                Kpi(row.RelativeItem(), "Melhor semana", best is { } week ? $"{Money(week.Totals.Net)}" : "—", BrandDark,
+                Kpi(row.RelativeItem(), "Melhor semana", best is { } week ? Money(week.Totals.Net, currency: currency) : "—", BrandDark,
                     best is { } bestWeek ? WeekText(bestWeek.Start) : null);
             });
         });
@@ -134,7 +153,7 @@ public static class IncomePdf
             }
         });
 
-    private static void ComposeSources(IContainer container, List<LedgerItem> items, IReadOnlyList<LedgerSource> sources)
+    private static void ComposeSources(IContainer container, List<LedgerItem> items, IReadOnlyList<LedgerSource> sources, IncomeCurrency currency)
     {
         Dictionary<string, LedgerTotals> bySource = IncomeLedger.BySource(items).ToDictionary(s => s.Key, s => s.Totals);
         decimal totalGains = IncomeLedger.Totals(items).Gains;
@@ -183,22 +202,22 @@ public static class IncomePdf
                         row.ConstantItem(30).AlignRight().Text($"{share.ToString("0", Culture)}%").FontSize(8).FontColor(Muted);
                     });
                     table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(totals.Count.ToString(Culture)).FontColor(Muted);
-                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(totals.Gains, signed: false)).FontColor(Gain);
-                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(totals.Losses == 0 ? "—" : Money(-totals.Losses)).FontColor(totals.Losses == 0 ? Muted : Loss);
-                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(totals.Net)).Bold().FontColor(Tone(totals.Net));
+                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(totals.Gains, false, currency)).FontColor(Gain);
+                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(totals.Losses == 0 ? "—" : Money(-totals.Losses, currency: currency)).FontColor(totals.Losses == 0 ? Muted : Loss);
+                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(totals.Net, currency: currency)).Bold().FontColor(Tone(totals.Net));
                 }
 
                 LedgerTotals all = IncomeLedger.Totals(items);
                 TotalCell(table.Cell().ColumnSpan(2), "Total");
                 TotalCell(table.Cell(), all.Count.ToString(Culture), alignRight: true);
-                TotalCell(table.Cell(), Money(all.Gains, signed: false), alignRight: true);
-                TotalCell(table.Cell(), all.Losses == 0 ? "—" : Money(-all.Losses), alignRight: true);
-                TotalCell(table.Cell(), Money(all.Net), alignRight: true);
+                TotalCell(table.Cell(), Money(all.Gains, false, currency), alignRight: true);
+                TotalCell(table.Cell(), all.Losses == 0 ? "—" : Money(-all.Losses, currency: currency), alignRight: true);
+                TotalCell(table.Cell(), Money(all.Net, currency: currency), alignRight: true);
             });
         });
     }
 
-    private static void ComposeMonths(IContainer container, List<LedgerItem> items, IncomeReportInput input)
+    private static void ComposeMonths(IContainer container, List<LedgerItem> items, IncomeReportInput input, IncomeCurrency currency)
     {
         IReadOnlyList<DateOnly> months = IncomeLedger.Months(input.From, input.To);
         IReadOnlyList<LedgerSource> sources = input.Sources;
@@ -247,18 +266,18 @@ public static class IncomePdf
                     foreach (LedgerSource source in sources)
                     {
                         decimal value = IncomeLedger.Totals(own.Where(i => i.SourceKey == source.Key)).Net;
-                        table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(value == 0 ? "—" : Money(value)).FontColor(value == 0 ? Muted : Tone(value));
+                        table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(value == 0 ? "—" : Money(value, currency: currency)).FontColor(value == 0 ? Muted : Tone(value));
                     }
 
                     double share = maxAbs == 0 ? 0 : (double)(Math.Abs(net) / maxAbs * 100);
                     table.Cell().Element(cell => Cell(cell, background)).AlignMiddle().Element(bar => ShareBar(bar, share, net < 0 ? Loss : Brand));
-                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(net)).Bold().FontColor(Tone(net));
+                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(net, currency: currency)).Bold().FontColor(Tone(net));
                 }
             });
         });
     }
 
-    private static void ComposeWeeks(IContainer container, List<LedgerItem> items)
+    private static void ComposeWeeks(IContainer container, List<LedgerItem> items, IncomeCurrency currency)
     {
         IReadOnlyList<(DateOnly Start, LedgerTotals Totals)> weeks = IncomeLedger.ByWeek(items);
 
@@ -273,13 +292,13 @@ public static class IncomePdf
             column.Item().Row(row =>
             {
                 row.Spacing(14);
-                row.RelativeItem().Element(item => WeekList(item, "Melhores", weeks.OrderByDescending(w => w.Totals.Net).Take(TopWeeks)));
-                row.RelativeItem().Element(item => WeekList(item, "Mais fracas", weeks.OrderBy(w => w.Totals.Net).Take(TopWeeks)));
+                row.RelativeItem().Element(item => WeekList(item, "Melhores", weeks.OrderByDescending(w => w.Totals.Net).Take(TopWeeks), currency));
+                row.RelativeItem().Element(item => WeekList(item, "Mais fracas", weeks.OrderBy(w => w.Totals.Net).Take(TopWeeks), currency));
             });
         });
     }
 
-    private static void WeekList(IContainer container, string title, IEnumerable<(DateOnly Start, LedgerTotals Totals)> weeks) =>
+    private static void WeekList(IContainer container, string title, IEnumerable<(DateOnly Start, LedgerTotals Totals)> weeks, IncomeCurrency currency) =>
         container.Border(1).BorderColor(Line).CornerRadius(6).Padding(10).Column(column =>
         {
             column.Spacing(5);
@@ -291,7 +310,7 @@ public static class IncomePdf
                 {
                     row.RelativeItem().Text(WeekText(start));
                     row.ConstantItem(40).AlignRight().Text($"{totals.Count} reg.").FontSize(8).FontColor(Muted);
-                    row.ConstantItem(76).AlignRight().Text(Money(totals.Net)).Bold().FontColor(Tone(totals.Net));
+                    row.ConstantItem(76).AlignRight().Text(Money(totals.Net, currency: currency)).Bold().FontColor(Tone(totals.Net));
                 });
             }
         });
@@ -305,7 +324,7 @@ public static class IncomePdf
         {
             column.Item().Element(item => SectionTitle(item, source.Name, source.Color));
 
-            string pendingText = pending.Count > 0 ? $" · {Money(pending.Amount, signed: false)} pendente de aprovação ({pending.Count})" : string.Empty;
+            string pendingText = pending.Count > 0 ? $" · {Money(pending.Amount, false, source.Currency)} pendente de aprovação ({pending.Count})" : string.Empty;
 
             if (items.Count == 0)
             {
@@ -313,7 +332,7 @@ public static class IncomePdf
                 return;
             }
 
-            column.Item().PaddingBottom(8).Text($"{totals.Count} registos · resultado {Money(totals.Net)} · média por registo {Money(Math.Round(totals.Net / totals.Count, 2))}{pendingText}").FontColor(Muted);
+            column.Item().PaddingBottom(8).Text($"{totals.Count} registos · resultado {Money(totals.Net, currency: source.Currency)} · média por registo {Money(Math.Round(totals.Net / totals.Count, 2), currency: source.Currency)}{pendingText}").FontColor(Muted);
             column.Item().Table(table =>
             {
                 table.ColumnsDefinition(columns =>
@@ -342,7 +361,7 @@ public static class IncomePdf
                     table.Cell().Element(cell => Cell(cell, background)).Text(platform).SemiBold();
                     table.Cell().Element(cell => Cell(cell, background)).AlignMiddle().Element(bar => ShareBar(bar, share, source.Color));
                     table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(platformTotals.Count.ToString(Culture)).FontColor(Muted);
-                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(platformTotals.Net)).Bold().FontColor(Tone(platformTotals.Net));
+                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(platformTotals.Net, currency: source.Currency)).Bold().FontColor(Tone(platformTotals.Net));
                 }
             });
         });
@@ -476,7 +495,7 @@ public static class IncomePdf
                     });
                     table.Cell().Element(cell => Cell(cell, background)).Text(string.IsNullOrWhiteSpace(item.Label) ? "—" : item.Label).FontColor(string.IsNullOrWhiteSpace(item.Label) ? Muted : Ink);
                     table.Cell().Element(cell => Cell(cell, background)).Text(string.IsNullOrWhiteSpace(item.Detail) ? "—" : item.Detail).FontSize(8.5f).FontColor(Muted);
-                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(item.Amount)).Bold().FontColor(Tone(item.Amount));
+                    table.Cell().Element(cell => Cell(cell, background)).AlignRight().Text(Money(item.Amount, currency: source.Currency)).Bold().FontColor(Tone(item.Amount));
                 }
             });
         });
@@ -537,8 +556,12 @@ public static class IncomePdf
             });
         });
 
-    public static string Money(decimal value, bool signed = true) =>
-        (signed ? value.ToString("+#,##0.00;-#,##0.00;0.00", Culture) : value.ToString("#,##0.00", Culture)) + " €";
+    public static string Money(decimal value, bool signed = true, IncomeCurrency currency = IncomeCurrency.Eur) =>
+        (signed ? value.ToString("+#,##0.00;-#,##0.00;0.00", Culture) : value.ToString("#,##0.00", Culture)) + (currency == IncomeCurrency.Usd ? " $" : " €");
+
+    private static void CurrencyBanner(IContainer container, IncomeCurrency currency) =>
+        container.Background(BrandSoft).Border(1).BorderColor(BrandBorder).CornerRadius(6).PaddingVertical(6).PaddingHorizontal(10)
+            .Text(currency == IncomeCurrency.Usd ? "Fontes em dólares ($)" : "Fontes em euros (€)").FontSize(11).Bold().FontColor(BrandDark);
 
     private static string Tone(decimal value) => value > 0 ? Gain : value < 0 ? Loss : Muted;
 

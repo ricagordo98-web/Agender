@@ -23,7 +23,7 @@
                     <span class="wk-cal-num">@day.Day</span>
                     @if (totals is not null)
                     {
-                        <span class="wk-cal-value">@WorkFormat.Money(totals.Net)</span>
+                        <span class="wk-cal-value">@WorkFormat.Money(totals.Net, currency: Currency)</span>
                         <span class="wk-cal-count">@WorkFormat.Count(totals.Count, Singular, Plural)</span>
                     }
                     @if (note is not null)
@@ -38,7 +38,7 @@
             <div class="wk-cal-week @(week.Count == 0 ? string.Empty : WorkFormat.Tone(week.Net))">
                 @if (week.Count > 0)
                 {
-                    <strong>@WorkFormat.Money(week.Net)</strong>
+                    <strong>@WorkFormat.Money(week.Net, currency: Currency)</strong>
                     <span>@WorkFormat.Count(week.Count, Singular, Plural)</span>
                 }
                 else if (weekNote is null)
@@ -60,6 +60,9 @@
 
     [Parameter]
     public DateOnly Today { get; set; }
+
+    [Parameter]
+    public IncomeCurrency Currency { get; set; }
 
     [Parameter]
     public DateOnly? Selected { get; set; }
@@ -118,6 +121,6 @@
 
     private string Label(DateOnly day, LedgerTotals? totals, string? note) =>
         $"{day.ToString("d 'de' MMMM", WorkFormat.Culture)}: "
-        + (totals is null ? "sem registos" : $"{WorkFormat.Count(totals.Count, Singular, Plural)}, {WorkFormat.Money(totals.Net)}")
+        + (totals is null ? "sem registos" : $"{WorkFormat.Count(totals.Count, Singular, Plural)}, {WorkFormat.Money(totals.Net, currency: Currency)}")
         + (note is null ? string.Empty : $", {note}");
 }

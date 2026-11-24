@@ -247,6 +247,12 @@
 .wk-overview-split div { display: grid; gap: 2px; }
 .wk-overview-split strong.pending { color: var(--pending); }
 .wk-overview-split strong { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wk-overview-split strong > span { display: block; }
+.wk-overview-split strong > span.pending { color: var(--pending); }
+.wk-currency { align-self: flex-start; }
+.wk-currency button.on { color: var(--text); }
+.wk-chart-currency { margin-left: auto; }
+.wk-chart-currency + .wk-head-note { margin-left: 0; }
 
 .wk-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .wk-source-card {

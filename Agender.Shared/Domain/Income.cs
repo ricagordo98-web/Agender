@@ -10,6 +10,13 @@ public enum IncomeEntryStatus
     Rejected
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum IncomeCurrency
+{
+    Eur,
+    Usd
+}
+
 public class IncomeSource
 {
     public const int NameMaxLength = 60;
@@ -22,6 +29,8 @@ public class IncomeSource
     public string Emoji { get; set; } = string.Empty;
 
     public EntryColor Color { get; set; } = EntryColor.Indigo;
+
+    public IncomeCurrency Currency { get; set; } = IncomeCurrency.Eur;
 
     public bool IsArchived { get; set; }
 

@@ -957,6 +957,13 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Eur");
+
                     b.Property<string>("Emoji")
                         .IsRequired()
                         .HasMaxLength(16)

@@ -44,7 +44,7 @@
 
             <rect x="@Format(x)" y="@Format(Math.Min(y, zero))" width="@Format(barWidth)" height="@Format(Math.Max(height, point.Value == 0 ? 0 : 1.5))" rx="3"
                   class="@(point.Value < 0 ? "neg" : "pos")" opacity="@(isLast || !FadeOlder ? "1" : ".7")">
-                <title>@point.Label: @WorkFormat.Money(point.Value)</title>
+                <title>@point.Label: @WorkFormat.Money(point.Value, currency: Currency)</title>
             </rect>
 
             @if (ShowLabel(index))
@@ -78,6 +78,9 @@
 
     [Parameter]
     public IReadOnlyList<Point> Points { get; set; } = [];
+
+    [Parameter]
+    public IncomeCurrency Currency { get; set; }
 
     [Parameter]
     public double Width { get; set; } = 560;

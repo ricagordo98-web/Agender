@@ -1,4 +1,5 @@
 using System.Globalization;
+using Agender.Shared.Domain;
 
 namespace Agender.Shared.Components.Work;
 
@@ -10,10 +11,14 @@ public static class WorkFormat
 
     public static readonly string[] Emojis = ["📝", "💻", "🎨", "📦", "🛍️", "🚗", "🎧", "📚", "🎮", "🤝", "💼", "🧾", "💡", "🏠", "📸", "💰"];
 
-    public static string Money(decimal value, bool signed = true) =>
-        (signed ? value.ToString("+#,##0.00;-#,##0.00;0.00", Culture) : value.ToString("#,##0.00", Culture)) + " €";
+    public static string Money(decimal value, bool signed = true, IncomeCurrency currency = IncomeCurrency.Eur) =>
+        (signed ? value.ToString("+#,##0.00;-#,##0.00;0.00", Culture) : value.ToString("#,##0.00", Culture)) + " " + Symbol(currency);
 
     public static string Money(double value, bool signed = true) => Money((decimal)Math.Round(value, 2), signed);
+
+    public static string Symbol(IncomeCurrency currency) => currency == IncomeCurrency.Usd ? "$" : "€";
+
+    public static string CurrencyName(IncomeCurrency currency) => currency == IncomeCurrency.Usd ? "Dólares" : "Euros";
 
     public static string Tone(decimal value) => value > 0 ? "win" : value < 0 ? "loss" : "flat";
 

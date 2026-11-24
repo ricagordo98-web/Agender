@@ -103,6 +103,7 @@ public class IncomeSourceInputValidator : AbstractValidator<IncomeSourceInput>
         RuleFor(s => s.Name).NotEmpty().MaximumLength(IncomeSource.NameMaxLength);
         RuleFor(s => s.Emoji).NotNull().MaximumLength(IncomeSource.EmojiMaxLength);
         RuleFor(s => s.Color).IsInEnum();
+        RuleFor(s => s.Currency).IsInEnum();
     }
 }
 

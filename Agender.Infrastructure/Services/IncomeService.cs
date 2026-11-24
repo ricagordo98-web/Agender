@@ -148,6 +148,11 @@ public class IncomeService(IUserDbContextFactory contextFactory, TimeProvider ti
             throw new ArgumentException("The color is not valid.");
         }
 
+        if (!Enum.IsDefined(input.Currency))
+        {
+            throw new ArgumentException("The currency is not valid.");
+        }
+
         string lowered = name.ToLower();
 
         if (await context.IncomeSources.AnyAsync(s => s.Id != source.Id && s.Name.ToLower() == lowered, cancellationToken))
@@ -158,6 +163,7 @@ public class IncomeService(IUserDbContextFactory contextFactory, TimeProvider ti
         source.Name = name;
         source.Emoji = emoji;
         source.Color = input.Color;
+        source.Currency = input.Currency;
         source.IsArchived = input.IsArchived;
     }
 

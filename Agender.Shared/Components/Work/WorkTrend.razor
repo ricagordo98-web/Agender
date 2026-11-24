@@ -67,7 +67,7 @@
                 double y2 = Y(Math.Min(from, to));
 
                 <rect x="@Format(x)" y="@Format(y1)" width="@Format(barWidth)" height="@Format(Math.Max(1, y2 - y1))" rx="3" fill="@source.Color" opacity="@(isLast ? "1" : ".78")">
-                    <title>@WorkFormat.Month(month) · @source.Name: @WorkFormat.Money(value)</title>
+                    <title>@WorkFormat.Month(month) · @source.Name: @WorkFormat.Money(value, currency: Currency)</title>
                 </rect>
             }
 
@@ -83,7 +83,7 @@
             @for (int index = 0; index < data.Count; index++)
             {
                 <circle cx="@Format(64 + slot * index + slot / 2)" cy="@Format(Y((double)data[index].Net))" r="3.5" class="net-dot">
-                    <title>@WorkFormat.Month(data[index].Month): @WorkFormat.Money(data[index].Net)</title>
+                    <title>@WorkFormat.Month(data[index].Month): @WorkFormat.Money(data[index].Net, currency: Currency)</title>
                 </circle>
             }
         }
@@ -103,6 +103,9 @@
     private const double Height = 240;
 
     [Parameter]
+    public IncomeCurrency Currency { get; set; }
+
+    [Parameter]
     public IReadOnlyList<DateOnly> Months { get; set; } = [];
 
     [Parameter]
@@ -113,8 +116,8 @@
 
     private static string Format(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
 
-    private static string Short(double value) =>
-        Math.Abs(value) >= 1000 ? $"{(value / 1000).ToString("0.#", WorkFormat.Culture)}k €" : $"{value.ToString("0", WorkFormat.Culture)} €";
+    private string Short(double value) =>
+        Math.Abs(value) >= 1000 ? $"{(value / 1000).ToString("0.#", WorkFormat.Culture)}k {WorkFormat.Symbol(Currency)}" : $"{value.ToString("0", WorkFormat.Culture)} {WorkFormat.Symbol(Currency)}";
 
     private static double Nice(double value)
     {
