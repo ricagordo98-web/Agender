@@ -243,16 +243,16 @@
 .wk-overview-main small, .wk-overview-split small { font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .wk-overview-main strong { font-size: 36px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .wk-overview-main > span { font-size: 12.5px; color: var(--text-muted); }
-.wk-overview-split { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding-left: 24px; border-left: 1px solid var(--border); }
+.wk-overview-split { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 12px; padding-left: 24px; border-left: 1px solid var(--border); }
 .wk-overview-split div { display: grid; gap: 2px; }
 .wk-overview-split strong.pending { color: var(--pending); }
 .wk-overview-split strong { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wk-overview-split strong > span { display: block; }
-.wk-overview-split strong > span.pending { color: var(--pending); }
-.wk-currency { align-self: flex-start; }
-.wk-currency button.on { color: var(--text); }
-.wk-chart-currency { margin-left: auto; }
-.wk-chart-currency + .wk-head-note { margin-left: 0; }
+.wk-entry-value { display: grid; justify-items: end; gap: 1px; }
+.wk-entry-eur { font-size: 12px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.wk-convert { padding: 0; border: 0; background: none; color: var(--pending); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.wk-qa-converted { flex: 0 0 140px; }
+.wk-entry-form.with-eur { grid-template-columns: 140px 100px 110px minmax(110px, 1fr) minmax(110px, 1.3fr) 110px auto auto; }
 
 .wk-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .wk-source-card {

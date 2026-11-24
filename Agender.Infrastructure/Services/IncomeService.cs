@@ -192,14 +192,21 @@ public class IncomeService(IUserDbContextFactory contextFactory, TimeProvider ti
             throw new ArgumentException($"The note exceeds {IncomeEntry.NoteMaxLength} characters.");
         }
 
-        if (!await context.IncomeSources.AnyAsync(s => s.Id == input.SourceId, cancellationToken))
+        if (input.ConvertedAmount is { } converted && (converted == 0 || Math.Abs(converted) > IncomeEntry.MaxAmount))
         {
-            throw new NotFoundException($"Income source {input.SourceId} was not found.");
+            throw new ArgumentException("The converted amount must be different from zero and within limits.");
         }
+
+        IncomeCurrency currency = await context.IncomeSources
+            .Where(s => s.Id == input.SourceId)
+            .Select(s => (IncomeCurrency?)s.Currency)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException($"Income source {input.SourceId} was not found.");
 
         entry.SourceId = input.SourceId;
         entry.Date = input.Date;
         entry.Amount = Math.Round(input.Amount, 2);
+        entry.ConvertedAmount = currency == IncomeCurrency.Eur || input.ConvertedAmount is not { } value ? null : Math.Round(value, 2);
         entry.Platform = platform;
         entry.Note = note;
         entry.Status = input.Status;

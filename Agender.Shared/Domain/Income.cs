@@ -14,7 +14,37 @@ public enum IncomeEntryStatus
 public enum IncomeCurrency
 {
     Eur,
-    Usd
+    Usd,
+    Gbp,
+    Brl,
+    Chf,
+    Cad,
+    Aud
+}
+
+public static class IncomeCurrencies
+{
+    public static string Symbol(IncomeCurrency currency) => currency switch
+    {
+        IncomeCurrency.Usd => "$",
+        IncomeCurrency.Gbp => "£",
+        IncomeCurrency.Brl => "R$",
+        IncomeCurrency.Chf => "CHF",
+        IncomeCurrency.Cad => "C$",
+        IncomeCurrency.Aud => "A$",
+        _ => "€"
+    };
+
+    public static string Name(IncomeCurrency currency) => currency switch
+    {
+        IncomeCurrency.Usd => "Dólar americano (USD)",
+        IncomeCurrency.Gbp => "Libra (GBP)",
+        IncomeCurrency.Brl => "Real (BRL)",
+        IncomeCurrency.Chf => "Franco suíço (CHF)",
+        IncomeCurrency.Cad => "Dólar canadiano (CAD)",
+        IncomeCurrency.Aud => "Dólar australiano (AUD)",
+        _ => "Euro (EUR)"
+    };
 }
 
 public class IncomeSource
@@ -52,6 +82,8 @@ public class IncomeEntry
     public DateOnly Date { get; set; }
 
     public decimal Amount { get; set; }
+
+    public decimal? ConvertedAmount { get; set; }
 
     public IncomeEntryStatus Status { get; set; } = IncomeEntryStatus.Earned;
 

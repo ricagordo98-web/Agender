@@ -36,19 +36,22 @@
             </div>
         </div>
 
-        <div class="cs-field">
-            <span>Moeda</span>
-            <span class="wk-qa-status wk-currency" role="radiogroup" aria-label="Moeda">
+        <label class="cs-field">Moeda em que recebes
+            <select class="field" @bind="_currency">
                 @foreach (IncomeCurrency currency in Enum.GetValues<IncomeCurrency>())
                 {
-                    <button type="button" role="radio" aria-checked="@(_currency == currency ? "true" : "false")" class="@(_currency == currency ? "on" : string.Empty)" @onclick="() => _currency = currency">@WorkFormat.Symbol(currency) · @WorkFormat.CurrencyName(currency)</button>
+                    <option value="@currency">@IncomeCurrencies.Symbol(currency) · @IncomeCurrencies.Name(currency)</option>
                 }
-            </span>
+            </select>
             @if (Source is not null && _currency != Source.Currency)
             {
                 <small class="cs-hint">Os valores já registados ficam iguais, só muda a moeda (não há conversão).</small>
             }
-        </div>
+            else if (_currency != IncomeCurrency.Eur)
+            {
+                <small class="cs-hint">Em cada registo podes indicar quanto recebeste em euros depois da conversão. Só esse valor entra nos totais.</small>
+            }
+        </label>
 
         @if (Source is not null)
         {

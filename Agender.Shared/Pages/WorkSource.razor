@@ -64,6 +64,14 @@
                 <strong>@Money(_pending.Amount, signed: false)</strong>
                 <span>@(_pending.Count == 0 ? "nada à espera" : $"{WorkFormat.Count(_pending.Count, "registo", "registos")} à espera")</span>
             </div>
+            @if (IsForeign)
+            {
+                <div class="card wk-kpi @(_unconverted.Count > 0 ? "pending" : string.Empty)" title="O que recebeste em euros depois da conversão. É este valor que entra nos totais do Trabalho e no PDF.">
+                    <small>Recebido em € no mês</small>
+                    <strong>@WorkFormat.Money(_monthConverted, signed: false)</strong>
+                    <span>@(_unconverted.Count == 0 ? "tudo convertido" : $"{Money(_unconverted.Amount, signed: false)} por converter")</span>
+                </div>
+            }
         </section>
 
         <WorkCalendar Currency="Currency" Month="_month0" Today="Store.Today" Selected="_selected" Items="_items" DayNote="PendingDayNote" WeekNote="PendingWeekNote" OnSelect="Select" />
@@ -90,10 +98,17 @@
                     <span class="wk-quick-icon" aria-hidden="true"><Icon Name="IconName.Plus" Size="18" /></span>
                     <span class="wk-qa-day" title="O registo fica neste dia. Para outro dia, escolhe-o no calendário.">@selected.ToString("ddd, d MMM", WorkFormat.Culture)</span>
                     <label class="wk-qa-amount">
-                        <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor em euros"
+                        <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="0,00" aria-label="Valor"
                                @ref="_amountInput" @bind="_newAmount" @bind:event="oninput" />
                         <span aria-hidden="true">@WorkFormat.Symbol(Currency)</span>
                     </label>
+                    @if (IsForeign && _newStatus == IncomeEntryStatus.Earned)
+                    {
+                        <label class="wk-qa-amount wk-qa-converted" title="Quanto recebeste em euros depois da conversão (opcional; podes indicar mais tarde)">
+                            <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="Recebido" aria-label="Recebido em euros" @bind="_newConverted" @bind:event="oninput" />
+                            <span aria-hidden="true">€</span>
+                        </label>
+                    }
                     <input class="field wk-qa-platform" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_newPlatform" />
                     <datalist id="wk-platforms">
                         @foreach (string platform in _platforms)
@@ -130,9 +145,13 @@
                             @if (_editing?.Id == entry.Id)
                             {
                                 <li class="wk-entry editing">
-                                    <form class="wk-entry-form" @onsubmit="SaveEditAsync" @onsubmit:preventDefault>
+                                    <form class="wk-entry-form @(IsForeign ? "with-eur" : string.Empty)" @onsubmit="SaveEditAsync" @onsubmit:preventDefault>
                                         <input class="field" type="date" aria-label="Data" @bind="_editDate" />
-                                        <input class="field" type="number" step="0.01" aria-label="Valor" @bind="_editAmount" />
+                                        <input class="field" type="number" step="0.01" aria-label="@($"Valor em {WorkFormat.Symbol(Currency)}")" placeholder="@WorkFormat.Symbol(Currency)" @bind="_editAmount" />
+                                        @if (IsForeign)
+                                        {
+                                            <input class="field" type="number" step="0.01" aria-label="Recebido em euros" placeholder="Recebido €" title="Quanto recebeste em euros depois da conversão" @ref="_convertedInput" @bind="_editConverted" />
+                                        }
                                         <input class="field" list="wk-platforms" maxlength="@IncomeEntry.PlatformMaxLength" placeholder="Plataforma" aria-label="Plataforma" @bind="_editPlatform" />
                                         <input class="field" maxlength="@IncomeEntry.NoteMaxLength" placeholder="Nota" aria-label="Nota" @bind="_editNote" />
                                         <select class="field" aria-label="Estado" @bind="_editStatus">
@@ -160,7 +179,20 @@
                                         }
                                     </span>
                                     <span class="wk-entry-note">@entry.Note</span>
-                                    <strong class="wk-entry-amount @(entry.Status == IncomeEntryStatus.Earned ? WorkFormat.Tone(entry.Amount) : string.Empty)">@Money(entry.Amount, signed: entry.Status == IncomeEntryStatus.Earned)</strong>
+                                    <span class="wk-entry-value">
+                                        <strong class="wk-entry-amount @(entry.Status == IncomeEntryStatus.Earned ? WorkFormat.Tone(entry.Amount) : string.Empty)">@Money(entry.Amount, signed: entry.Status == IncomeEntryStatus.Earned)</strong>
+                                        @if (IsForeign && entry.Status == IncomeEntryStatus.Earned)
+                                        {
+                                            @if (entry.ConvertedAmount is { } converted)
+                                            {
+                                                <small class="wk-entry-eur">= @WorkFormat.Money(converted, signed: false)</small>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="wk-convert" @onclick="() => StartConvertAsync(entry)">indicar € recebidos</button>
+                                            }
+                                        }
+                                    </span>
                                     <span class="wk-entry-actions">
                                         @if (entry.Status == IncomeEntryStatus.Pending)
                                         {
@@ -258,6 +290,11 @@
     private LedgerTotals _thisWeek = LedgerTotals.Empty;
     private decimal _weeklyAverage;
     private PendingTotals _pending = PendingTotals.Empty;
+    private PendingTotals _unconverted = PendingTotals.Empty;
+    private decimal _monthConverted;
+    private decimal? _newConverted;
+    private decimal? _editConverted;
+    private ElementReference _convertedInput;
     private IncomeEntryStatus _newStatus = IncomeEntryStatus.Earned;
     private IncomeEntryStatus _editStatus = IncomeEntryStatus.Earned;
     private (string Platform, LedgerTotals Totals)? _topPlatform;
@@ -359,6 +396,8 @@
     {
         _items = IncomeLedger.Build(_entries, []);
         _pending = IncomeLedger.Pending(_entries);
+        _unconverted = IsForeign ? IncomeLedger.Unconverted(_entries, [IncomeLedger.ToSource(_source!)]).Select(x => x.Totals).FirstOrDefault() ?? PendingTotals.Empty : PendingTotals.Empty;
+        _monthConverted = _entries.Where(e => e.Status == IncomeEntryStatus.Earned && e.Date >= _month0 && e.Date <= IncomeLedger.MonthEnd(_month0)).Sum(e => e.ConvertedAmount ?? 0);
         DateOnly monthEnd = IncomeLedger.MonthEnd(_month0);
         DateOnly weekStart = TraderStats.WeekStart(Store.Today);
         List<LedgerItem> month = [.. IncomeLedger.Between(_items, _month0, monthEnd)];
@@ -421,10 +460,11 @@
 
         try
         {
-            IncomeEntryDto created = await IncomeService.CreateEntryAsync(new IncomeEntryInput(_source.Id, day, amount, _newPlatform, _newNote, _newStatus));
+            IncomeEntryDto created = await IncomeService.CreateEntryAsync(new IncomeEntryInput(_source.Id, day, amount, _newPlatform, _newNote, _newStatus, IsForeign && _newStatus == IncomeEntryStatus.Earned && _newConverted is not 0 ? _newConverted : null));
             _entries.Add(created);
             Recalculate();
             _newAmount = null;
+            _newConverted = null;
             _newNote = string.Empty;
             string where = string.IsNullOrEmpty(created.Platform) ? string.Empty : $" em {created.Platform}";
             Toasts.Show(created.Status == IncomeEntryStatus.Pending
@@ -456,6 +496,22 @@
         _editPlatform = entry.Platform;
         _editNote = entry.Note;
         _editStatus = entry.Status;
+        _editConverted = entry.ConvertedAmount;
+    }
+
+    private async Task StartConvertAsync(IncomeEntryDto entry)
+    {
+        StartEdit(entry);
+        StateHasChanged();
+        await Task.Yield();
+
+        try
+        {
+            await _convertedInput.FocusAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JSException)
+        {
+        }
     }
 
     private async Task SaveEditAsync()
@@ -469,7 +525,7 @@
 
         try
         {
-            IncomeEntryDto updated = await IncomeService.UpdateEntryAsync(_editing.Id, new IncomeEntryInput(_editing.SourceId, _editDate, amount, _editPlatform, _editNote, _editStatus));
+            IncomeEntryDto updated = await IncomeService.UpdateEntryAsync(_editing.Id, new IncomeEntryInput(_editing.SourceId, _editDate, amount, _editPlatform, _editNote, _editStatus, _editConverted is 0 ? null : _editConverted));
             _entries[_entries.FindIndex(e => e.Id == updated.Id)] = updated;
             _editing = null;
             Recalculate();
@@ -508,7 +564,7 @@
     {
         try
         {
-            IncomeEntryDto restored = await IncomeService.CreateEntryAsync(new IncomeEntryInput(entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note, entry.Status));
+            IncomeEntryDto restored = await IncomeService.CreateEntryAsync(new IncomeEntryInput(entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note, entry.Status, entry.ConvertedAmount));
 
             if (_source?.Id == restored.SourceId)
             {
@@ -534,7 +590,7 @@
 
         try
         {
-            IncomeEntryDto updated = await IncomeService.UpdateEntryAsync(entry.Id, new IncomeEntryInput(entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note, status));
+            IncomeEntryDto updated = await IncomeService.UpdateEntryAsync(entry.Id, new IncomeEntryInput(entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note, status, entry.ConvertedAmount));
             _entries[_entries.FindIndex(e => e.Id == updated.Id)] = updated;
             Recalculate();
             string message = status == IncomeEntryStatus.Earned
@@ -556,7 +612,7 @@
     {
         try
         {
-            IncomeEntryDto reverted = await IncomeService.UpdateEntryAsync(original.Id, new IncomeEntryInput(original.SourceId, original.Date, original.Amount, original.Platform, original.Note, original.Status));
+            IncomeEntryDto reverted = await IncomeService.UpdateEntryAsync(original.Id, new IncomeEntryInput(original.SourceId, original.Date, original.Amount, original.Platform, original.Note, original.Status, original.ConvertedAmount));
             int index = _entries.FindIndex(e => e.Id == reverted.Id);
 
             if (index >= 0)
@@ -573,6 +629,8 @@
     }
 
     private IncomeCurrency Currency => _source?.Currency ?? IncomeCurrency.Eur;
+
+    private bool IsForeign => Currency != IncomeCurrency.Eur;
 
     private string Money(decimal value, bool signed = true) => WorkFormat.Money(value, signed, Currency);
 

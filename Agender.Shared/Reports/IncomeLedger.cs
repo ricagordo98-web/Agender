@@ -6,7 +6,7 @@ namespace Agender.Shared.Reports;
 
 public sealed record LedgerSource(string Key, string Name, string Emoji, string Color, bool IsTrades, IncomeCurrency Currency = IncomeCurrency.Eur);
 
-public sealed record LedgerItem(DateOnly Date, string SourceKey, decimal Amount, string Platform, string Label, string Detail);
+public sealed record LedgerItem(DateOnly Date, string SourceKey, decimal Amount, string Platform, string Label, string Detail, decimal? OriginalAmount = null, IncomeCurrency OriginalCurrency = IncomeCurrency.Eur);
 
 public sealed record LedgerTotals(decimal Gains, decimal Losses, int Count)
 {
@@ -32,8 +32,6 @@ public static class IncomeLedger
 
     public static string SourceKey(Guid sourceId) => sourceId.ToString("N");
 
-    public static IReadOnlyList<IncomeCurrency> Currencies(IEnumerable<LedgerSource> sources) =>
-        [.. sources.Select(s => s.Currency).Distinct().Order()];
 
     public static IReadOnlyList<LedgerItem> Build(IEnumerable<IncomeEntryDto> entries, IEnumerable<TraderTradeDto> trades)
     {
@@ -51,6 +49,50 @@ public static class IncomeLedger
 
         return [.. manual.Concat(closed).OrderBy(i => i.Date)];
     }
+
+    public static IReadOnlyList<LedgerItem> BuildInEuros(IEnumerable<IncomeEntryDto> entries, IEnumerable<TraderTradeDto> trades, IEnumerable<LedgerSource> sources)
+    {
+        Dictionary<string, IncomeCurrency> currencies = CurrencyMap(sources);
+        List<IncomeEntryDto> euros = [];
+        List<LedgerItem> converted = [];
+
+        foreach (IncomeEntryDto entry in entries.Where(e => e.Status == IncomeEntryStatus.Earned))
+        {
+            IncomeCurrency currency = currencies.GetValueOrDefault(SourceKey(entry.SourceId), IncomeCurrency.Eur);
+
+            if (currency == IncomeCurrency.Eur)
+            {
+                euros.Add(entry);
+            }
+            else if (entry.ConvertedAmount is { } value)
+            {
+                converted.Add(new LedgerItem(entry.Date, SourceKey(entry.SourceId), value, entry.Platform, entry.Platform, entry.Note, entry.Amount, currency));
+            }
+        }
+
+        return [.. Build(euros, trades).Concat(converted).OrderBy(i => i.Date)];
+    }
+
+    public static IReadOnlyList<(IncomeCurrency Currency, PendingTotals Totals)> PendingByCurrency(IEnumerable<IncomeEntryDto> entries, IEnumerable<LedgerSource> sources) =>
+        ByCurrency(entries.Where(e => e.Status == IncomeEntryStatus.Pending), sources, foreignOnly: false);
+
+    public static IReadOnlyList<(IncomeCurrency Currency, PendingTotals Totals)> Unconverted(IEnumerable<IncomeEntryDto> entries, IEnumerable<LedgerSource> sources) =>
+        ByCurrency(entries.Where(e => e.Status == IncomeEntryStatus.Earned && e.ConvertedAmount is null), sources, foreignOnly: true);
+
+    private static IReadOnlyList<(IncomeCurrency Currency, PendingTotals Totals)> ByCurrency(IEnumerable<IncomeEntryDto> entries, IEnumerable<LedgerSource> sources, bool foreignOnly)
+    {
+        Dictionary<string, IncomeCurrency> currencies = CurrencyMap(sources);
+
+        return [.. entries
+            .Where(e => currencies.ContainsKey(SourceKey(e.SourceId)))
+            .GroupBy(e => currencies[SourceKey(e.SourceId)])
+            .Where(g => !foreignOnly || g.Key != IncomeCurrency.Eur)
+            .OrderBy(g => g.Key)
+            .Select(g => (g.Key, new PendingTotals(g.Sum(e => e.Amount), g.Count())))];
+    }
+
+    private static Dictionary<string, IncomeCurrency> CurrencyMap(IEnumerable<LedgerSource> sources) =>
+        sources.Where(s => !s.IsTrades).ToDictionary(s => s.Key, s => s.Currency);
 
     public static PendingTotals Pending(IEnumerable<IncomeEntryDto> entries)
     {

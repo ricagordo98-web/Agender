@@ -898,6 +898,9 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("ConvertedAmount")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 

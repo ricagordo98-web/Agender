@@ -16,9 +16,7 @@ public static class WorkFormat
 
     public static string Money(double value, bool signed = true) => Money((decimal)Math.Round(value, 2), signed);
 
-    public static string Symbol(IncomeCurrency currency) => currency == IncomeCurrency.Usd ? "$" : "€";
-
-    public static string CurrencyName(IncomeCurrency currency) => currency == IncomeCurrency.Usd ? "Dólares" : "Euros";
+    public static string Symbol(IncomeCurrency currency) => IncomeCurrencies.Symbol(currency);
 
     public static string Tone(decimal value) => value > 0 ? "win" : value < 0 ? "loss" : "flat";
 
