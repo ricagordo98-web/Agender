@@ -94,6 +94,28 @@ public static class IncomeLedger
     private static Dictionary<string, IncomeCurrency> CurrencyMap(IEnumerable<LedgerSource> sources) =>
         sources.Where(s => !s.IsTrades).ToDictionary(s => s.Key, s => s.Currency);
 
+    public static IReadOnlyList<(Guid Id, decimal Converted)> Distribute(IReadOnlyList<IncomeEntryDto> entries, decimal total)
+    {
+        decimal sum = entries.Sum(e => e.Amount);
+
+        if (entries.Count == 0 || sum == 0)
+        {
+            return [];
+        }
+
+        List<(Guid Id, decimal Converted)> shares = [];
+        decimal assigned = 0;
+
+        for (int index = 0; index < entries.Count; index++)
+        {
+            decimal share = index == entries.Count - 1 ? total - assigned : Math.Round(total * entries[index].Amount / sum, 2);
+            assigned += share;
+            shares.Add((entries[index].Id, share));
+        }
+
+        return shares;
+    }
+
     public static PendingTotals Pending(IEnumerable<IncomeEntryDto> entries)
     {
         List<IncomeEntryDto> pending = [.. entries.Where(e => e.Status == IncomeEntryStatus.Pending)];

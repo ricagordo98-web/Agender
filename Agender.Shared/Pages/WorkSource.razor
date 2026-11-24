@@ -133,6 +133,23 @@
                     </div>
                 }
 
+                @if (IsForeign && WeekToConvert(selected) is { Count: > 0 } weekEntries)
+                {
+                    DateOnly weekStart = TraderStats.WeekStart(selected);
+
+                    <form class="wk-week-convert" @onsubmit="() => ConvertWeekAsync(weekEntries)" @onsubmit:preventDefault>
+                        <span class="wk-week-convert-text">
+                            <strong>Converter a semana de @WorkFormat.Week(weekStart)</strong>
+                            <small>@WorkFormat.Count(weekEntries.Count, "registo", "registos") por converter · @Money(weekEntries.Sum(e => e.Amount), signed: false). O total em € é repartido pelos registos na proporção do valor de cada um.</small>
+                        </span>
+                        <label class="wk-qa-amount wk-qa-converted">
+                            <input class="field" type="number" step="0.01" inputmode="decimal" placeholder="Recebido" aria-label="Total recebido em euros nesta semana" @bind="_weekConverted" @bind:event="oninput" />
+                            <span aria-hidden="true">€</span>
+                        </label>
+                        <button type="submit" class="btn btn-primary btn-sm" disabled="@(_busy || _weekConverted is null or 0)">Converter semana</button>
+                    </form>
+                }
+
                 @if (dayEntries.Count == 0)
                 {
                     <p class="cs-hint">Sem registos neste dia.</p>
@@ -294,6 +311,7 @@
     private decimal _monthConverted;
     private decimal? _newConverted;
     private decimal? _editConverted;
+    private decimal? _weekConverted;
     private ElementReference _convertedInput;
     private IncomeEntryStatus _newStatus = IncomeEntryStatus.Earned;
     private IncomeEntryStatus _editStatus = IncomeEntryStatus.Earned;
@@ -606,6 +624,73 @@
         {
             _busy = false;
         }
+    }
+
+    private List<IncomeEntryDto> WeekToConvert(DateOnly day)
+    {
+        DateOnly start = TraderStats.WeekStart(day);
+        return [.. _entries
+            .Where(e => e.Status == IncomeEntryStatus.Earned && e.ConvertedAmount is null && e.Date >= start && e.Date <= start.AddDays(6))
+            .OrderBy(e => e.Date)];
+    }
+
+    private async Task ConvertWeekAsync(List<IncomeEntryDto> entries)
+    {
+        if (_busy || _weekConverted is not { } total || total == 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        List<IncomeEntryDto> converted = [];
+
+        try
+        {
+            foreach ((Guid id, decimal share) in IncomeLedger.Distribute(entries, total))
+            {
+                IncomeEntryDto entry = entries.First(e => e.Id == id);
+                IncomeEntryDto updated = await IncomeService.UpdateEntryAsync(id, new IncomeEntryInput(entry.SourceId, entry.Date, entry.Amount, entry.Platform, entry.Note, entry.Status, share));
+                _entries[_entries.FindIndex(e => e.Id == id)] = updated;
+                converted.Add(entry);
+            }
+
+            _weekConverted = null;
+            Toasts.Show($"{Money(entries.Sum(e => e.Amount), signed: false)} convertidos em {WorkFormat.Money(total, signed: false)} ({WorkFormat.Count(entries.Count, "registo", "registos")}).",
+                ToastKind.Success, new ToastAction("Anular", () => UndoConversionAsync(converted)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show(converted.Count == 0 ? "Não foi possível converter a semana." : $"Só {converted.Count} de {entries.Count} registos foram convertidos.", ToastKind.Error);
+        }
+        finally
+        {
+            Recalculate();
+            _busy = false;
+        }
+    }
+
+    private async Task UndoConversionAsync(List<IncomeEntryDto> originals)
+    {
+        try
+        {
+            foreach (IncomeEntryDto original in originals)
+            {
+                IncomeEntryDto reverted = await IncomeService.UpdateEntryAsync(original.Id, new IncomeEntryInput(original.SourceId, original.Date, original.Amount, original.Platform, original.Note, original.Status, original.ConvertedAmount));
+                int index = _entries.FindIndex(e => e.Id == reverted.Id);
+
+                if (index >= 0)
+                {
+                    _entries[index] = reverted;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível anular a conversão.", ToastKind.Error);
+        }
+
+        Recalculate();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RevertStatusAsync(IncomeEntryDto original)

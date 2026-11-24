@@ -252,6 +252,10 @@
 .wk-entry-eur { font-size: 12px; font-weight: 700; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .wk-convert { padding: 0; border: 0; background: none; color: var(--pending); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
 .wk-qa-converted { flex: 0 0 140px; }
+.wk-week-convert { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px dashed color-mix(in srgb, var(--pending) 45%, var(--border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--pending) 6%, var(--surface)); }
+.wk-week-convert-text { display: grid; gap: 2px; flex: 1 1 260px; min-width: 0; }
+.wk-week-convert-text strong { font-size: 13.5px; }
+.wk-week-convert-text small { font-size: 12px; color: var(--text-muted); }
 .wk-entry-form.with-eur { grid-template-columns: 140px 100px 110px minmax(110px, 1fr) minmax(110px, 1.3fr) 110px auto auto; }
 
 .wk-sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
