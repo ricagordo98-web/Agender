@@ -1,0 +1,594 @@
+@page "/casa/contas"
+@attribute [Authorize]
+@inherits CasaPageBase
+@inject IUtilityBillService Bills
+@inject IFinanceService Finance
+
+<PageTitle>Contas · Agender</PageTitle>
+
+<div class="page">
+    <PageHeader Title="Contas da casa" Subtitle="Luz, gás, água, TV/Net e telemóvel: quanto pagam, o que falta pagar e como evolui ao longo do ano.">
+        @if (Current is not null)
+        {
+            <button type="button" class="btn btn-primary" @onclick="() => OpenNew(UtilityService.Electricity, DefaultMonth)"><Icon Name="IconName.Plus" Size="16" /> Nova conta</button>
+        }
+    </PageHeader>
+    <CasaTabs />
+
+    @if (Loading)
+    {
+        <p class="cs-muted">A carregar…</p>
+    }
+    else if (Current is null)
+    {
+        <HouseholdSetup OnReady="OnHouseholdReadyAsync" />
+    }
+    else
+    {
+        List<UtilityBill> yearBills = [.. _bills.Where(b => b.Year == _year)];
+        List<UtilityBill> unpaid = [.. _bills.Where(b => !b.IsPaid).OrderBy(b => b.DueDate ?? DateOnly.MaxValue).ThenBy(b => b.Year).ThenBy(b => b.Month)];
+        int monthsWithBills = yearBills.Select(b => b.Month).Distinct().Count();
+        decimal yearTotal = yearBills.Sum(b => b.Amount);
+        (decimal currentSpend, decimal previousSpend) = SameMonthsComparison();
+
+        <div class="fb-tabs">
+            <SegmentedControl Label="Secção das contas" Options="ViewOptions" Value="(int)_view" ValueChanged="v => _view = (BillsView)v" />
+        </div>
+
+        @if (_view == BillsView.Simulator)
+        {
+            <UtilitySimulator Tariffs="_tariffs" History="_bills" Today="Today" OnSaved="() => RefreshAsync(silent: false)" OnRegister="RegisterEstimate" />
+        }
+        else
+        {
+        <div class="ub-year">
+            <button type="button" class="icon-btn" aria-label="Ano anterior" @onclick="() => ChangeYearAsync(-1)"><Icon Name="IconName.ChevronLeft" Size="18" /></button>
+            <strong>@_year</strong>
+            <button type="button" class="icon-btn" aria-label="Ano seguinte" @onclick="() => ChangeYearAsync(1)"><Icon Name="IconName.ChevronRight" Size="18" /></button>
+            @if (_year != Today.Year)
+            {
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => ChangeYearAsync(Today.Year - _year)">Este ano</button>
+            }
+        </div>
+
+        <div class="cs-kpis">
+            <div class="card cs-kpi feature">
+                <small>Total em @_year</small>
+                <strong>@CasaCatalog.Money(yearTotal)</strong>
+                <span class="cs-muted">@(monthsWithBills == 0 ? "ainda sem contas" : $"média de {CasaCatalog.Money(yearTotal / monthsWithBills)} por mês")</span>
+            </div>
+            <div class="card cs-kpi @(unpaid.Any(b => b.IsOverdue(Today)) ? "ub-alert" : string.Empty)">
+                <small>Por pagar</small>
+                <strong>@CasaCatalog.Money(unpaid.Sum(b => b.Amount))</strong>
+                <span class="cs-muted">@UnpaidSummary(unpaid)</span>
+            </div>
+            <div class="card cs-kpi">
+                <small>Comparado com @(_year - 1)</small>
+                @if (currentSpend == 0 || previousSpend == 0)
+                {
+                    <strong>—</strong>
+                    <span class="cs-muted">sem contas de @(_year - 1) nos mesmos meses</span>
+                }
+                else
+                {
+                    decimal change = (currentSpend - previousSpend) / previousSpend;
+
+                    <strong class="@(change > 0 ? "ub-up" : "ub-down")">@Percent(change)</strong>
+                    <span class="cs-muted">@CasaCatalog.Money(currentSpend) contra @CasaCatalog.Money(previousSpend) nos mesmos meses</span>
+                }
+            </div>
+        </div>
+
+        @if (unpaid.Count > 0)
+        {
+            <section class="card ub-unpaid">
+                <header class="iv-group-head"><span class="cl-emoji small">🧾</span> <h2>Por pagar</h2> <span class="cs-muted">@unpaid.Count</span></header>
+                @foreach (UtilityBill bill in unpaid)
+                {
+                    UtilityCatalog.ServiceInfo info = UtilityCatalog.Info(bill.Service);
+
+                    <div class="ub-unpaid-row @(bill.IsOverdue(Today) ? "overdue" : string.Empty)" @key="bill.Id">
+                        <button type="button" class="ub-unpaid-main" @onclick="() => OpenEdit(bill)">
+                            <span class="cl-emoji small" style="--cl-color:@info.Color">@info.Emoji</span>
+                            <span>
+                                <strong>@info.Label · @UtilityCatalog.MonthLabel(bill.Year, bill.Month)</strong>
+                                <small>@DueLabel(bill)@(string.IsNullOrWhiteSpace(bill.Provider) ? string.Empty : $" · {bill.Provider}")</small>
+                            </span>
+                        </button>
+                        <strong class="ub-amount">@CasaCatalog.Money(bill.Amount)</strong>
+                        <button type="button" class="btn btn-sm btn-primary" disabled="@_busy" @onclick="() => MarkPaidAsync(bill)"><Icon Name="IconName.Check" Size="14" /> Paga</button>
+                    </div>
+                }
+            </section>
+        }
+
+        <section class="card ub-table-card">
+            <div class="ub-scroll">
+                <table class="ub-table">
+                    <thead>
+                        <tr>
+                            <th class="ub-service">Serviço</th>
+                            @for (int month = 1; month <= 12; month++)
+                            {
+                                <th class="@(IsNow(month) ? "now" : string.Empty)">@CasaCatalog.MonthName(month)[..3]</th>
+                            }
+                            <th>Total</th>
+                            <th>Média</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (UtilityCatalog.ServiceInfo info in UtilityCatalog.Services)
+                        {
+                            List<UtilityBill> row = [.. yearBills.Where(b => b.Service == info.Service)];
+
+                            <tr @key="info.Service">
+                                <th class="ub-service" style="--ub-color:@info.Color"><span>@info.Emoji</span> @info.Label</th>
+                                @for (int month = 1; month <= 12; month++)
+                                {
+                                    int current = month;
+                                    UtilityBill? bill = row.FirstOrDefault(b => b.Month == current);
+
+                                    <td class="@(IsNow(month) ? "now" : string.Empty)">
+                                        @if (bill is null)
+                                        {
+                                            <button type="button" class="ub-cell empty" aria-label="@($"Adicionar {info.Label} de {CasaCatalog.MonthName(month)}")" @onclick="() => OpenNew(info.Service, current)">+</button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="ub-cell @CellState(bill)" title="@CellTitle(bill)" @onclick="() => OpenEdit(bill)">@CasaCatalog.MoneyShort(bill.Amount)</button>
+                                        }
+                                    </td>
+                                }
+                                <td class="ub-sum">@(row.Count == 0 ? "—" : CasaCatalog.Money(row.Sum(b => b.Amount)))</td>
+                                <td class="ub-sum muted">@(row.Count == 0 ? "—" : CasaCatalog.Money(row.Average(b => b.Amount)))</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th class="ub-service">Total</th>
+                            @for (int month = 1; month <= 12; month++)
+                            {
+                                int current = month;
+                                decimal total = yearBills.Where(b => b.Month == current).Sum(b => b.Amount);
+
+                                <td class="@(IsNow(month) ? "now" : string.Empty)">@(total == 0 ? "—" : CasaCatalog.MoneyShort(total))</td>
+                            }
+                            <td class="ub-sum">@CasaCatalog.Money(yearTotal)</td>
+                            <td class="ub-sum muted">@(monthsWithBills == 0 ? "—" : CasaCatalog.Money(yearTotal / monthsWithBills))</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="cs-hint">Carrega numa célula para registar ou editar a conta. <span class="ub-legend unpaid"></span> por pagar · <span class="ub-legend overdue"></span> em atraso. As contas pagas entram nos Movimentos das Finanças, em «Contas da casa».</p>
+        </section>
+
+        @if (yearBills.Count > 0)
+        {
+            <div class="ub-insights">
+                @foreach (UtilityCatalog.ServiceInfo info in UtilityCatalog.Services)
+                {
+                    List<UtilityBill> history = [.. _bills.Where(b => b.Service == info.Service).OrderBy(b => b.Year).ThenBy(b => b.Month)];
+                    UtilityBill? last = history.LastOrDefault(b => b.Year == _year);
+
+                    if (last is not null)
+                    {
+                        UtilityBill? before = history.LastOrDefault(b => Key(b) < Key(last));
+                        UtilityBill? lastYear = history.FirstOrDefault(b => b.Year == last.Year - 1 && b.Month == last.Month);
+                        List<UtilityBill> measured = [.. history.Where(b => b.Year == _year && b.Consumption is > 0)];
+
+                        <section class="card ub-insight" style="--ub-color:@info.Color" @key="info.Service">
+                            <header class="iv-group-head"><span class="cl-emoji small" style="--cl-color:@info.Color">@info.Emoji</span> <h2>@info.Label</h2> <span class="cs-muted">@last.Provider</span></header>
+                            <div class="ub-insight-main">
+                                <strong>@CasaCatalog.Money(last.Amount)</strong>
+                                <span class="cs-muted">em @UtilityCatalog.MonthLabel(last.Year, last.Month)@(last.Consumption is { } lastUsed && info.Unit is not null ? $" · {CasaCatalog.Quantity(lastUsed)} {info.Unit}" : string.Empty)</span>
+                            </div>
+                            <ul class="ub-insight-list">
+                                @if (before is not null)
+                                {
+                                    <li>@Trend(last.Amount, before.Amount) face a @CasaCatalog.MonthName(before.Month).ToLower(CasaCatalog.Culture) (@CasaCatalog.Money(before.Amount))</li>
+                                }
+                                @if (lastYear is not null)
+                                {
+                                    <li>@Trend(last.Amount, lastYear.Amount) face ao mesmo mês de @lastYear.Year (@CasaCatalog.Money(lastYear.Amount))</li>
+                                }
+                                @if (info.Unit is not null && measured.Count > 0)
+                                {
+                                    decimal used = measured.Sum(b => b.Consumption!.Value);
+
+                                    <li>Média de @CasaCatalog.Quantity(Math.Round(used / measured.Count, 1)) @info.Unit por conta · @PricePerUnit(measured.Sum(b => b.Amount), used, info.Unit)</li>
+                                }
+                            </ul>
+                        </section>
+                    }
+                }
+            </div>
+        }
+
+        }
+
+        @if (_edit is not null)
+        {
+            UtilityCatalog.ServiceInfo editInfo = UtilityCatalog.Info(_edit.Service);
+
+            <Modal Title="@(_isNew ? "Nova conta" : $"{editInfo.Label} · {UtilityCatalog.MonthLabel(_edit.Year, _edit.Month)}")" OnClose="CloseEdit" OnSubmit="SaveAsync">
+                <ChildContent>
+                    <div class="cs-field">
+                        <span>Serviço</span>
+                        <div class="cs-chips" role="radiogroup" aria-label="Serviço">
+                            @foreach (UtilityCatalog.ServiceInfo info in UtilityCatalog.Services)
+                            {
+                                <button type="button" role="radio" class="cs-chip @(_edit.Service == info.Service ? "on" : string.Empty)" aria-checked="@(_edit.Service == info.Service ? "true" : "false")" @onclick="() => ChangeService(info.Service)">@info.Emoji @info.Label</button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="cs-two">
+                        <label class="cs-field">Mês
+                            <select class="field" @bind="_edit.Month">
+                                @for (int month = 1; month <= 12; month++)
+                                {
+                                    <option value="@month">@CasaCatalog.MonthName(month)</option>
+                                }
+                            </select>
+                        </label>
+                        <label class="cs-field">Ano
+                            <input class="field" type="number" min="2000" max="2100" @bind="_edit.Year" />
+                        </label>
+                    </div>
+
+                    <div class="cs-two">
+                        <label class="cs-field">Valor (€)
+                            <input class="field" type="number" step="0.01" min="0" inputmode="decimal" @bind="_edit.Amount" @bind:event="oninput" autofocus />
+                        </label>
+                        @if (editInfo.Unit is not null)
+                        {
+                            <label class="cs-field">Consumo (@editInfo.Unit, opcional)
+                                <input class="field" type="number" step="0.01" min="0" inputmode="decimal" @bind="_edit.Consumption" @bind:event="oninput" />
+                            </label>
+                        }
+                    </div>
+
+                    @if (EditComparison() is string comparison)
+                    {
+                        <p class="cs-hint">@comparison</p>
+                    }
+
+                    <div class="cs-two">
+                        <label class="cs-field">Fornecedor (opcional)
+                            <input class="field" maxlength="@UtilityBill.ProviderMaxLength" list="ub-providers" placeholder="Ex.: EDP, Galp, MEO" @bind="_edit.Provider" />
+                            <datalist id="ub-providers">
+                                @foreach (string provider in Providers(_edit.Service))
+                                {
+                                    <option value="@provider"></option>
+                                }
+                            </datalist>
+                        </label>
+                        <label class="cs-field">Data limite (opcional)
+                            <input class="field" type="date" @bind="_edit.DueDate" />
+                        </label>
+                    </div>
+
+                    <label class="cs-check">
+                        <input type="checkbox" checked="@_editPaid" @onchange="e => TogglePaid(e.Value is true)" />
+                        Já está paga
+                    </label>
+
+                    @if (_editPaid)
+                    {
+                        <div class="cs-two">
+                            <label class="cs-field">Paga em
+                                <input class="field" type="date" @bind="_editPaidOn" />
+                            </label>
+                            <label class="cs-field">Paga por (opcional)
+                                <select class="field" @bind="_edit.PersonId">
+                                    <option value="">—</option>
+                                    @foreach (FinancePerson person in _people)
+                                    {
+                                        <option value="@person.Id">@person.Name</option>
+                                    }
+                                </select>
+                            </label>
+                        </div>
+                        <p class="cs-hint">Entra nos Movimentos das Finanças como despesa em «Contas da casa». Se a desmarcares ou eliminares, a despesa sai de lá também.</p>
+                    }
+
+                    <label class="cs-field">Nota (opcional)
+                        <input class="field" maxlength="@UtilityBill.NoteMaxLength" @bind="_edit.Note" />
+                    </label>
+                </ChildContent>
+                <Footer>
+                    @if (!_isNew)
+                    {
+                        <button type="button" class="btn btn-danger" disabled="@_busy" @onclick="DeleteAsync"><Icon Name="IconName.Trash" Size="16" /> Eliminar</button>
+                    }
+                    <span class="spacer"></span>
+                    <button type="button" class="btn btn-ghost" @onclick="CloseEdit">Cancelar</button>
+                    <button type="button" class="btn btn-primary" disabled="@(_busy || _edit.Amount <= 0)" @onclick="SaveAsync">Guardar</button>
+                </Footer>
+            </Modal>
+        }
+    }
+</div>
+
+@code {
+    private enum BillsView { Bills, Simulator }
+
+    private static readonly IReadOnlyList<SegmentedControl.SegmentOption> ViewOptions =
+        [new((int)BillsView.Bills, "Contas"), new((int)BillsView.Simulator, "Simulador de luz e gás")];
+
+    private BillsView _view = BillsView.Bills;
+    private List<UtilityTariff> _tariffs = [];
+    private List<UtilityBill> _bills = [];
+    private IReadOnlyList<FinancePerson> _people = [];
+    private int _year = DateTime.Today.Year;
+    private UtilityBill? _edit;
+    private bool _isNew;
+    private bool _editPaid;
+    private DateOnly _editPaidOn;
+    private bool _busy;
+
+    protected override bool IsEditing => _edit is not null;
+
+    private static DateOnly Today => DateOnly.FromDateTime(DateTime.Now);
+
+    private int DefaultMonth => _year == Today.Year ? Today.Month : 1;
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        _bills = await Bills.GetAsync(_year - 1, _year, cancellationToken);
+        _people = await Finance.GetPeopleAsync(cancellationToken);
+        _tariffs = await Bills.GetTariffsAsync(cancellationToken);
+    }
+
+    private void RegisterEstimate((UtilityService Service, decimal Amount, decimal Consumption) estimate)
+    {
+        UtilityBill? existing = _bills.FirstOrDefault(b => b.Service == estimate.Service && b.Year == Today.Year && b.Month == Today.Month);
+
+        if (existing is not null)
+        {
+            OpenEdit(existing);
+        }
+        else
+        {
+            OpenNew(estimate.Service, Today.Month);
+            _edit!.Year = Today.Year;
+        }
+
+        _edit!.Amount = estimate.Amount;
+        _edit.Consumption = estimate.Consumption;
+    }
+
+    private async Task ChangeYearAsync(int delta)
+    {
+        _year += delta;
+        await RefreshAsync(silent: false);
+    }
+
+    private bool IsNow(int month) => _year == Today.Year && month == Today.Month;
+
+    private static int Key(UtilityBill bill) => bill.Year * 12 + bill.Month;
+
+    private (decimal Current, decimal Previous) SameMonthsComparison()
+    {
+        HashSet<int> previousMonths = [.. _bills.Where(b => b.Year == _year - 1).Select(b => b.Month)];
+        List<int> months = [.. _bills.Where(b => b.Year == _year && previousMonths.Contains(b.Month)).Select(b => b.Month).Distinct()];
+
+        return (_bills.Where(b => b.Year == _year && months.Contains(b.Month)).Sum(b => b.Amount),
+                _bills.Where(b => b.Year == _year - 1 && months.Contains(b.Month)).Sum(b => b.Amount));
+    }
+
+    private static string Percent(decimal change) =>
+        (change > 0 ? "+" : string.Empty) + change.ToString("0.#%", CasaCatalog.Culture);
+
+    private static string Trend(decimal current, decimal previous)
+    {
+        if (previous == 0 || current == previous)
+        {
+            return "Igual";
+        }
+
+        decimal change = (current - previous) / previous;
+        return $"{(change > 0 ? "▲" : "▼")} {Math.Abs(change).ToString("0.#%", CasaCatalog.Culture)}";
+    }
+
+    private static string PricePerUnit(decimal amount, decimal used, string unit) =>
+        used == 0 ? string.Empty : $"{(amount / used).ToString("0.000", CasaCatalog.Culture)} €/{unit} (com taxas)";
+
+    private string UnpaidSummary(List<UtilityBill> unpaid)
+    {
+        if (unpaid.Count == 0)
+        {
+            return "tudo pago";
+        }
+
+        int overdue = unpaid.Count(b => b.IsOverdue(Today));
+        string count = unpaid.Count == 1 ? "1 conta" : $"{unpaid.Count} contas";
+        return overdue == 0 ? count : $"{count} · {overdue} em atraso";
+    }
+
+    private static string DueLabel(UtilityBill bill)
+    {
+        if (bill.DueDate is not { } due)
+        {
+            return "sem data limite";
+        }
+
+        int days = due.DayNumber - Today.DayNumber;
+
+        return days switch
+        {
+            < 0 => $"em atraso há {-days} {(days == -1 ? "dia" : "dias")}",
+            0 => "termina hoje",
+            1 => "termina amanhã",
+            _ => $"até {due.ToString("d MMM", CasaCatalog.Culture)} (faltam {days} dias)"
+        };
+    }
+
+    private static string CellState(UtilityBill bill) =>
+        bill.IsPaid ? "paid" : bill.IsOverdue(Today) ? "overdue" : "unpaid";
+
+    private static string CellTitle(UtilityBill bill)
+    {
+        string state = bill.PaidOn is { } paid ? $"paga a {paid.ToString("d MMM", CasaCatalog.Culture)}" : DueLabel(bill);
+        UtilityCatalog.ServiceInfo info = UtilityCatalog.Info(bill.Service);
+        string usage = bill.Consumption is { } used && info.Unit is not null ? $" · {CasaCatalog.Quantity(used)} {info.Unit}" : string.Empty;
+        return $"{CasaCatalog.Money(bill.Amount)}{usage} · {state}";
+    }
+
+    private IEnumerable<string> Providers(UtilityService service) =>
+        _bills.Where(b => b.Service == service && !string.IsNullOrWhiteSpace(b.Provider)).Select(b => b.Provider!).Distinct();
+
+    private string? LastProvider(UtilityService service) =>
+        _bills.Where(b => b.Service == service && !string.IsNullOrWhiteSpace(b.Provider)).OrderBy(Key).Select(b => b.Provider).LastOrDefault();
+
+    private string? EditComparison()
+    {
+        if (_edit is null || _edit.Amount <= 0)
+        {
+            return null;
+        }
+
+        int key = Key(_edit);
+        UtilityBill? before = _bills.Where(b => b.Service == _edit.Service && b.Id != _edit.Id && Key(b) < key).OrderBy(Key).LastOrDefault();
+        UtilityBill? lastYear = _bills.FirstOrDefault(b => b.Service == _edit.Service && b.Id != _edit.Id && b.Year == _edit.Year - 1 && b.Month == _edit.Month);
+        List<string> parts = [];
+
+        if (before is not null)
+        {
+            parts.Add($"{Trend(_edit.Amount, before.Amount)} face a {CasaCatalog.MonthName(before.Month).ToLower(CasaCatalog.Culture)} ({CasaCatalog.Money(before.Amount)})");
+        }
+
+        if (lastYear is not null)
+        {
+            parts.Add($"{Trend(_edit.Amount, lastYear.Amount)} face a {lastYear.Year} ({CasaCatalog.Money(lastYear.Amount)})");
+        }
+
+        return parts.Count == 0 ? null : string.Join(" · ", parts);
+    }
+
+    private void OpenNew(UtilityService service, int month)
+    {
+        _isNew = true;
+        _edit = new UtilityBill { Id = Guid.Empty, Service = service, Year = _year, Month = month, Provider = LastProvider(service) };
+        _editPaid = false;
+        _editPaidOn = Today;
+    }
+
+    private void OpenEdit(UtilityBill bill)
+    {
+        _isNew = false;
+        _edit = new UtilityBill
+        {
+            Id = bill.Id,
+            Service = bill.Service,
+            Year = bill.Year,
+            Month = bill.Month,
+            Amount = bill.Amount,
+            Consumption = bill.Consumption,
+            Provider = bill.Provider,
+            DueDate = bill.DueDate,
+            PaidOn = bill.PaidOn,
+            PersonId = bill.PersonId,
+            Note = bill.Note
+        };
+        _editPaid = bill.IsPaid;
+        _editPaidOn = bill.PaidOn ?? Today;
+    }
+
+    private void CloseEdit() => _edit = null;
+
+    private void ChangeService(UtilityService service)
+    {
+        if (_edit is null)
+        {
+            return;
+        }
+
+        if (_isNew && (string.IsNullOrWhiteSpace(_edit.Provider) || _edit.Provider == LastProvider(_edit.Service)))
+        {
+            _edit.Provider = LastProvider(service);
+        }
+
+        _edit.Service = service;
+
+        if (UtilityCatalog.Info(service).Unit is null)
+        {
+            _edit.Consumption = null;
+        }
+    }
+
+    private void TogglePaid(bool paid)
+    {
+        _editPaid = paid;
+
+        if (paid && _edit?.PaidOn is null)
+        {
+            _editPaidOn = Today;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_edit is null || _busy || _edit.Amount <= 0)
+        {
+            return;
+        }
+
+        if (_bills.Any(b => b.Id != _edit.Id && b.Service == _edit.Service && b.Year == _edit.Year && b.Month == _edit.Month))
+        {
+            Toasts.Show($"Já existe uma conta de {UtilityCatalog.Info(_edit.Service).Label} em {UtilityCatalog.MonthLabel(_edit.Year, _edit.Month)}.", ToastKind.Error);
+            return;
+        }
+
+        UtilityBill bill = _edit;
+        bill.PaidOn = _editPaid ? _editPaidOn : null;
+        bill.PersonId = _editPaid ? bill.PersonId : null;
+        _busy = true;
+
+        bool saved = _isNew
+            ? await RunAsync(() => Bills.CreateAsync(bill, Cancellation), "Conta registada.")
+            : await RunAsync(() => Bills.UpdateAsync(bill, Cancellation), "Conta atualizada.");
+
+        if (saved)
+        {
+            _edit = null;
+        }
+
+        _busy = false;
+    }
+
+    private async Task MarkPaidAsync(UtilityBill bill)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        OpenEdit(bill);
+        UtilityBill changed = _edit!;
+        _edit = null;
+        changed.PaidOn = Today;
+        _busy = true;
+        await RunAsync(() => Bills.UpdateAsync(changed, Cancellation), $"{UtilityCatalog.Info(bill.Service).Label} de {UtilityCatalog.MonthLabel(bill.Year, bill.Month)} paga.");
+        _busy = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_edit is null || _busy)
+        {
+            return;
+        }
+
+        Guid id = _edit.Id;
+        _busy = true;
+
+        if (await RunAsync(() => Bills.DeleteAsync(id, Cancellation), "Conta eliminada."))
+        {
+            _edit = null;
+        }
+
+        _busy = false;
+    }
+}

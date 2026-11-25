@@ -50,5 +50,6 @@ public enum IconName
     Heart,
     Sparkles,
     Utensils,
-    Bell
+    Bell,
+    Zap
 }

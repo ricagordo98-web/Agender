@@ -111,6 +111,10 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
 
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
 
+    public DbSet<UtilityBill> UtilityBills => Set<UtilityBill>();
+
+    public DbSet<UtilityTariff> UtilityTariffs => Set<UtilityTariff>();
+
     public DbSet<FinanceTransaction> FinanceTransactions => Set<FinanceTransaction>();
 
     public DbSet<SavingsGoal> SavingsGoals => Set<SavingsGoal>();
@@ -559,6 +563,24 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             entity.Property(i => i.Unit).HasMaxLength(InventoryItem.UnitMaxLength);
             entity.Property(i => i.Category).HasMaxLength(60);
             entity.HasIndex(i => i.HouseholdId);
+        });
+
+        modelBuilder.Entity<UtilityBill>(entity =>
+        {
+            entity.HasKey(b => b.Id);
+            entity.Property(b => b.Service).HasConversion<string>().HasMaxLength(20);
+            entity.Property(b => b.Provider).HasMaxLength(UtilityBill.ProviderMaxLength);
+            entity.Property(b => b.Note).HasMaxLength(UtilityBill.NoteMaxLength);
+            entity.Ignore(b => b.IsPaid);
+            entity.HasIndex(b => new { b.HouseholdId, b.Service, b.Year, b.Month }).IsUnique();
+        });
+
+        modelBuilder.Entity<UtilityTariff>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Service).HasConversion<string>().HasMaxLength(20);
+            entity.Property(t => t.Source).HasMaxLength(UtilityTariff.SourceMaxLength);
+            entity.HasIndex(t => new { t.HouseholdId, t.Service }).IsUnique();
         });
 
         modelBuilder.Entity<FinanceTransaction>(entity =>

@@ -92,6 +92,21 @@ public interface IInventoryService
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
+public interface IUtilityBillService
+{
+    Task<List<UtilityBill>> GetAsync(int fromYear, int toYear, CancellationToken cancellationToken = default);
+
+    Task<UtilityBill> CreateAsync(UtilityBill bill, CancellationToken cancellationToken = default);
+
+    Task<UtilityBill> UpdateAsync(UtilityBill bill, CancellationToken cancellationToken = default);
+
+    Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<List<UtilityTariff>> GetTariffsAsync(CancellationToken cancellationToken = default);
+
+    Task<UtilityTariff> SaveTariffAsync(UtilityTariff tariff, CancellationToken cancellationToken = default);
+}
+
 public interface IMealService
 {
     Task<MealWeekOverview> GetWeekAsync(DateOnly weekStart, CancellationToken cancellationToken = default);

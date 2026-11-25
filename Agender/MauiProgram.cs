@@ -53,6 +53,7 @@ public static class MauiProgram
         builder.Services.AddScoped<ICleaningService, ApiCleaningService>();
         builder.Services.AddScoped<IMealService, ApiMealService>();
         builder.Services.AddScoped<IInventoryService, ApiInventoryService>();
+        builder.Services.AddScoped<IUtilityBillService, ApiUtilityBillService>();
         builder.Services.AddScoped<IMealSettingsService, ApiMealSettingsService>();
         builder.Services.AddScoped<IDailyReminderService, ApiDailyReminderService>();
         builder.Services.AddScoped<IDatabaseImportService, ApiDatabaseImportService>();

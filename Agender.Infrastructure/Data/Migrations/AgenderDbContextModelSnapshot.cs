@@ -1847,6 +1847,122 @@ namespace Agender.Infrastructure.Data.Migrations
                     b.ToTable("UserSettings");
                 });
 
+            modelBuilder.Entity("Agender.Shared.Domain.UtilityBill", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Consumption")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("PaidOn")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("PersonId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Service")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TransactionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseholdId", "Service", "Year", "Month")
+                        .IsUnique();
+
+                    b.ToTable("UtilityBills");
+                });
+
+            modelBuilder.Entity("Agender.Shared.Domain.UtilityTariff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ConversionFactor")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EnergyPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EnergyTax")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("FixedDaily")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("HouseholdId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("MonthlyFees")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PeriodDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Service")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("StartReading")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("VatEnergy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("VatFixed")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseholdId", "Service")
+                        .IsUnique();
+
+                    b.ToTable("UtilityTariffs");
+                });
+
             modelBuilder.Entity("Agender.Shared.Domain.WeddingCategory", b =>
                 {
                     b.Property<Guid>("Id")

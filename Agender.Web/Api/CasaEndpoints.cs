@@ -50,6 +50,7 @@ public static class CasaEndpoints
         MapCleaning(group.MapGroup("/cleaning"));
         MapMeals(group.MapGroup("/meals"));
         MapInventory(group.MapGroup("/inventory"));
+        MapUtilityBills(group.MapGroup("/utilities"));
         MapMealSettings(group.MapGroup("/meal-settings"));
         MapDailyReminders(group.MapGroup("/daily"));
     }
@@ -146,6 +147,29 @@ public static class CasaEndpoints
         });
 
         group.MapDelete("/{id:guid}", async (Guid id, IInventoryService service, CancellationToken ct) =>
+        {
+            await service.DeleteAsync(id, ct);
+            return Results.NoContent();
+        });
+    }
+
+    private static void MapUtilityBills(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (int fromYear, int toYear, IUtilityBillService service, CancellationToken ct) => await service.GetAsync(fromYear, toYear, ct));
+
+        group.MapGet("/tariffs", async (IUtilityBillService service, CancellationToken ct) => await service.GetTariffsAsync(ct));
+
+        group.MapPut("/tariffs", async (UtilityTariff tariff, IUtilityBillService service, CancellationToken ct) => await service.SaveTariffAsync(tariff, ct));
+
+        group.MapPost("/", async (UtilityBill bill, IUtilityBillService service, CancellationToken ct) => await service.CreateAsync(bill, ct));
+
+        group.MapPut("/{id:guid}", async (Guid id, UtilityBill bill, IUtilityBillService service, CancellationToken ct) =>
+        {
+            EnsureSameId(id, bill.Id);
+            return await service.UpdateAsync(bill, ct);
+        });
+
+        group.MapDelete("/{id:guid}", async (Guid id, IUtilityBillService service, CancellationToken ct) =>
         {
             await service.DeleteAsync(id, ct);
             return Results.NoContent();

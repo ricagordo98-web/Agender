@@ -1,0 +1,298 @@
+@inject IUtilityBillService Bills
+@inject IToastService Toasts
+
+<section class="ub-sim">
+    <div class="cs-chips" role="radiogroup" aria-label="Simular conta de">
+        @foreach (UtilityService service in UtilityCalculator.Simulated)
+        {
+            UtilityCatalog.ServiceInfo info = UtilityCatalog.Info(service);
+
+            <button type="button" role="radio" class="cs-chip @(_service == service ? "on" : string.Empty)" aria-checked="@(_service == service ? "true" : "false")" @onclick="() => Select(service)">@info.Emoji @info.Label</button>
+        }
+    </div>
+
+    <div class="ub-sim-grid">
+        <div class="card ub-sim-inputs">
+            <h2>Consumo</h2>
+            <div class="cs-two">
+                <label class="cs-field">Leitura no início do período (@ReadingUnit)
+                    <input class="field" type="number" step="any" min="0" inputmode="decimal" @bind="_start" @bind:event="oninput" />
+                </label>
+                <label class="cs-field">Leitura atual (@ReadingUnit)
+                    <input class="field" type="number" step="any" min="0" inputmode="decimal" @bind="_current" @bind:event="oninput" autofocus />
+                </label>
+                <label class="cs-field">Dias decorridos
+                    <input class="field" type="number" min="1" max="@UtilityTariff.MaxPeriodDays" @bind="_elapsed" @bind:event="oninput" />
+                </label>
+                <label class="cs-field">Dias do período de faturação
+                    <input class="field" type="number" min="1" max="@UtilityTariff.MaxPeriodDays" @bind="_period" @bind:event="oninput" />
+                </label>
+            </div>
+            <p class="cs-hint">
+                @if (Stored(_service) is { StartReading: { } reading, StartDate: { } date })
+                {
+                    <span>A leitura inicial guardada é @CasaCatalog.Quantity(reading) @ReadingUnit, de @date.ToString("d MMM", CasaCatalog.Culture). Se enviaste uma leitura real, usa essa.</span>
+                }
+                else
+                {
+                    <span>Usa a leitura em que começa o período da tua última fatura (real ou estimada). Ao guardar, fica para a próxima vez.</span>
+                }
+            </p>
+            <button type="button" class="btn btn-ghost btn-sm" disabled="@_busy" @onclick="SaveAsync">Guardar leitura inicial e preços</button>
+        </div>
+
+        <div class="ub-sim-result">
+            @if (Estimate is { } estimate)
+            {
+                <div class="card ub-sim-hero" style="--ub-color:@Info.Color">
+                    <small>Fatura estimada para o período completo</small>
+                    <strong>@CasaCatalog.Money(estimate.Total)</strong>
+                    <span>com cerca de @Kwh(estimate.ProjectedKwh) kWh em @_period dias</span>
+                    @if (LastBill is { } last)
+                    {
+                        <span class="ub-sim-compare">@CompareWithLast(estimate.Total, last)</span>
+                    }
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="RegisterAsync"><Icon Name="IconName.Plus" Size="14" /> Registar como conta deste mês</button>
+                </div>
+
+                <div class="card ub-sim-detail">
+                    <h2>Detalhe</h2>
+                    <dl>
+                        <dt>Consumo até hoje</dt>
+                        <dd>@(IsGas ? $"{CasaCatalog.Quantity(estimate.UsedUnits)} m³ = {Kwh(estimate.UsedKwh)} kWh" : $"{Kwh(estimate.UsedKwh)} kWh")</dd>
+                        <dt>Média diária</dt>
+                        <dd>@estimate.DailyKwh.ToString("0.0", CasaCatalog.Culture) kWh/dia</dd>
+                        <dt>Custo até hoje</dt>
+                        <dd>@CasaCatalog.Money(estimate.CostToDate)</dd>
+                        <dt class="ub-sim-sep">Energia (@Kwh(estimate.ProjectedKwh) kWh × @Price(_tariff.EnergyPrice) €)</dt>
+                        <dd class="ub-sim-sep">@CasaCatalog.Money(estimate.Energy)</dd>
+                        @if (estimate.EnergyTax > 0)
+                        {
+                            <dt>Imposto especial de consumo</dt>
+                            <dd>@CasaCatalog.Money(estimate.EnergyTax)</dd>
+                        }
+                        <dt>@FixedLabel (@_period dias × @Price(_tariff.FixedDaily) €)</dt>
+                        <dd>@CasaCatalog.Money(estimate.Fixed)</dd>
+                        <dt>IVA</dt>
+                        <dd>@CasaCatalog.Money(estimate.Vat)</dd>
+                        @if (estimate.Fees > 0)
+                        {
+                            <dt>Taxas fixas</dt>
+                            <dd>@CasaCatalog.Money(estimate.Fees)</dd>
+                        }
+                        <dt class="ub-sim-total">Total estimado</dt>
+                        <dd class="ub-sim-total">@CasaCatalog.Money(estimate.Total)</dd>
+                    </dl>
+                </div>
+            }
+            else
+            {
+                <div class="card ub-sim-empty">
+                    <span class="ml-empty-emoji">@Info.Emoji</span>
+                    <strong>Escreve a leitura atual do contador</strong>
+                    <span class="cs-muted">@(_current is { } current && current < (_start ?? 0) ? "A leitura atual tem de ser maior do que a inicial." : "A estimativa aparece aqui, com o detalhe de cada parcela.")</span>
+                </div>
+            }
+        </div>
+    </div>
+
+    <details class="card ub-sim-prices" open="@(Stored(_service) is null)">
+        <summary><strong>Preços da fatura de @Info.Label.ToLower(CasaCatalog.Culture)</strong> <span class="cs-muted">@(Stored(_service)?.Source ?? "valores de exemplo, copia os da tua fatura")</span></summary>
+        <div class="ub-sim-fields">
+            <label class="cs-field">Preço da energia (€/kWh, sem IVA)
+                <input class="field" type="number" step="any" min="0" @bind="_tariff.EnergyPrice" @bind:event="oninput" />
+            </label>
+            <label class="cs-field">@FixedLabel (€/dia, sem IVA)
+                <input class="field" type="number" step="any" min="0" @bind="_tariff.FixedDaily" @bind:event="oninput" />
+            </label>
+            <label class="cs-field">Imposto especial de consumo (€/kWh)
+                <input class="field" type="number" step="any" min="0" @bind="_tariff.EnergyTax" @bind:event="oninput" />
+            </label>
+            @if (IsGas)
+            {
+                <label class="cs-field">Fator de conversão (kWh por m³)
+                    <input class="field" type="number" step="any" min="0" @bind="_tariff.ConversionFactor" @bind:event="oninput" />
+                </label>
+            }
+            <label class="cs-field">IVA da energia (%)
+                <input class="field" type="number" step="any" min="0" max="100" @bind="_tariff.VatEnergy" @bind:event="oninput" />
+            </label>
+            <label class="cs-field">IVA do @FixedLabel.ToLower(CasaCatalog.Culture) (%)
+                <input class="field" type="number" step="any" min="0" max="100" @bind="_tariff.VatFixed" @bind:event="oninput" />
+            </label>
+            <label class="cs-field">Taxas fixas por mês, com IVA (€)
+                <input class="field" type="number" step="any" min="0" @bind="_tariff.MonthlyFees" @bind:event="oninput" />
+                <small class="cs-hint">@(IsGas ? "Ex.: taxa de ocupação do subsolo, se vier à parte." : "Ex.: contribuição audiovisual e taxa DGEG.")</small>
+            </label>
+            <label class="cs-field">De onde vêm estes preços
+                <input class="field" maxlength="@UtilityTariff.SourceMaxLength" placeholder="Ex.: fatura de 24 nov 2026" @bind="_tariff.Source" />
+            </label>
+        </div>
+        <div class="ub-sim-actions">
+            <button type="button" class="btn btn-ghost btn-sm" @onclick="ResetPrices">Repor valores de exemplo</button>
+            <button type="button" class="btn btn-primary btn-sm" disabled="@_busy" @onclick="SaveAsync">Guardar preços</button>
+        </div>
+    </details>
+</section>
+
+@code {
+    private UtilityService _service = UtilityService.Electricity;
+    private UtilityTariff _tariff = UtilityCalculator.Default(UtilityService.Electricity);
+    private decimal? _start;
+    private decimal? _current;
+    private int _elapsed = 1;
+    private int _period = 30;
+    private bool _busy;
+    private bool _ready;
+
+    [Parameter]
+    public IReadOnlyList<UtilityTariff> Tariffs { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<UtilityBill> History { get; set; } = [];
+
+    [Parameter]
+    public DateOnly Today { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    [Parameter]
+    public EventCallback<(UtilityService Service, decimal Amount, decimal Consumption)> OnRegister { get; set; }
+
+    private UtilityCatalog.ServiceInfo Info => UtilityCatalog.Info(_service);
+
+    private bool IsGas => _service == UtilityService.Gas;
+
+    private string ReadingUnit => IsGas ? "m³" : "kWh";
+
+    private string FixedLabel => IsGas ? "Termo fixo" : "Termo de potência";
+
+    private UtilityEstimate? Estimate =>
+        _current is { } current && _start is { } start
+            ? UtilityCalculator.Estimate(_tariff, start, current, _elapsed, _period)
+            : null;
+
+    private UtilityBill? LastBill =>
+        History.Where(b => b.Service == _service).OrderBy(b => b.Year).ThenBy(b => b.Month).LastOrDefault();
+
+    protected override void OnParametersSet()
+    {
+        if (!_ready)
+        {
+            _ready = true;
+            Load(_service);
+        }
+    }
+
+    private UtilityTariff? Stored(UtilityService service) => Tariffs.FirstOrDefault(t => t.Service == service);
+
+    private void Select(UtilityService service)
+    {
+        if (_service != service)
+        {
+            _service = service;
+            Load(service);
+        }
+    }
+
+    private void Load(UtilityService service)
+    {
+        UtilityTariff source = Stored(service) ?? UtilityCalculator.Default(service);
+        _tariff = Copy(source);
+        _start = source.StartReading;
+        _current = null;
+        _period = source.PeriodDays;
+        _elapsed = source.StartDate is { } date ? Math.Clamp(Today.DayNumber - date.DayNumber, 1, UtilityTariff.MaxPeriodDays) : 1;
+    }
+
+    private void ResetPrices()
+    {
+        UtilityTariff defaults = UtilityCalculator.Default(_service);
+        _tariff.EnergyPrice = defaults.EnergyPrice;
+        _tariff.EnergyTax = defaults.EnergyTax;
+        _tariff.FixedDaily = defaults.FixedDaily;
+        _tariff.ConversionFactor = defaults.ConversionFactor;
+        _tariff.MonthlyFees = defaults.MonthlyFees;
+        _tariff.VatEnergy = defaults.VatEnergy;
+        _tariff.VatFixed = defaults.VatFixed;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        UtilityTariff tariff = Copy(_tariff);
+        tariff.Service = _service;
+        tariff.StartReading = _start;
+        tariff.StartDate = _start is null ? null : Today.AddDays(-Math.Max(_elapsed, 0));
+        tariff.PeriodDays = Math.Clamp(_period, 1, UtilityTariff.MaxPeriodDays);
+        _busy = true;
+
+        try
+        {
+            await Bills.SaveTariffAsync(tariff);
+            Toasts.Show($"Simulador de {Info.Label.ToLower(CasaCatalog.Culture)} guardado.", ToastKind.Success);
+            await OnSaved.InvokeAsync();
+        }
+        catch (ArgumentException)
+        {
+            Toasts.Show("Confirma os valores: há preços, leituras ou dias fora do normal.", ToastKind.Error);
+        }
+        catch (Exception ex) when (ex is NotFoundException or PersistenceException or ServerUnavailableException or UnauthorizedAccessException)
+        {
+            Toasts.Show("Não foi possível guardar o simulador.", ToastKind.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RegisterAsync()
+    {
+        if (Estimate is not { } estimate)
+        {
+            return;
+        }
+
+        decimal factor = _tariff.ConversionFactor > 0 ? _tariff.ConversionFactor : 1;
+        await OnRegister.InvokeAsync((_service, estimate.Total, Math.Round(estimate.ProjectedKwh / factor, 2)));
+    }
+
+    private static string Kwh(decimal value) => Math.Round(value).ToString("0", CasaCatalog.Culture);
+
+    private static string Price(decimal value) => value.ToString("0.0000", CasaCatalog.Culture);
+
+    private static string CompareWithLast(decimal total, UtilityBill last)
+    {
+        string when = $"{CasaCatalog.MonthName(last.Month).ToLower(CasaCatalog.Culture)} {last.Year}";
+
+        if (last.Amount == 0 || total == last.Amount)
+        {
+            return $"Igual à última conta ({when})";
+        }
+
+        decimal change = (total - last.Amount) / last.Amount;
+        return $"{(change > 0 ? "▲" : "▼")} {Math.Abs(change).ToString("0.#%", CasaCatalog.Culture)} face à última conta ({when}: {CasaCatalog.Money(last.Amount)})";
+    }
+
+    private static UtilityTariff Copy(UtilityTariff source) => new()
+    {
+        Service = source.Service,
+        EnergyPrice = source.EnergyPrice,
+        EnergyTax = source.EnergyTax,
+        FixedDaily = source.FixedDaily,
+        ConversionFactor = source.ConversionFactor,
+        MonthlyFees = source.MonthlyFees,
+        VatEnergy = source.VatEnergy,
+        VatFixed = source.VatFixed,
+        StartReading = source.StartReading,
+        StartDate = source.StartDate,
+        PeriodDays = source.PeriodDays,
+        Source = source.Source
+    };
+}
