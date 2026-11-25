@@ -132,7 +132,8 @@
         }
         else
         {
-            SelectAll();
+            _selected.Add(IncomeLedger.TradesKey);
+            _selected.UnionWith(Sources.Where(s => !s.ExcludeFromReport).Select(s => IncomeLedger.SourceKey(s.Id)));
         }
     }
 

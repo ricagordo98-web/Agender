@@ -53,6 +53,11 @@
             }
         </label>
 
+        <label class="cs-check">
+            <input type="checkbox" @bind="_includeInReport" />
+            Incluir no relatório PDF (se desligares, a fonte começa desmarcada ao exportar)
+        </label>
+
         @if (Source is not null)
         {
             <label class="cs-check">
@@ -85,6 +90,7 @@
     private EntryColor _color = EntryColor.Teal;
     private IncomeCurrency _currency = IncomeCurrency.Eur;
     private bool _archived;
+    private bool _includeInReport = true;
     private bool _busy;
     private bool _confirmDelete;
 
@@ -109,6 +115,7 @@
             _color = Source.Color;
             _currency = Source.Currency;
             _archived = Source.IsArchived;
+            _includeInReport = !Source.ExcludeFromReport;
         }
     }
 
@@ -123,7 +130,7 @@
 
         try
         {
-            IncomeSourceInput input = new(_name.Trim(), _emoji, _color, _archived, _currency);
+            IncomeSourceInput input = new(_name.Trim(), _emoji, _color, _archived, _currency, !_includeInReport);
             IncomeSourceDto saved = Source is null
                 ? await IncomeService.CreateSourceAsync(input)
                 : await IncomeService.UpdateSourceAsync(Source.Id, input);

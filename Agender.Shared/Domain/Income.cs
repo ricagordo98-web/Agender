@@ -64,6 +64,8 @@ public class IncomeSource
 
     public bool IsArchived { get; set; }
 
+    public bool ExcludeFromReport { get; set; }
+
     public int SortOrder { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

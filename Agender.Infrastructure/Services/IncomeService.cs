@@ -165,6 +165,7 @@ public class IncomeService(IUserDbContextFactory contextFactory, TimeProvider ti
         source.Color = input.Color;
         source.Currency = input.Currency;
         source.IsArchived = input.IsArchived;
+        source.ExcludeFromReport = input.ExcludeFromReport;
     }
 
     private static async Task ApplyAsync(AgenderDbContext context, IncomeEntry entry, IncomeEntryInput input, DateTime now, CancellationToken cancellationToken)
