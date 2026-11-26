@@ -2,7 +2,6 @@
 @inject IJSRuntime JS
 @inject UserSettingsState Settings
 
-<div class="cs-tabs-bar">
 <ScrollArrows Class="cs-tabs-wrap">
 <nav class="cs-tabs" aria-label="Secções da casa" @ref="_nav">
     @foreach (TabItem tab in _order.Where(t => !_hidden.Contains(t.Key)))
@@ -19,8 +18,6 @@
             </NavLink>
         </span>
     }
-</nav>
-</ScrollArrows>
 
 <Popover Label="Organizar separadores" TriggerClass="icon-btn cs-tabs-config" Width="280">
     <Trigger><Icon Name="IconName.Settings" Size="16" /></Trigger>
@@ -57,7 +54,8 @@
         </div>
     </ChildContent>
 </Popover>
-</div>
+</nav>
+</ScrollArrows>
 
 @code {
     private const string HomeKey = "resumo";

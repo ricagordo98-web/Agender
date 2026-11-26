@@ -1,6 +1,6 @@
 /* ---------- Casa (household) ---------- */
-.cs-tabs-bar { display: flex; align-items: center; gap: 6px; margin: 4px 0 22px; }
-.sa.cs-tabs-wrap { display: flex; flex: 1 1 auto; min-width: 0; }
+.sa.cs-tabs-wrap { display: flex; margin: 4px 0 22px; }
+.cs-tabs-config { flex: 0 0 auto; align-self: center; }
 .cs-tabs > span { display: contents; }
 
 .cs-tabs {
@@ -934,9 +934,7 @@ body.ml-drag-active, body.ml-drag-active * { cursor: grabbing !important; user-s
 
 /* ---------- Phones ---------- */
 @media (max-width: 640px) {
-    .cs-tabs-bar { margin: 0 -16px 18px; }
-    .sa.cs-tabs-wrap { max-width: none; }
-    .cs-tabs-config { margin-right: 12px; }
+    .sa.cs-tabs-wrap { max-width: none; margin: 0 -16px 18px; }
     .cs-tabs { padding: 4px 16px; border-left: 0; border-right: 0; border-radius: 0; scroll-padding-inline: 16px; }
     .cs-quick-add { flex-wrap: wrap; padding: 8px 8px 8px 12px; }
     .cs-quick-add .bare { flex: 1 1 calc(100% - 40px); min-height: 36px; }
