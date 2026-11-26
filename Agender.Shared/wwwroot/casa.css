@@ -1,5 +1,7 @@
 /* ---------- Casa (household) ---------- */
-.sa.cs-tabs-wrap { display: flex; margin: 4px 0 22px; }
+.cs-tabs-bar { display: flex; align-items: center; gap: 6px; margin: 4px 0 22px; }
+.sa.cs-tabs-wrap { display: flex; flex: 1 1 auto; min-width: 0; }
+.cs-tabs > span { display: contents; }
 
 .cs-tabs {
     flex: 1 1 auto;
@@ -28,6 +30,15 @@
 
 .cs-tab:hover { background: var(--surface-hover); color: var(--text); }
 .cs-tab.active { background: var(--accent-soft); color: var(--accent-text); }
+.cs-tab.is-dragging { opacity: 0.45; }
+.cs-tab.is-drop { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.cs-tabs-menu-title { margin: 0; font-weight: 700; }
+.cs-tabs-menu { display: grid; gap: 2px; margin: 10px 0 0; padding: 0; list-style: none; }
+.cs-tabs-menu li { display: flex; align-items: center; gap: 4px; }
+.cs-tabs-menu label { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; padding: 5px 4px; cursor: pointer; }
+.cs-tabs-menu label:has(input:disabled) { cursor: default; }
+.cs-tabs-menu-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
 
 .cs-muted { color: var(--text-muted); font-size: 13px; }
 .cs-hint { margin: 6px 0 0; color: var(--text-muted); font-size: 12.5px; }
@@ -923,7 +934,9 @@ body.ml-drag-active, body.ml-drag-active * { cursor: grabbing !important; user-s
 
 /* ---------- Phones ---------- */
 @media (max-width: 640px) {
-    .sa.cs-tabs-wrap { max-width: none; margin: 0 -16px 18px; }
+    .cs-tabs-bar { margin: 0 -16px 18px; }
+    .sa.cs-tabs-wrap { max-width: none; }
+    .cs-tabs-config { margin-right: 12px; }
     .cs-tabs { padding: 4px 16px; border-left: 0; border-right: 0; border-radius: 0; scroll-padding-inline: 16px; }
     .cs-quick-add { flex-wrap: wrap; padding: 8px 8px 8px 12px; }
     .cs-quick-add .bare { flex: 1 1 calc(100% - 40px); min-height: 36px; }

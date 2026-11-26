@@ -83,6 +83,7 @@ public class UserSettingsDtoValidator : AbstractValidator<UserSettingsDto>
         RuleFor(s => s.DefaultEntryMinutes).Must(UserSettings.EntryDurationOptions.Contains);
         RuleFor(s => s.StartScrollMinute).Must(UserSettings.StartScrollOptions.Contains);
         RuleFor(s => s.TimerRoundingMinutes).Must(UserSettings.TimerRoundingOptions.Contains);
+        RuleFor(s => s.CasaTabs).MaximumLength(UserSettings.CasaTabsMaxLength);
     }
 }
 

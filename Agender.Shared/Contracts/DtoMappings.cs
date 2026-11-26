@@ -96,7 +96,8 @@ public static class DtoMappings
         settings.HideDayNotes,
         settings.HideEntryDetails,
         settings.StartScrollMinute,
-        settings.TimerRoundingMinutes);
+        settings.TimerRoundingMinutes,
+        settings.CasaTabs);
 
     public static UserSettings ToEntity(this UserSettingsDto dto) => new()
     {
@@ -110,7 +111,8 @@ public static class DtoMappings
         HideDayNotes = dto.HideDayNotes,
         HideEntryDetails = dto.HideEntryDetails,
         StartScrollMinute = dto.StartScrollMinute,
-        TimerRoundingMinutes = dto.TimerRoundingMinutes
+        TimerRoundingMinutes = dto.TimerRoundingMinutes,
+        CasaTabs = dto.CasaTabs
     };
 
     public static AgendaDto ToDto(this Agenda agenda) => new(

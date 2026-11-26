@@ -222,6 +222,7 @@ public class AgenderDbContext(DbContextOptions<AgenderDbContext> options) : Iden
             ConfigureOwnership(entity);
             entity.HasKey(s => s.Id);
             entity.HasIndex(UserIdProperty).IsUnique();
+            entity.Property(s => s.CasaTabs).HasMaxLength(Shared.Domain.UserSettings.CasaTabsMaxLength);
         });
 
         modelBuilder.Entity<AgendaShare>(entity =>

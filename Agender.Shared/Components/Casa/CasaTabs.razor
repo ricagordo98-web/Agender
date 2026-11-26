@@ -1,19 +1,81 @@
+@implements IDisposable
 @inject IJSRuntime JS
+@inject UserSettingsState Settings
 
+<div class="cs-tabs-bar">
 <ScrollArrows Class="cs-tabs-wrap">
 <nav class="cs-tabs" aria-label="Secções da casa" @ref="_nav">
-    @foreach (TabItem tab in Tabs)
+    @foreach (TabItem tab in _order.Where(t => !_hidden.Contains(t.Key)))
     {
-        <NavLink class="cs-tab" href="@tab.Href" Match="@tab.Match">
-            <Icon Name="tab.Icon" Size="16" />
-            <span>@tab.Label</span>
-        </NavLink>
+        <span @key="tab.Key"
+              @ondragstart="() => _dragKey = tab.Key"
+              @ondragenter="() => _dropKey = tab.Key" @ondragenter:preventDefault
+              @ondragover:preventDefault
+              @ondrop="() => DropAsync(tab.Key)" @ondrop:preventDefault
+              @ondragend="EndDrag">
+            <NavLink class="@TabClass(tab)" href="@tab.Href" Match="@tab.Match" title="Arrasta para mudar a ordem">
+                <Icon Name="tab.Icon" Size="16" />
+                <span>@tab.Label</span>
+            </NavLink>
+        </span>
     }
 </nav>
 </ScrollArrows>
 
+<Popover Label="Organizar separadores" TriggerClass="icon-btn cs-tabs-config" Width="280">
+    <Trigger><Icon Name="IconName.Settings" Size="16" /></Trigger>
+    <ChildContent>
+        <p class="cs-tabs-menu-title">Separadores da casa</p>
+        <p class="cs-hint">Arrasta os separadores na barra ou usa as setas. Desmarca para esconder.</p>
+        <ul class="cs-tabs-menu">
+            @for (int i = 0; i < _order.Count; i++)
+            {
+                TabItem tab = _order[i];
+                int index = i;
+                bool isHome = tab.Key == HomeKey;
+
+                <li @key="tab.Key">
+                    <label>
+                        <input type="checkbox" checked="@(!_hidden.Contains(tab.Key))" disabled="@isHome"
+                               @onchange="() => ToggleAsync(tab.Key)" />
+                        <Icon Name="tab.Icon" Size="15" />
+                        <span>@tab.Label</span>
+                    </label>
+                    <button type="button" class="icon-btn small" aria-label="Subir @tab.Label" disabled="@(index == 0)"
+                            @onclick="() => MoveAsync(index, index - 1)">
+                        <Icon Name="IconName.ArrowUp" Size="14" />
+                    </button>
+                    <button type="button" class="icon-btn small" aria-label="Descer @tab.Label" disabled="@(index == _order.Count - 1)"
+                            @onclick="() => MoveAsync(index, index + 1)">
+                        <Icon Name="IconName.ArrowDown" Size="14" />
+                    </button>
+                </li>
+            }
+        </ul>
+        <div class="cs-tabs-menu-actions">
+            <button type="button" class="btn btn-ghost btn-sm" @onclick="ResetAsync">Repor ordem original</button>
+        </div>
+    </ChildContent>
+</Popover>
+</div>
+
 @code {
+    private const string HomeKey = "resumo";
+    private const char HiddenMarker = '!';
+    private const char Separator = ',';
+
     private ElementReference _nav;
+    private List<TabItem> _order = [.. Tabs];
+    private HashSet<string> _hidden = [];
+    private string? _dragKey;
+    private string? _dropKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Settings.Changed += OnSettingsChanged;
+        await Settings.EnsureLoadedAsync();
+        ApplyLayout(Settings.Current.CasaTabs);
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -32,19 +94,125 @@
         }
     }
 
-    private record TabItem(string Href, string Label, IconName Icon, NavLinkMatch Match);
+    private string TabClass(TabItem tab) =>
+        tab.Key == _dragKey ? "cs-tab is-dragging"
+        : tab.Key == _dropKey && _dragKey is not null ? "cs-tab is-drop"
+        : "cs-tab";
+
+    private void OnSettingsChanged() => _ = InvokeAsync(() =>
+    {
+        ApplyLayout(Settings.Current.CasaTabs);
+        StateHasChanged();
+    });
+
+    private void ApplyLayout(string? layout)
+    {
+        List<TabItem> order = [];
+        HashSet<string> hidden = [];
+
+        foreach (string entry in (layout ?? string.Empty).Split(Separator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            bool isHidden = entry[0] == HiddenMarker;
+            string key = isHidden ? entry[1..] : entry;
+            TabItem? tab = Tabs.FirstOrDefault(t => t.Key == key);
+
+            if (tab is null || order.Contains(tab))
+            {
+                continue;
+            }
+
+            order.Add(tab);
+
+            if (isHidden && key != HomeKey)
+            {
+                hidden.Add(key);
+            }
+        }
+
+        order.AddRange(Tabs.Where(t => !order.Contains(t)));
+        _order = order;
+        _hidden = hidden;
+    }
+
+    private async Task DropAsync(string targetKey)
+    {
+        string? dragKey = _dragKey;
+        EndDrag();
+
+        if (dragKey is null || dragKey == targetKey)
+        {
+            return;
+        }
+
+        int from = _order.FindIndex(t => t.Key == dragKey);
+        int to = _order.FindIndex(t => t.Key == targetKey);
+
+        if (from >= 0 && to >= 0)
+        {
+            await MoveAsync(from, to);
+        }
+    }
+
+    private void EndDrag()
+    {
+        _dragKey = null;
+        _dropKey = null;
+    }
+
+    private async Task MoveAsync(int from, int to)
+    {
+        TabItem tab = _order[from];
+        _order.RemoveAt(from);
+        _order.Insert(to, tab);
+        await SaveAsync();
+    }
+
+    private async Task ToggleAsync(string key)
+    {
+        if (!_hidden.Remove(key))
+        {
+            _hidden.Add(key);
+        }
+
+        await SaveAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        _order = [.. Tabs];
+        _hidden = [];
+        await SaveLayoutAsync(null);
+    }
+
+    private Task SaveAsync() =>
+        SaveLayoutAsync(string.Join(Separator, _order.Select(t => _hidden.Contains(t.Key) ? HiddenMarker + t.Key : t.Key)));
+
+    private async Task SaveLayoutAsync(string? layout)
+    {
+        UserSettings updated = Settings.Current.Clone();
+        updated.CasaTabs = layout;
+
+        if (!await Settings.SaveAsync(updated))
+        {
+            ApplyLayout(Settings.Current.CasaTabs);
+        }
+    }
+
+    public void Dispose() => Settings.Changed -= OnSettingsChanged;
+
+    private record TabItem(string Key, string Href, string Label, IconName Icon, NavLinkMatch Match);
 
     private static readonly TabItem[] Tabs =
     [
-        new("casa", "Resumo", IconName.Home, NavLinkMatch.All),
-        new("casa/compras", "Compras", IconName.Cart, NavLinkMatch.Prefix),
-        new("casa/refeicoes", "Refeições", IconName.Utensils, NavLinkMatch.Prefix),
-        new("casa/inventario", "Inventário", IconName.Archive, NavLinkMatch.Prefix),
-        new("casa/obras", "Obras", IconName.Hammer, NavLinkMatch.Prefix),
-        new("casa/limpezas", "Limpezas", IconName.Sparkles, NavLinkMatch.Prefix),
-        new("casa/financas", "Finanças", IconName.Wallet, NavLinkMatch.Prefix),
-        new("casa/contas", "Contas", IconName.Zap, NavLinkMatch.Prefix),
-        new("casa/eventos", "Agenda da casa", IconName.Calendar, NavLinkMatch.Prefix),
-        new("casa/casamento", "Casamento", IconName.Heart, NavLinkMatch.Prefix)
+        new(HomeKey, "casa", "Resumo", IconName.Home, NavLinkMatch.All),
+        new("compras", "casa/compras", "Compras", IconName.Cart, NavLinkMatch.Prefix),
+        new("refeicoes", "casa/refeicoes", "Refeições", IconName.Utensils, NavLinkMatch.Prefix),
+        new("inventario", "casa/inventario", "Inventário", IconName.Archive, NavLinkMatch.Prefix),
+        new("obras", "casa/obras", "Obras", IconName.Hammer, NavLinkMatch.Prefix),
+        new("limpezas", "casa/limpezas", "Limpezas", IconName.Sparkles, NavLinkMatch.Prefix),
+        new("financas", "casa/financas", "Finanças", IconName.Wallet, NavLinkMatch.Prefix),
+        new("contas", "casa/contas", "Contas", IconName.Zap, NavLinkMatch.Prefix),
+        new("eventos", "casa/eventos", "Agenda da casa", IconName.Calendar, NavLinkMatch.Prefix),
+        new("casamento", "casa/casamento", "Casamento", IconName.Heart, NavLinkMatch.Prefix)
     ];
 }

@@ -19,7 +19,8 @@ public class UserSettingsService(IUserDbContextFactory contextFactory) : IUserSe
         if (!UserSettings.SnapOptions.Contains(settings.SnapMinutes)
             || !UserSettings.EntryDurationOptions.Contains(settings.DefaultEntryMinutes)
             || !UserSettings.StartScrollOptions.Contains(settings.StartScrollMinute)
-            || !UserSettings.TimerRoundingOptions.Contains(settings.TimerRoundingMinutes))
+            || !UserSettings.TimerRoundingOptions.Contains(settings.TimerRoundingMinutes)
+            || settings.CasaTabs?.Length > UserSettings.CasaTabsMaxLength)
         {
             throw new ArgumentException("A setting is not one of the allowed options.");
         }
@@ -45,6 +46,7 @@ public class UserSettingsService(IUserDbContextFactory contextFactory) : IUserSe
             existing.TimerRoundingMinutes = settings.TimerRoundingMinutes;
             existing.ConfirmBeforeDelete = settings.ConfirmBeforeDelete;
             existing.RemoveFromAgendaWhenCompleted = settings.RemoveFromAgendaWhenCompleted;
+            existing.CasaTabs = settings.CasaTabs;
         }
 
         await context.SaveChangesAsync(cancellationToken);

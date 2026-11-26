@@ -69,6 +69,7 @@ public record UserSettingsDto(
     bool HideDayNotes = false,
     bool HideEntryDetails = false,
     int StartScrollMinute = 0,
-    int TimerRoundingMinutes = 0);
+    int TimerRoundingMinutes = 0,
+    string? CasaTabs = null);
 
 public record AgendaDto(Guid Id, string Name, EntryColor Color, bool IsVisible, bool IsActive, bool IsDefault, DateTime CreatedAt, string? CustomColor = null);

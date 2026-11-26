@@ -1799,6 +1799,10 @@ namespace Agender.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CasaTabs")
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("ConfirmBeforeDelete")
                         .HasColumnType("INTEGER");
 

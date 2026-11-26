@@ -10,6 +10,8 @@ public class UserSettings
 
     public static readonly IReadOnlyList<int> TimerRoundingOptions = [0, 5, 15, 30];
 
+    public const int CasaTabsMaxLength = 400;
+
     public Guid Id { get; set; } = Guid.NewGuid();
 
     public bool DefaultWeekView { get; set; } = true;
@@ -33,6 +35,8 @@ public class UserSettings
     public bool ConfirmBeforeDelete { get; set; } = true;
 
     public bool RemoveFromAgendaWhenCompleted { get; set; }
+
+    public string? CasaTabs { get; set; }
 
     public UserSettings Clone() => (UserSettings)MemberwiseClone();
 }
